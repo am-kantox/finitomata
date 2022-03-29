@@ -46,6 +46,9 @@ defmodule Finitomata.PlantUML do
     |> ignore(choice([string("\n"), eos()]))
     |> tag(:transition)
 
+  @type parse_error ::
+          {:error, String.t(), binary(), map(), {pos_integer(), pos_integer()}, pos_integer()}
+
   @doc ~S"""
       iex> {:ok, result, _, _, _, _} = Finitomata.PlantUML.transition("state1 --> state2 : succeeded")
       iex> result
@@ -64,6 +67,8 @@ defmodule Finitomata.PlantUML do
   """
   defparsec :fsm, times(plant_line, min: 1)
 
+  @type validation_error :: :initial_state | :final_state | :orphan_from_state | :orphan_to_state
+
   @doc ~S"""
       iex> {:ok, result, _, _, _, _} = Finitomata.PlantUML.fsm("s1 --> s2 : ok\ns2 --> [*] : ko")
       ...> Finitomata.PlantUML.validate(result)
@@ -78,7 +83,8 @@ defmodule Finitomata.PlantUML do
           %Finitomata.PlantUML.Transition{event: "ko", from: "s2", to: "[*]"}
         ]}
   """
-  @spec validate([{:transition, [binary()]}]) :: {:ok, [Transition.t()]} | {:error, any()}
+  @spec validate([{:transition, [binary()]}]) ::
+          {:ok, [Transition.t()]} | {:error, validation_error()}
   def validate(parsed) do
     from_states = parsed |> Enum.map(fn {:transition, [from, _, _]} -> from end) |> Enum.uniq()
     to_states = parsed |> Enum.map(fn {:transition, [_, to, _]} -> to end) |> Enum.uniq()
@@ -99,5 +105,22 @@ defmodule Finitomata.PlantUML do
       true ->
         {:ok, Enum.map(parsed, &(&1 |> elem(1) |> Transition.from_parsed()))}
     end
+  end
+
+  @doc ~S"""
+      iex> Finitomata.PlantUML.parse("[*] --> s1 : ok\ns2 --> [*] : ko")
+      {:error, :orphan_from_state}
+
+      iex> Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")
+      {:ok,
+        [
+          %Finitomata.PlantUML.Transition{event: "foo", from: "[*]", to: "s1"},
+          %Finitomata.PlantUML.Transition{event: "ok", from: "s1", to: "s2"},
+          %Finitomata.PlantUML.Transition{event: "ko", from: "s2", to: "[*]"}
+        ]}
+  """
+  @spec parse(binary()) :: {:ok, [Transition.t()]} | {:error, validation_error()} | parse_error()
+  def parse(input) do
+    with {:ok, result, _, _, _, _} <- fsm(input), do: validate(result)
   end
 end
