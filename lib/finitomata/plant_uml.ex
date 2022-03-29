@@ -1,28 +1,20 @@
 defmodule Finitomata.PlantUML do
   @moduledoc false
 
-  """
-  @startuml
-  scale 600 width
+  defmodule Transition do
+    @moduledoc false
 
-  [*] -> State1
-  State1 --> State2 : Succeeded
-  State1 --> [*] : Aborted
-  State2 --> State3 : Succeeded
-  State2 --> [*] : Aborted
-  state State3 {
-    state "Accumulate Enough Data\nLong State Name" as long1
-    long1 : Just a test
-    [*] --> long1
-    long1 --> long1 : New Data
-    long1 --> ProcessData : Enough Data
-  }
-  State3 --> State3 : Failed
-  State3 --> [*] : Succeeded / Save Result
-  State3 --> [*] : Aborted
+    @type t :: %{
+            from: binary(),
+            to: binary(),
+            event: binary()
+          }
+    defstruct [:from, :to, :event]
 
-  @enduml
-  """
+    def from_parsed([from, to, event]) do
+      struct(Transition, from: from, to: to, event: event)
+    end
+  end
 
   import NimbleParsec
 
@@ -32,11 +24,12 @@ defmodule Finitomata.PlantUML do
   transition_op = string("-->")
   event_op = string(":")
 
-  state =
-    event =
-    ascii_char([?a..?z, ?A..?Z, ?_])
+  event =
+    ascii_char([?a..?z])
     |> optional(ascii_string(@alphanumeric, min: 1))
     |> reduce({IO, :iodata_to_binary, []})
+
+  state = choice([string("[*]"), event])
 
   plant_line =
     optional(blankspace)
@@ -58,20 +51,53 @@ defmodule Finitomata.PlantUML do
       iex> result
       [transition: ["state1", "state2", "succeeded"]]
 
-      iex> {:error, message, _, _, _, _} = Finitomata.PlantUML.transition("other stuff")
-      iex> message
-      "expected string \"-->\""
+      iex> {:error, message, _, _, _, _} = Finitomata.PlantUML.transition("state1 --> State2 : succeeded")
+      iex> String.slice(message, 0..14)
+      "expected string"
   """
   defparsec :transition, plant_line
 
   @doc ~S"""
-      iex> {:ok, result, _, _, _, _} = Finitomata.PlantUML.fsm("s1 --> s2 : ok\ns2 --> s3 : ko")
+      iex> {:ok, result, _, _, _, _} = Finitomata.PlantUML.fsm("s1 --> s2 : ok\ns2 --> [*] : ko")
       iex> result
-      [transition: ["s1", "s2", "ok"], transition: ["s2", "s3", "ko"]]
-
-      iex> {:error, message, _, _, _, _} = Finitomata.PlantUML.fsm("other stuff")
-      iex> message
-      "expected string \"-->\""
+      [transition: ["s1", "s2", "ok"], transition: ["s2", "[*]", "ko"]]
   """
   defparsec :fsm, times(plant_line, min: 1)
+
+  @doc ~S"""
+      iex> {:ok, result, _, _, _, _} = Finitomata.PlantUML.fsm("s1 --> s2 : ok\ns2 --> [*] : ko")
+      ...> Finitomata.PlantUML.validate(result)
+      {:error, :initial_state}
+
+      iex> {:ok, result, _, _, _, _} = Finitomata.PlantUML.fsm("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")
+      ...> Finitomata.PlantUML.validate(result)
+      {:ok,
+        [
+          %Finitomata.PlantUML.Transition{event: "foo", from: "[*]", to: "s1"},
+          %Finitomata.PlantUML.Transition{event: "ok", from: "s1", to: "s2"},
+          %Finitomata.PlantUML.Transition{event: "ko", from: "s2", to: "[*]"}
+        ]}
+  """
+  @spec validate([{:transition, [binary()]}]) :: {:ok, [Transition.t()]} | {:error, any()}
+  def validate(parsed) do
+    from_states = parsed |> Enum.map(fn {:transition, [from, _, _]} -> from end) |> Enum.uniq()
+    to_states = parsed |> Enum.map(fn {:transition, [_, to, _]} -> to end) |> Enum.uniq()
+
+    cond do
+      Enum.count(parsed, &match?({:transition, ["[*]", _, _]}, &1)) != 1 ->
+        {:error, :initial_state}
+
+      Enum.count(parsed, &match?({:transition, [_, "[*]", _]}, &1)) < 1 ->
+        {:error, :final_state}
+
+      from_states -- to_states != [] ->
+        {:error, :orphan_from_state}
+
+      to_states -- from_states != [] ->
+        {:error, :orphan_to_state}
+
+      true ->
+        {:ok, Enum.map(parsed, &(&1 |> elem(1) |> Transition.from_parsed()))}
+    end
+  end
 end
