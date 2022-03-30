@@ -120,7 +120,7 @@ defmodule Finitomata do
     quote location: :keep, generated: true do
       require Logger
       alias Finitomata.Transition, as: Transition
-      use GenServer
+      use GenServer, restart: :transient, shutdown: 10_000
 
       @before_compile Finitomata.Hook
 
@@ -151,7 +151,7 @@ defmodule Finitomata do
       @doc false
       @impl GenServer
       def init(payload) do
-        Process.flag(:trap_exit, true)
+        # Process.flag(:trap_exit, true)
         {:ok, %State{current: Transition.entry(@plant), payload: payload}}
       end
 
