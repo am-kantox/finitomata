@@ -15,7 +15,7 @@ defmodule Finitomata.Hook do
             )
         )
 
-        case Finitomata.PlantUML.allowed(@plant, current, event) do
+        case Finitomata.Transition.allowed(@plant, current, event) do
           [new_current] -> {:ok, new_current, state_payload}
           _other -> :error
         end

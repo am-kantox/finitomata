@@ -4,6 +4,8 @@ defmodule Finitomata.PlantUML do
   import NimbleParsec
   alias Finitomata.Transition
 
+  use Boundary, deps: [Finitomata], exports: []
+
   @alphanumeric [?a..?z, ?A..?Z, ?0..?9, ?_]
 
   blankspace = ignore(ascii_string([?\s], min: 1))
@@ -108,40 +110,5 @@ defmodule Finitomata.PlantUML do
   @spec parse(binary()) :: {:ok, [Transition.t()]} | {:error, validation_error()} | parse_error()
   def parse(input) do
     with {:ok, result, _, _, _, _} <- fsm(input), do: validate(result)
-  end
-
-  @doc ~S"""
-      iex> {:ok, transitions} = Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")
-      ...> Finitomata.PlantUML.entry(transitions)
-      :s1
-  """
-  @spec entry([Transition.t()]) :: atom()
-  def entry(transitions) do
-    transition = Enum.find(transitions, &match?(%Transition{from: :*}, &1))
-    transition.to
-  end
-
-  @doc ~S"""
-      iex> {:ok, transitions} = Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")
-      ...> Finitomata.PlantUML.allowed?(transitions, :s1, :s2)
-      true
-      ...> Finitomata.PlantUML.allowed?(transitions, :s1, :*)
-      false
-  """
-  @spec allowed?([Transition.t()], atom(), atom()) :: atom()
-  def allowed?(transitions, from, to) do
-    not is_nil(Enum.find(transitions, &match?(%Transition{from: ^from, to: ^to}, &1)))
-  end
-
-  @doc ~S"""
-      iex> {:ok, transitions} = Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")
-      ...> Finitomata.PlantUML.allowed(transitions, :s1, :foo)
-      [:s2]
-      ...> Finitomata.PlantUML.allowed(transitions, :s1, :*)
-      []
-  """
-  @spec allowed([Transition.t()], atom(), atom()) :: [atom()]
-  def allowed(transitions, from, event) do
-    for %Transition{from: ^from, to: to, event: ^event} <- transitions, do: to
   end
 end
