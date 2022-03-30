@@ -31,8 +31,13 @@ defmodule Finitomata.PlantUML do
     |> ignore(blankspace)
     |> concat(event)
     |> optional(blankspace)
-    |> ignore(choice([string("\n"), eos()]))
+    |> ignore(choice([times(string("\n"), min: 1), eos()]))
     |> tag(:transition)
+
+  malformed =
+    optional(utf8_string([not: ?\n], min: 1))
+    |> string("\n")
+    |> pre_traverse(:abort)
 
   @type parse_error ::
           {:error, String.t(), binary(), map(), {pos_integer(), pos_integer()}, pos_integer()}
@@ -53,7 +58,7 @@ defmodule Finitomata.PlantUML do
       iex> result
       [transition: ["s1", "s2", "ok"], transition: ["s2", "[*]", "ko"]]
   """
-  defparsec :fsm, times(plant_line, min: 1)
+  defparsec :fsm, times(choice([plant_line, malformed]), min: 1)
 
   @type validation_error :: :initial_state | :final_state | :orphan_from_state | :orphan_to_state
 
@@ -109,6 +114,33 @@ defmodule Finitomata.PlantUML do
   """
   @spec parse(binary()) :: {:ok, [Transition.t()]} | {:error, validation_error()} | parse_error()
   def parse(input) do
-    with {:ok, result, _, _, _, _} <- fsm(input), do: validate(result)
+    case fsm(input) do
+      {:ok, result, _, _, _, _} ->
+        validate(result)
+
+      {:error, "[line: " <> _ = msg, _rest, context, _, _} ->
+        [numbers, msg] = String.split(msg, "|||")
+        {numbers, []} = Code.eval_string(numbers)
+
+        {:error, msg, numbers[:rest], context, {numbers[:line], numbers[:column]},
+         numbers[:offset]}
+
+      error ->
+        error
+    end
+  end
+
+  @spec abort(
+          String.t(),
+          [String.t()],
+          map(),
+          {non_neg_integer, non_neg_integer},
+          non_neg_integer
+        ) :: {:error, binary()}
+
+  defp abort(rest, content, _context, {line, column}, offset) do
+    rest = content |> Enum.reverse() |> Enum.join() |> Kernel.<>(rest)
+    meta = inspect(line: line, column: column, offset: offset, rest: rest)
+    {:error, meta <> "|||malformed FSM transition, expected `from --> to : event`"}
   end
 end

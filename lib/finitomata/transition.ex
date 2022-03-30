@@ -51,6 +51,18 @@ defmodule Finitomata.Transition do
 
   @doc ~S"""
       iex> {:ok, transitions} = Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")
+      ...> Finitomata.Transition.responds?(transitions, :s1, :ok)
+      true
+      ...> Finitomata.Transition.responds?(transitions, :s1, :ko)
+      false
+  """
+  @spec responds?([Transition.t()], state(), event()) :: boolean()
+  def responds?(transitions, from, event) do
+    not is_nil(Enum.find(transitions, &match?(%Transition{from: ^from, event: ^event}, &1)))
+  end
+
+  @doc ~S"""
+      iex> {:ok, transitions} = Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")
       ...> Finitomata.Transition.allowed(transitions, :s1, :foo)
       [:s2]
       ...> Finitomata.Transition.allowed(transitions, :s1, :*)
