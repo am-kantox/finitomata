@@ -1,22 +1,8 @@
 defmodule Finitomata.PlantUML do
   @moduledoc false
 
-  defmodule Transition do
-    @moduledoc false
-
-    @type t :: %{
-            from: binary(),
-            to: binary(),
-            event: binary()
-          }
-    defstruct [:from, :to, :event]
-
-    def from_parsed([from, to, event]) do
-      struct(Transition, from: from, to: to, event: event)
-    end
-  end
-
   import NimbleParsec
+  alias Finitomata.Transition
 
   @alphanumeric [?a..?z, ?A..?Z, ?0..?9, ?_]
 
@@ -78,9 +64,9 @@ defmodule Finitomata.PlantUML do
       ...> Finitomata.PlantUML.validate(result)
       {:ok,
         [
-          %Finitomata.PlantUML.Transition{event: "foo", from: "[*]", to: "s1"},
-          %Finitomata.PlantUML.Transition{event: "ok", from: "s1", to: "s2"},
-          %Finitomata.PlantUML.Transition{event: "ko", from: "s2", to: "[*]"}
+          %Finitomata.Transition{event: :foo, from: :*, to: :s1},
+          %Finitomata.Transition{event: :ok, from: :s1, to: :s2},
+          %Finitomata.Transition{event: :ko, from: :s2, to: :*}
         ]}
   """
   @spec validate([{:transition, [binary()]}]) ::
@@ -114,13 +100,48 @@ defmodule Finitomata.PlantUML do
       iex> Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")
       {:ok,
         [
-          %Finitomata.PlantUML.Transition{event: "foo", from: "[*]", to: "s1"},
-          %Finitomata.PlantUML.Transition{event: "ok", from: "s1", to: "s2"},
-          %Finitomata.PlantUML.Transition{event: "ko", from: "s2", to: "[*]"}
+          %Finitomata.Transition{event: :foo, from: :*, to: :s1},
+          %Finitomata.Transition{event: :ok, from: :s1, to: :s2},
+          %Finitomata.Transition{event: :ko, from: :s2, to: :*}
         ]}
   """
   @spec parse(binary()) :: {:ok, [Transition.t()]} | {:error, validation_error()} | parse_error()
   def parse(input) do
     with {:ok, result, _, _, _, _} <- fsm(input), do: validate(result)
+  end
+
+  @doc ~S"""
+      iex> {:ok, transitions} = Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")
+      ...> Finitomata.PlantUML.entry(transitions)
+      :s1
+  """
+  @spec entry([Transition.t()]) :: atom()
+  def entry(transitions) do
+    transition = Enum.find(transitions, &match?(%Transition{from: :*}, &1))
+    transition.to
+  end
+
+  @doc ~S"""
+      iex> {:ok, transitions} = Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")
+      ...> Finitomata.PlantUML.allowed?(transitions, :s1, :s2)
+      true
+      ...> Finitomata.PlantUML.allowed?(transitions, :s1, :*)
+      false
+  """
+  @spec allowed?([Transition.t()], atom(), atom()) :: atom()
+  def allowed?(transitions, from, to) do
+    not is_nil(Enum.find(transitions, &match?(%Transition{from: ^from, to: ^to}, &1)))
+  end
+
+  @doc ~S"""
+      iex> {:ok, transitions} = Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")
+      ...> Finitomata.PlantUML.allowed(transitions, :s1, :foo)
+      [:s2]
+      ...> Finitomata.PlantUML.allowed(transitions, :s1, :*)
+      []
+  """
+  @spec allowed([Transition.t()], atom(), atom()) :: [atom()]
+  def allowed(transitions, from, event) do
+    for %Transition{from: ^from, to: to, event: ^event} <- transitions, do: to
   end
 end
