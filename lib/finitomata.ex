@@ -60,6 +60,7 @@ defmodule Finitomata do
         do: GenServer.start_link(__MODULE__, payload, name: name)
 
       @doc false
+      @impl GenServer
       def init(payload) do
         Process.flag(:trap_exit, true)
         {:ok, %State{current: P.entry(@plant), payload: payload}}

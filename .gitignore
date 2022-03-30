@@ -24,3 +24,9 @@ finitomata-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+# Dialyzer’s PLT
+/.dialyzer/*.plt*
+
+# Elixir LS
+/.elixir_ls/

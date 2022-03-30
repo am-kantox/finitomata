@@ -1,4 +1,6 @@
 defmodule Finitomata.Test.P1 do
+  @moduledoc false
+
   @fsm """
   [*] --> s1 : to_s1
   s1 --> s2 : to_s2
