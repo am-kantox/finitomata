@@ -1,21 +1,21 @@
 defmodule Finitomata do
-  @moduledoc """
-  Documentation for `Finitomata`.
-  """
+  @moduledoc "README.md" |> File.read!() |> String.split("\n---") |> Enum.at(1)
 
   require Logger
-
   use Boundary, top_level?: true, deps: [], exports: [Supervisor, Transition]
-
   alias Finitomata.Transition
 
   defmodule State do
-    @moduledoc false
+    @moduledoc """
+    Carries the state of the FSM.
+    """
 
     alias Finitomata.Transition
 
+    @typedoc "The payload that has been passed to the FSM instance on startup"
     @type payload :: any()
 
+    @typedoc "The internal representation of the FSM state"
     @type t :: %{
             __struct__: State,
             current: Transition.state(),
@@ -25,8 +25,12 @@ defmodule Finitomata do
     defstruct [:current, :payload, history: []]
   end
 
+  @typedoc "The payload that can be passed to each call to `transition/3`"
   @type event_payload :: any()
 
+  @doc """
+  This callback will be called from each transition processor.
+  """
   @callback on_transition(
               Transition.state(),
               Transition.event(),
@@ -34,31 +38,79 @@ defmodule Finitomata do
               State.payload()
             ) ::
               {:ok, Transition.state(), State.payload()} | :error
+
+  @doc """
+  This callback will be called if the transition failed to complete to allow
+  the consumer to take an action upon failure.
+  """
   @callback on_failure(Transition.event(), event_payload(), State.t()) :: :ok
+
+  @doc """
+  This callback will be called on transition to the final state to allow
+  the consumer to perform some cleanup, or like.
+  """
   @callback on_terminate(State.t()) :: :ok
 
   @doc """
+  Starts the FSM instance.
+
+  The arguments are
+
+  - the implementation of FSM (the module, having `use Finitomata`)
+  - the name of the FSM (might be any term, but it must be unique)
+  - the payload to be carried in the FSM state during the lifecycle
+
+  The FSM is started supervised.
   """
   @spec start_fsm(module(), any(), any()) :: DynamicSupervisor.on_start_child()
-  def start_fsm(impl, name, state),
-    do: DynamicSupervisor.start_child(Finitomata.Manager, {impl, name: fqn(name), payload: state})
+  def start_fsm(impl, name, payload),
+    do:
+      DynamicSupervisor.start_child(Finitomata.Manager, {impl, name: fqn(name), payload: payload})
 
+  @doc """
+  Initiates the transition.
+
+  The arguments are
+
+  - the name of the FSM
+  - `{event, event_payload}` tuple; the payload will be passed to the respective
+    `on_transition/4` call
+  """
   @spec transition(GenServer.name(), {Transition.event(), State.payload()}) :: :ok
   def transition(target, {event, payload}),
     do: target |> fqn() |> GenServer.cast({event, payload})
 
+  @doc """
+  The state of the FSM.
+  """
   @spec state(GenServer.name()) :: State.t()
   def state(target), do: target |> fqn() |> GenServer.call(:state)
 
+  @doc """
+  Returns `true` if the transition to the state `state` is possible, `false` otherwise.
+  """
   @spec allowed?(GenServer.name(), Transition.state()) :: boolean()
   def allowed?(target, state), do: target |> fqn() |> GenServer.call({:allowed?, state})
 
+  @doc """
+  Returns `true` if the transition by the event `event` is possible, `false` otherwise.
+  """
   @spec responds?(GenServer.name(), Transition.event()) :: boolean()
   def responds?(target, event), do: target |> fqn() |> GenServer.call({:responds?, event})
 
+  @doc """
+  Returns `true` if the supervision tree is alive, `false` otherwise.
+  """
   @spec alive? :: boolean()
   def alive?, do: is_pid(Process.whereis(Registry.Finitomata))
 
+  @doc """
+  Returns `true` if the FSM specified is alive, `false` otherwise.
+  """
+  @spec alive?(GenServer.name()) :: boolean()
+  def alive?(target), do: target |> fqn() |> GenServer.whereis() |> is_pid()
+
+  @doc false
   @spec child_spec(non_neg_integer()) :: Supervisor.child_spec()
   def child_spec(id \\ 0),
     do: Supervisor.child_spec({Finitomata.Supervisor, []}, id: {Finitomata, id})
@@ -109,8 +161,8 @@ defmodule Finitomata do
 
       @doc false
       @impl GenServer
-      def handle_call({:allowed?, state}, _from, state),
-        do: {:reply, Transition.allowed?(@plant, state.current, state), state}
+      def handle_call({:allowed?, to}, _from, state),
+        do: {:reply, Transition.allowed?(@plant, state.current, to), state}
 
       @doc false
       @impl GenServer

@@ -6,6 +6,9 @@ defmodule Finitomata.Transition do
   @type state :: atom()
   @type event :: atom()
 
+  @typedoc """
+  The transition is represented by `from` and `to` states _and_ the `event`.
+  """
   @type t :: %{
           __struct__: Transition,
           from: state(),
@@ -14,6 +17,7 @@ defmodule Finitomata.Transition do
         }
   defstruct [:from, :to, :event]
 
+  @doc false
   @spec from_parsed([binary()]) :: t()
   def from_parsed([from, to, event])
       when is_binary(from) and is_binary(to) and is_binary(event) do
