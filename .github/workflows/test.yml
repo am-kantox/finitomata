@@ -1,0 +1,30 @@
+name: Test
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+    name: OTP ${{matrix.pair.otp}} / Elixir ${{matrix.pair.elixir}}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pair:
+              otp: 23.2.5
+              elixir: 1.12.3
+          - pair:
+              otp: 24.2
+              elixir: 1.13.2
+    steps:
+      - uses: actions/checkout@v2
+      - uses: erlef/setup-elixir@v1
+        with:
+          otp-version: ${{matrix.pair.otp}}
+          elixir-version: ${{matrix.pair.elixir}}
+      - name: "Compile and Test Everything"
+        run: |
+          mix do deps.get, deps.compile, compile
+          mix test
