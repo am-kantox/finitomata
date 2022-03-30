@@ -23,9 +23,12 @@ defmodule Finitomata.Hook do
 
       @impl Finitomata
       def on_failure(event, payload, state) do
-        Logger.warn(
-          "[✗ ⇄] " <> inspect(state: state, event: event, payload: payload) <> " has failed"
-        )
+        Logger.warn("[✗ ⇄] " <> inspect(state: state, event: event, payload: payload))
+      end
+
+      @impl Finitomata
+      def on_terminate(state) do
+        Logger.info("[◉ ⇄] " <> inspect(state: state))
       end
     end
   end
