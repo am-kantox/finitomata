@@ -46,8 +46,16 @@ defmodule Finitomata do
   @spec state(GenServer.name()) :: State.t()
   def state(target), do: target |> fqn() |> GenServer.call(:state)
 
-  @spec fqn(any()) :: {:via, module(), {module, any()}}
-  def fqn(name), do: {:via, Registry, {Registry.Finitomata, name}}
+  @spec start_fsm(module(), any(), any()) :: DynamicSupervisor.on_start_child()
+  def start_fsm(impl, name, state),
+    do: DynamicSupervisor.start_child(Finitomata.Manager, {impl, name: fqn(name), payload: state})
+
+  @spec child_spec(non_neg_integer()) :: Supervisor.child_spec()
+  def child_spec(id \\ 0),
+    do: Supervisor.child_spec({Finitomata.Supervisor, []}, id: {Finitomata, id})
+
+  @spec alive? :: boolean()
+  def alive?, do: is_pid(Process.whereis(Registry.Finitomata))
 
   defmacro __using__(plant) do
     quote location: :keep, generated: true do
@@ -115,4 +123,7 @@ defmodule Finitomata do
       @behaviour Finitomata
     end
   end
+
+  @spec fqn(any()) :: {:via, module(), {module, any()}}
+  defp fqn(name), do: {:via, Registry, {Registry.Finitomata, name}}
 end

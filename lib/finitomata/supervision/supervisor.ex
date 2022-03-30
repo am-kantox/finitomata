@@ -3,14 +3,14 @@ defmodule Finitomata.Supervisor do
 
   use Supervisor
 
-  def start_link do
-    Supervisor.start_link(__MODULE__, %{}, name: __MODULE__)
-  end
+  def start_link(state \\ []),
+    do: Supervisor.start_link(__MODULE__, state)
 
   @impl Supervisor
   def init(_) do
     children = [
-      {Registry, keys: :unique, name: Registry.Finitomata},
+      {Registry,
+       keys: :unique, name: Registry.Finitomata, partitions: System.schedulers_online()},
       Finitomata.Manager
     ]
 
