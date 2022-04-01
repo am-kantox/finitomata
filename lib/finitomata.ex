@@ -120,7 +120,7 @@ defmodule Finitomata do
     quote location: :keep, generated: true do
       require Logger
       alias Finitomata.Transition, as: Transition
-      use GenServer, restart: :transient, shutdown: 10_000
+      use GenServer, restart: :transient, shutdown: 5_000
 
       @before_compile Finitomata.Hook
 
@@ -145,6 +145,15 @@ defmodule Finitomata do
       def start_link(payload: payload, name: name),
         do: start_link(name: name, payload: payload)
 
+      @doc ~s"""
+      Starts an _FSM_ alone with `name` and `payload` given.
+
+      Usually one does not want to call this directly, the most common way would be
+      to start a `Finitomata` supervision tree with `Finitomata.Supervisor.start_link/1`
+      or even better embed it into the existing supervision tree _and_
+      start _FSM_ with `Finitomata.start_fsm/3` passing `#{__MODULE__}` as the first
+      parameter.
+      """
       def start_link(name: name, payload: payload),
         do: GenServer.start_link(__MODULE__, payload, name: name)
 
@@ -173,7 +182,7 @@ defmodule Finitomata do
       @impl GenServer
       def handle_cast({event, payload}, state) do
         with {:ok, new_current, new_payload} <-
-               on_transition(state.current, event, payload, state.payload),
+               safe_on_transition(state.current, event, payload, state.payload),
              true <- Transition.allowed?(@plant, state.current, new_current) do
           case new_current do
             :* ->
@@ -189,8 +198,9 @@ defmodule Finitomata do
                }}
           end
         else
-          _ ->
-            on_failure(event, payload, state)
+          err ->
+            Logger.warn("[⚐ ⇄] transition failed " <> inspect(err))
+            safe_on_failure(event, payload, state)
             {:noreply, state}
         end
       end
@@ -198,7 +208,42 @@ defmodule Finitomata do
       @doc false
       @impl GenServer
       def terminate(reason, state) do
+        safe_on_terminate(state)
+      end
+
+      @spec safe_on_transition(
+              Transition.state(),
+              Transition.event(),
+              Finitomata.event_payload(),
+              State.payload()
+            ) ::
+              {:ok, Transition.state(), State.payload()} | :error
+      defp safe_on_transition(current, event, event_payload, state_payload) do
+        on_transition(current, event, event_payload, state_payload)
+      rescue
+        err ->
+          case err do
+            %{__exception__: true} ->
+              {:error, Exception.message(err)}
+
+            _ ->
+              Logger.warn("[⚑ ⇄] on_transition raised " <> inspect(err))
+              {:error, :on_transition_raised}
+          end
+      end
+
+      @spec safe_on_failure(Transition.event(), Finitomata.event_payload(), State.t()) :: :ok
+      defp safe_on_failure(event, event_payload, state_payload) do
+        on_failure(event, event_payload, state_payload)
+      rescue
+        err -> Logger.warn("[⚑ ⇄] on_failure raised " <> inspect(err))
+      end
+
+      @spec safe_on_terminate(State.t()) :: :ok
+      defp safe_on_terminate(state) do
         on_terminate(state)
+      rescue
+        err -> Logger.warn("[⚑ ⇄] on_terminate raised " <> inspect(err))
       end
 
       @behaviour Finitomata
