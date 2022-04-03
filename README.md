@@ -10,13 +10,20 @@
 
 `Finitomata` provides a boilerplate for [FSM](https://en.wikipedia.org/wiki/Finite-state_machine) implementation, allowing to concentrate on the business logic rather than on the process management and transitions/events consistency tweaking.
 
-It reads a description of the FSM from a string in [PlantUML format](https://plantuml.com/en/state-diagram). Basically, it looks more or less like this
+It reads a description of the FSM from a string in [PlantUML](https://plantuml.com/en/state-diagram), [Mermaid](https://mermaid.live), or even custom format. Basically, it looks more or less like this
+
+##### `PlantUML`
 
     [*] --> s1 : to_s1
     s1 --> s2 : to_s2
     s1 --> s3 : to_s3
     s2 --> [*] : ok
     s3 --> [*] : ok
+
+##### `Mermaid`
+
+    s1 --> |to_s2| s2
+    s1 --> |to_s3| s3
 
 It validates the FSM is consistent, namely it has a single initial state, one or more final states, and no orphan states. If everything is OK, it generates a `GenServer` that could be used both alone, and with provided supervision tree. This `GenServer` requires to implement three callbacks
 
@@ -87,5 +94,9 @@ def deps do
   ]
 end
 ```
+
+## Changelog
+
+- `0.2.0` — [Mermaid](https://mermaid.live) support
 
 [Documentation](https://hexdocs.pm/finitomata).

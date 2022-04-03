@@ -116,7 +116,11 @@ defmodule Finitomata do
     do: Supervisor.child_spec({Finitomata.Supervisor, []}, id: {Finitomata, id})
 
   @doc false
-  defmacro __using__(plant) do
+  defmacro __using__({plant, syntax}), do: ast(plant, syntax: syntax)
+  defmacro __using__(plant), do: ast(plant, [])
+
+  @doc false
+  def ast(plant, options \\ []) do
     quote location: :keep, generated: true do
       require Logger
       alias Finitomata.Transition, as: Transition
@@ -124,7 +128,17 @@ defmodule Finitomata do
 
       @before_compile Finitomata.Hook
 
-      @plant (case Finitomata.PlantUML.parse(unquote(plant)) do
+      @syntax Keyword.get(
+                unquote(options),
+                :syntax,
+                Application.compile_env(:finitomata, :syntax, Finitomata.Mermaid)
+              )
+      @md_syntax @syntax
+                 |> Module.split()
+                 |> List.last()
+                 |> Macro.underscore()
+
+      @plant (case @syntax.parse(unquote(plant)) do
                 {:ok, result} ->
                   result
 
@@ -153,6 +167,12 @@ defmodule Finitomata do
       or even better embed it into the existing supervision tree _and_
       start _FSM_ with `Finitomata.start_fsm/3` passing `#{__MODULE__}` as the first
       parameter.
+
+      FSM representation
+
+      ```#{@md_syntax}
+      #{@syntax.lint(unquote(plant))}
+      ```
       """
       def start_link(name: name, payload: payload),
         do: GenServer.start_link(__MODULE__, payload, name: name)

@@ -109,6 +109,9 @@ defmodule Finitomata.PlantUML do
     end
   end
 
+  @spec lint(binary()) :: binary()
+  def lint(input), do: "@startuml\n\n" <> input <> "\n@enduml"
+
   @spec abort(
           String.t(),
           [String.t()],

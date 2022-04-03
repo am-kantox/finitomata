@@ -120,6 +120,13 @@ defmodule Finitomata.Mermaid do
     end
   end
 
+  @spec lint(binary()) :: binary()
+  def lint(input) do
+    input = input |> String.split("\n", trim: true) |> Enum.map_join("\n", &("    " <> &1))
+
+    "graph TD\n" <> input
+  end
+
   @spec abort(
           String.t(),
           [String.t()],

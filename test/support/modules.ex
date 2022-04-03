@@ -1,5 +1,5 @@
 defmodule Finitomata.Test.P1 do
-  @moduledoc false
+  @moduledoc "false"
 
   @fsm """
   [*] --> s1 : to_s1
@@ -9,7 +9,7 @@ defmodule Finitomata.Test.P1 do
   s3 --> [*] : ok
   """
 
-  use Finitomata, @fsm
+  use Finitomata, {@fsm, Finitomata.PlantUML}
 
   def on_transition(:s1, :to_s2, event_payload, state_payload) do
     Logger.info(
@@ -22,4 +22,15 @@ defmodule Finitomata.Test.P1 do
 
     {:ok, :s2, state_payload}
   end
+end
+
+defmodule Finitomata.Test.P2 do
+  @moduledoc "false"
+
+  @fsm """
+  s1 --> |to_s2| s2
+  s1 --> |to_s3| s3
+  """
+
+  use Finitomata, {@fsm, Finitomata.Mermaid}
 end
