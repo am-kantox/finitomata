@@ -250,6 +250,36 @@ defmodule Finitomata do
     end
   end
 
+  @typedoc """
+  Error types of FSM validation
+  """
+  @type validation_error :: :initial_state | :final_state | :orphan_from_state | :orphan_to_state
+
+  @doc false
+  @spec validate([{:transition, [binary()]}]) ::
+          {:ok, [Transition.t()]} | {:error, validation_error()}
+  def validate(parsed) do
+    from_states = parsed |> Enum.map(fn {:transition, [from, _, _]} -> from end) |> Enum.uniq()
+    to_states = parsed |> Enum.map(fn {:transition, [_, to, _]} -> to end) |> Enum.uniq()
+
+    cond do
+      Enum.count(parsed, &match?({:transition, ["[*]", _, _]}, &1)) != 1 ->
+        {:error, :initial_state}
+
+      Enum.count(parsed, &match?({:transition, [_, "[*]", _]}, &1)) < 1 ->
+        {:error, :final_state}
+
+      from_states -- to_states != [] ->
+        {:error, :orphan_from_state}
+
+      to_states -- from_states != [] ->
+        {:error, :orphan_to_state}
+
+      true ->
+        {:ok, Enum.map(parsed, &(&1 |> elem(1) |> Transition.from_parsed()))}
+    end
+  end
+
   @spec fqn(any()) :: {:via, module(), {module, any()}}
   defp fqn(name), do: {:via, Registry, {Registry.Finitomata, name}}
 end

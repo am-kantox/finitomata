@@ -60,8 +60,6 @@ defmodule Finitomata.PlantUML do
   """
   defparsec :fsm, times(choice([plant_line, malformed]), min: 1)
 
-  @type validation_error :: :initial_state | :final_state | :orphan_from_state | :orphan_to_state
-
   @doc ~S"""
       iex> {:ok, result, _, _, _, _} = Finitomata.PlantUML.fsm("s1 --> s2 : ok\ns2 --> [*] : ko")
       ...> Finitomata.PlantUML.validate(result)
@@ -77,28 +75,8 @@ defmodule Finitomata.PlantUML do
         ]}
   """
   @spec validate([{:transition, [binary()]}]) ::
-          {:ok, [Transition.t()]} | {:error, validation_error()}
-  def validate(parsed) do
-    from_states = parsed |> Enum.map(fn {:transition, [from, _, _]} -> from end) |> Enum.uniq()
-    to_states = parsed |> Enum.map(fn {:transition, [_, to, _]} -> to end) |> Enum.uniq()
-
-    cond do
-      Enum.count(parsed, &match?({:transition, ["[*]", _, _]}, &1)) != 1 ->
-        {:error, :initial_state}
-
-      Enum.count(parsed, &match?({:transition, [_, "[*]", _]}, &1)) < 1 ->
-        {:error, :final_state}
-
-      from_states -- to_states != [] ->
-        {:error, :orphan_from_state}
-
-      to_states -- from_states != [] ->
-        {:error, :orphan_to_state}
-
-      true ->
-        {:ok, Enum.map(parsed, &(&1 |> elem(1) |> Transition.from_parsed()))}
-    end
-  end
+          {:ok, [Transition.t()]} | {:error, Finitomata.validation_error()}
+  def validate(parsed), do: Finitomata.validate(parsed)
 
   @doc ~S"""
       iex> Finitomata.PlantUML.parse("[*] --> s1 : ok\ns2 --> [*] : ko")
@@ -112,7 +90,8 @@ defmodule Finitomata.PlantUML do
           %Finitomata.Transition{event: :ko, from: :s2, to: :*}
         ]}
   """
-  @spec parse(binary()) :: {:ok, [Transition.t()]} | {:error, validation_error()} | parse_error()
+  @spec parse(binary()) ::
+          {:ok, [Transition.t()]} | {:error, Finitomata.validation_error()} | parse_error()
   def parse(input) do
     case fsm(input) do
       {:ok, result, _, _, _, _} ->
