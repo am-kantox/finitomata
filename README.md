@@ -12,7 +12,7 @@
 
 It reads a description of the FSM from a string in [PlantUML](https://plantuml.com/en/state-diagram), [Mermaid](https://mermaid.live), or even custom format. Basically, it looks more or less like this
 
-##### `PlantUML`
+#### `PlantUML`
 
     [*] --> s1 : to_s1
     s1 --> s2 : to_s2
@@ -20,15 +20,23 @@ It reads a description of the FSM from a string in [PlantUML](https://plantuml.c
     s2 --> [*] : ok
     s3 --> [*] : ok
 
-##### `Mermaid`
+#### `Mermaid`
 
     s1 --> |to_s2| s2
     s1 --> |to_s3| s3
 
-It validates the FSM is consistent, namely it has a single initial state, one or more final states, and no orphan states. If everything is OK, it generates a `GenServer` that could be used both alone, and with provided supervision tree. This `GenServer` requires to implement three callbacks
+> #### Note {: .tip}
+>
+> `mermaid` does not allow to explicitly specify transitions (and hence event names)
+> from the starting state and to the end state(s), these states names are implicitly set to `:*`
+> and events to `:__start__` and `:__end__` respectively.
+
+`Finitomata` validates the FSM is consistent, namely it has a single initial state, one or more final states, and no orphan states. If everything is OK, it generates a `GenServer` that could be used both alone, and with provided supervision tree. This `GenServer` requires to implement three callbacks
 
 - `on_transition/4` — mandatory
 - `on_failure/3` — optional
+- `on_enter/2` — optional
+- `on_exit/2` — optional
 - `on_terminate/1` — optional
 
 All the callbacks do have a default implementation, that would perfectly handle transitions having a single _to_ state and not requiring any additional business logic attached.

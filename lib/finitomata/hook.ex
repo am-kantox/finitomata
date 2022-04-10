@@ -27,6 +27,16 @@ defmodule Finitomata.Hook do
       end
 
       @impl Finitomata
+      def on_enter(entering, state) do
+        Logger.debug("[← ⇄] " <> inspect(state: state, entering: entering))
+      end
+
+      @impl Finitomata
+      def on_exit(exiting, state) do
+        Logger.debug("[→ ⇄] " <> inspect(state: state, exiting: exiting))
+      end
+
+      @impl Finitomata
       def on_terminate(state) do
         Logger.info("[◉ ⇄] " <> inspect(state: state))
       end

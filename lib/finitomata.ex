@@ -46,6 +46,16 @@ defmodule Finitomata do
   @callback on_failure(Transition.event(), event_payload(), State.t()) :: :ok
 
   @doc """
+  This callback will be called on entering the state.
+  """
+  @callback on_enter(Transition.state(), State.t()) :: :ok
+
+  @doc """
+  This callback will be called on exiting the state.
+  """
+  @callback on_exit(Transition.state(), State.t()) :: :ok
+
+  @doc """
   This callback will be called on transition to the final state to allow
   the consumer to perform some cleanup, or like.
   """
@@ -201,21 +211,24 @@ defmodule Finitomata do
       @doc false
       @impl GenServer
       def handle_cast({event, payload}, state) do
-        with {:ok, new_current, new_payload} <-
+        with {:on_exit, :ok} <- {:on_exit, safe_on_exit(state.current, state)},
+             {:ok, new_current, new_payload} <-
                safe_on_transition(state.current, event, payload, state.payload),
-             true <- Transition.allowed?(@plant, state.current, new_current) do
+             {:allowed, true} <-
+               {:allowed, Transition.allowed?(@plant, state.current, new_current)},
+             state <- %State{
+               state
+               | payload: new_payload,
+                 current: new_current,
+                 history: [state.current | state.history]
+             },
+             {:on_entry, :ok} <- {:on_entry, safe_on_enter(new_current, state)} do
           case new_current do
             :* ->
               {:stop, :normal, state}
 
             _ ->
-              {:noreply,
-               %State{
-                 state
-                 | payload: new_payload,
-                   current: new_current,
-                   history: [state.current | state.history]
-               }}
+              {:noreply, state}
           end
         else
           err ->
@@ -257,6 +270,20 @@ defmodule Finitomata do
         on_failure(event, event_payload, state_payload)
       rescue
         err -> Logger.warn("[⚑ ⇄] on_failure raised " <> inspect(err))
+      end
+
+      @spec safe_on_enter(Transition.state(), State.t()) :: :ok
+      defp safe_on_enter(state, state_payload) do
+        on_enter(state, state_payload)
+      rescue
+        err -> Logger.warn("[⚑ ⇄] on_enter raised " <> inspect(err))
+      end
+
+      @spec safe_on_exit(Transition.state(), State.t()) :: :ok
+      defp safe_on_exit(state, state_payload) do
+        on_exit(state, state_payload)
+      rescue
+        err -> Logger.warn("[⚑ ⇄] on_exit raised " <> inspect(err))
       end
 
       @spec safe_on_terminate(State.t()) :: :ok

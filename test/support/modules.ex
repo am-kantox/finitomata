@@ -1,5 +1,5 @@
 defmodule Finitomata.Test.P1 do
-  @moduledoc "false"
+  @moduledoc false
 
   @fsm """
   [*] --> s1 : to_s1
@@ -25,7 +25,7 @@ defmodule Finitomata.Test.P1 do
 end
 
 defmodule Finitomata.Test.P2 do
-  @moduledoc "false"
+  @moduledoc false
 
   @fsm """
   s1 --> |to_s2| s2
