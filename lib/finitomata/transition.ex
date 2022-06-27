@@ -37,7 +37,7 @@ defmodule Finitomata.Transition do
   end
 
   @doc ~S"""
-      Returns the state _after_ starting one, so-called `entry` state.
+  Returns the state _after_ starting one, so-called `entry` state.
 
       iex> {:ok, transitions} =
       ...>   Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")
@@ -51,7 +51,7 @@ defmodule Finitomata.Transition do
   end
 
   @doc ~S"""
-      Returns `true` if the transition `from` → `to` is allowed, `false` otherwise.
+  Returns `true` if the transition `from` → `to` is allowed, `false` otherwise.
 
       iex> {:ok, transitions} =
       ...>   Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")
@@ -66,7 +66,7 @@ defmodule Finitomata.Transition do
   end
 
   @doc ~S"""
-      Returns `true` if the state `from` hsa an outgoing transition with `event`, false otherwise.
+  Returns `true` if the state `from` hsa an outgoing transition with `event`, false otherwise.
 
       iex> {:ok, transitions} =
       ...>   Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")
@@ -81,9 +81,9 @@ defmodule Finitomata.Transition do
   end
 
   @doc ~S"""
-      Returns the list of all the transitions, matching the `from` state and the `event`.
+  Returns the list of all the transitions, matching the `from` state and the `event`.
 
-      Used internally for the validations.
+  Used internally for the validations.
 
       iex> {:ok, transitions} =
       ...>   Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")
@@ -104,7 +104,7 @@ defmodule Finitomata.Transition do
   end
 
   @doc ~S"""
-      Returns the not ordered list of states, excluding the starting and ending states `:*`.
+  Returns the not ordered list of states, excluding the starting and ending states `:*`.
 
       iex> {:ok, transitions} =
       ...>   Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")
