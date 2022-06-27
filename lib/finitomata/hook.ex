@@ -2,7 +2,7 @@ defmodule Finitomata.Hook do
   @moduledoc false
 
   defmacro __before_compile__(_env) do
-    quote do
+    quote generated: true, location: :keep do
       @impl Finitomata
       def on_transition(current, event, event_payload, state_payload) do
         Logger.debug(
