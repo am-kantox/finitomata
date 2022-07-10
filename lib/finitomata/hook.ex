@@ -17,7 +17,8 @@ defmodule Finitomata.Hook do
 
         case Finitomata.Transition.allowed(@plant, current, event) do
           [new_current] -> {:ok, new_current, state_payload}
-          _other -> :error
+          [] -> {:error, {:undefined_transition, {current, event}}}
+          other -> {:error, {:ambiguous_transition, {current, event}, other}}
         end
       end
 

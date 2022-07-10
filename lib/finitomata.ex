@@ -218,7 +218,7 @@ defmodule Finitomata do
                safe_on_transition(state.current, event, payload, state.payload),
              {:allowed, true} <-
                {:allowed, Transition.allowed?(@plant, state.current, new_current)},
-             state <- %State{
+             state = %State{
                state
                | payload: new_payload,
                  current: new_current,
