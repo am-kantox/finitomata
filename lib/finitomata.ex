@@ -61,6 +61,8 @@ defmodule Finitomata do
   """
   @callback on_terminate(State.t()) :: :ok
 
+  @optional_callbacks on_failure: 3, on_enter: 2, on_exit: 2, on_terminate: 1
+
   @doc """
   Starts the FSM instance.
 
@@ -126,11 +128,37 @@ defmodule Finitomata do
     do: Supervisor.child_spec({Finitomata.Supervisor, []}, id: {Finitomata, id})
 
   @doc false
-  defmacro __using__({plant, syntax}), do: ast(plant, syntax: syntax)
-  defmacro __using__(plant), do: ast(plant, [])
+  defmacro __using__(opts) when is_list(opts) do
+    raise_opts = fn description ->
+      [
+        file: Path.relative_to_cwd(__CALLER__.file),
+        line: __CALLER__.line,
+        description: description
+      ]
+    end
+
+    if not Keyword.keyword?(opts) do
+      raise CompileError, raise_opts.("options to `use Finitomata` must be a keyword list")
+    end
+
+    if Keyword.keys(opts) -- ~w|syntax impl_for|a != [:fsm] do
+      raise CompileError,
+            raise_opts.("`fsm:` key is mandatory, allowed: `syntax:` and `impl_for:`")
+    end
+
+    ast(opts)
+  end
 
   @doc false
-  def ast(plant, options \\ []) do
+  @doc deprecated: "Use `use fsm: …, syntax: …` instead"
+  defmacro __using__({fsm, syntax}), do: ast(fsm: fsm, syntax: syntax)
+
+  @doc false
+  @doc deprecated: "Use `use fsm: …, syntax: …` instead"
+  defmacro __using__(fsm), do: ast(fsm: fsm)
+
+  @doc false
+  defp ast(options \\ []) do
     quote location: :keep, generated: true do
       require Logger
       alias Finitomata.Transition, as: Transition
@@ -138,32 +166,45 @@ defmodule Finitomata do
 
       @before_compile Finitomata.Hook
 
-      @syntax Keyword.get(
-                unquote(options),
-                :syntax,
-                Application.compile_env(:finitomata, :syntax, Finitomata.Mermaid)
-              )
-      @md_syntax @syntax
-                 |> Module.split()
-                 |> List.last()
-                 |> Macro.underscore()
+      @__syntax__ Keyword.get(
+                    unquote(options),
+                    :syntax,
+                    Application.compile_env(:finitomata, :syntax, Finitomata.Mermaid)
+                  )
 
-      @plant (case @syntax.parse(unquote(plant)) do
-                {:ok, result} ->
-                  result
+      impls = ~w|on_transition on_failure on_enter on_exit on_terminate|a
 
-                {:error, description, snippet, _, {line, column}, _} ->
-                  raise SyntaxError,
-                    file: "lib/finitomata.ex",
-                    line: line,
-                    column: column,
-                    description: description,
-                    snippet: %{content: snippet, offset: 0}
+      impl_for =
+        case Keyword.get(unquote(options), :impl_for, :all) do
+          :all -> impls
+          :none -> []
+          list when is_list(list) -> list
+        end
 
-                {:error, error} ->
-                  raise TokenMissingError,
-                    description: "description is incomplete, error: #{error}"
-              end)
+      if impl_for -- impls != [] do
+        raise CompileError,
+          description:
+            "allowed `impl_for:` values are: `:all`, `:none`, or any combination of `#{inspect(impls)}`"
+      end
+
+      @__impl_for__ impl_for
+
+      @__fsm__ (case @__syntax__.parse(unquote(options[:fsm])) do
+                  {:ok, result} ->
+                    result
+
+                  {:error, description, snippet, _, {line, column}, _} ->
+                    raise SyntaxError,
+                      file: "lib/finitomata.ex",
+                      line: line,
+                      column: column,
+                      description: description,
+                      snippet: %{content: snippet, offset: 0}
+
+                  {:error, error} ->
+                    raise TokenMissingError,
+                      description: "description is incomplete, error: #{error}"
+                end)
 
       @doc false
       def start_link(payload: payload, name: name),
@@ -180,8 +221,8 @@ defmodule Finitomata do
 
       FSM representation
 
-      ```#{@md_syntax}
-      #{@syntax.lint(unquote(plant))}
+      ```#{@__syntax__ |> Module.split() |> List.last() |> Macro.underscore()}
+      #{@__syntax__.lint(unquote(options[:fsm]))}
       ```
       """
       def start_link(name: name, payload: payload),
@@ -194,7 +235,7 @@ defmodule Finitomata do
       @doc false
       @impl GenServer
       def init(payload),
-        do: {:ok, %State{current: Transition.entry(@plant), payload: payload}}
+        do: {:ok, %State{current: Transition.entry(@__fsm__), payload: payload}}
 
       @doc false
       @impl GenServer
@@ -203,12 +244,12 @@ defmodule Finitomata do
       @doc false
       @impl GenServer
       def handle_call({:allowed?, to}, _from, state),
-        do: {:reply, Transition.allowed?(@plant, state.current, to), state}
+        do: {:reply, Transition.allowed?(@__fsm__, state.current, to), state}
 
       @doc false
       @impl GenServer
       def handle_call({:responds?, event}, _from, state),
-        do: {:reply, Transition.responds?(@plant, state.current, event), state}
+        do: {:reply, Transition.responds?(@__fsm__, state.current, event), state}
 
       @doc false
       @impl GenServer
@@ -217,7 +258,7 @@ defmodule Finitomata do
              {:ok, new_current, new_payload} <-
                safe_on_transition(state.current, event, payload, state.payload),
              {:allowed, true} <-
-               {:allowed, Transition.allowed?(@plant, state.current, new_current)},
+               {:allowed, Transition.allowed?(@__fsm__, state.current, new_current)},
              state = %State{
                state
                | payload: new_payload,
@@ -269,28 +310,36 @@ defmodule Finitomata do
 
       @spec safe_on_failure(Transition.event(), Finitomata.event_payload(), State.t()) :: :ok
       defp safe_on_failure(event, event_payload, state_payload) do
-        on_failure(event, event_payload, state_payload)
+        if function_exported?(__MODULE__, :on_failure, 3),
+          do: apply(__MODULE__, :on_failure, [event, event_payload, state_payload]),
+          else: :ok
       rescue
         err -> Logger.warn("[⚑ ⇄] on_failure raised " <> inspect(err))
       end
 
       @spec safe_on_enter(Transition.state(), State.t()) :: :ok
       defp safe_on_enter(state, state_payload) do
-        on_enter(state, state_payload)
+        if function_exported?(__MODULE__, :on_enter, 2),
+          do: apply(__MODULE__, :on_enter, [state, state_payload]),
+          else: :ok
       rescue
         err -> Logger.warn("[⚑ ⇄] on_enter raised " <> inspect(err))
       end
 
       @spec safe_on_exit(Transition.state(), State.t()) :: :ok
       defp safe_on_exit(state, state_payload) do
-        on_exit(state, state_payload)
+        if function_exported?(__MODULE__, :on_exit, 2),
+          do: apply(__MODULE__, :on_exit, [state, state_payload]),
+          else: :ok
       rescue
         err -> Logger.warn("[⚑ ⇄] on_exit raised " <> inspect(err))
       end
 
       @spec safe_on_terminate(State.t()) :: :ok
       defp safe_on_terminate(state) do
-        on_terminate(state)
+        if function_exported?(__MODULE__, :on_terminate, 1),
+          do: apply(__MODULE__, :on_terminate, [state]),
+          else: :ok
       rescue
         err -> Logger.warn("[⚑ ⇄] on_terminate raised " <> inspect(err))
       end

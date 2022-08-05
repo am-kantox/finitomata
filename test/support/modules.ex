@@ -11,6 +11,7 @@ defmodule Finitomata.Test.P1 do
 
   use Finitomata, {@fsm, Finitomata.PlantUML}
 
+  @impl Finitomata
   def on_transition(:s1, :to_s2, event_payload, state_payload) do
     Logger.info(
       "[✓ ⇄] with: " <>
@@ -32,5 +33,5 @@ defmodule Finitomata.Test.P2 do
   s1 --> |to_s3| s3
   """
 
-  use Finitomata, {@fsm, Finitomata.Mermaid}
+  use Finitomata, fsm: @fsm, syntax: Finitomata.Mermaid, impl_for: :all
 end
