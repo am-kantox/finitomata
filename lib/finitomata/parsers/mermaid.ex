@@ -121,7 +121,7 @@ defmodule Finitomata.Mermaid do
   end
 
   @spec lint(binary()) :: binary()
-  def lint(input) do
+  def lint(input) when is_binary(input) do
     input = input |> String.split("\n", trim: true) |> Enum.map_join("\n", &("    " <> &1))
 
     "graph TD\n" <> input

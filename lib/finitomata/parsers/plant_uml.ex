@@ -110,7 +110,7 @@ defmodule Finitomata.PlantUML do
   end
 
   @spec lint(binary()) :: binary()
-  def lint(input), do: "@startuml\n\n" <> input <> "\n@enduml"
+  def lint(input) when is_binary(input), do: "@startuml\n\n" <> input <> "\n@enduml"
 
   @spec abort(
           String.t(),
