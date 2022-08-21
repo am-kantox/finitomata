@@ -111,6 +111,7 @@ end
 
 ## Changelog
 
+- `0.5.1` — fixed specs [credits @egidijusz]
 - `0.5.0` — all callbacks but `on_transition/4` are optional, accept `impl_for:` param to `use Finitomata`
 - `0.4.0` — allow anonymous FSM instances
 - `0.3.0` — `en_entry/2` and `on_exit/2` optional callbacks
