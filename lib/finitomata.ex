@@ -28,6 +28,9 @@ defmodule Finitomata do
   @typedoc "The payload that can be passed to each call to `transition/3`"
   @type event_payload :: any()
 
+  @typedoc "The name of the FSM (might be any term, but it must be unique)"
+  @type fsm_name :: any()
+
   @doc """
   This callback will be called from each transition processor.
   """
@@ -88,26 +91,26 @@ defmodule Finitomata do
   - `{event, event_payload}` tuple; the payload will be passed to the respective
     `on_transition/4` call
   """
-  @spec transition(GenServer.name(), {Transition.event(), State.payload()}) :: :ok
+  @spec transition(fsm_name(), {Transition.event(), State.payload()}) :: :ok
   def transition(target, {event, payload}),
     do: target |> fqn() |> GenServer.cast({event, payload})
 
   @doc """
   The state of the FSM.
   """
-  @spec state(GenServer.name()) :: State.t()
+  @spec state(fsm_name()) :: State.t()
   def state(target), do: target |> fqn() |> GenServer.call(:state)
 
   @doc """
   Returns `true` if the transition to the state `state` is possible, `false` otherwise.
   """
-  @spec allowed?(GenServer.name(), Transition.state()) :: boolean()
+  @spec allowed?(fsm_name(), Transition.state()) :: boolean()
   def allowed?(target, state), do: target |> fqn() |> GenServer.call({:allowed?, state})
 
   @doc """
   Returns `true` if the transition by the event `event` is possible, `false` otherwise.
   """
-  @spec responds?(GenServer.name(), Transition.event()) :: boolean()
+  @spec responds?(fsm_name(), Transition.event()) :: boolean()
   def responds?(target, event), do: target |> fqn() |> GenServer.call({:responds?, event})
 
   @doc """
@@ -119,7 +122,7 @@ defmodule Finitomata do
   @doc """
   Returns `true` if the FSM specified is alive, `false` otherwise.
   """
-  @spec alive?(GenServer.name()) :: boolean()
+  @spec alive?(any()) :: boolean()
   def alive?(target), do: target |> fqn() |> GenServer.whereis() |> is_pid()
 
   @doc false
@@ -378,6 +381,6 @@ defmodule Finitomata do
     end
   end
 
-  @spec fqn(any()) :: {:via, module(), {module, any()}}
+  @spec fqn(fsm_name()) :: {:via, module(), {module, any()}}
   defp fqn(name), do: {:via, Registry, {Registry.Finitomata, name}}
 end
