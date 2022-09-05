@@ -209,6 +209,10 @@ defmodule Finitomata do
                       description: "description is incomplete, error: #{error}"
                 end)
 
+      @__states__ @__fsm__
+                  |> Enum.flat_map(&[&1.from, &1.to])
+                  |> Enum.uniq()
+
       @doc false
       def start_link(payload: payload, name: name),
         do: start_link(name: name, payload: payload)

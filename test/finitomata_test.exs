@@ -12,6 +12,15 @@ defmodule FinitomataTest do
 
   alias Finitomata.Test.P2, as: MyFSM
 
+  test "exported types" do
+    defmodule StatesTest do
+      @spec foo(MyFSM.state()) :: MyFSM.state()
+      def foo(:s1), do: :s1
+      def foo(:s2), do: :s2
+      def foo(:s3), do: :s3
+    end
+  end
+
   test "callbacks" do
     start_supervised(Finitomata.Supervisor)
     Finitomata.start_fsm(MyFSM, "My first FSM", %{foo: :bar})

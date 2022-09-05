@@ -2,7 +2,10 @@ defmodule Finitomata.Hook do
   @moduledoc false
 
   defmacro __before_compile__(_env) do
-    quote generated: true, location: :keep do
+    quote generated: true, location: :keep, bind_quoted: [] do
+      states = @__states__
+      @type state :: unquote(Enum.reduce(states, &{:|, [], [&1, &2]}))
+
       if :on_transition in @__impl_for__ do
         @impl Finitomata
         def on_transition(current, event, event_payload, state_payload) do
