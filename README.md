@@ -67,6 +67,7 @@ defmodule MyFSM do
   # """
   # use Finitomata, fsm: @mermaid, syntax: Finitomata.Mermaid
 
+  @impl Finitomata
   def on_transition(:s1, :to_s2, event_payload, state_payload),
     do: {:ok, :s2, state_payload}
 end
