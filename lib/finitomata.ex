@@ -90,10 +90,22 @@ defmodule Finitomata do
   - the name of the FSM
   - `{event, event_payload}` tuple; the payload will be passed to the respective
     `on_transition/4` call
+  - `delay` (optional) the interval in milliseconds to apply transition after
   """
-  @spec transition(fsm_name(), {Transition.event(), State.payload()}) :: :ok
-  def transition(target, {event, payload}),
+  @spec transition(fsm_name(), {Transition.event(), State.payload()}, non_neg_integer()) :: :ok
+  def transition(target, event_payload, delay \\ 0)
+
+  def transition(target, {event, payload}, 0),
     do: target |> fqn() |> GenServer.cast({event, payload})
+
+  def transition(target, {event, payload}, delay) when is_integer(delay) and delay > 0 do
+    fn ->
+      Process.sleep(delay)
+      target |> fqn() |> GenServer.cast({event, payload})
+    end
+    |> Task.start()
+    |> elem(0)
+  end
 
   @doc """
   The state of the FSM.
@@ -181,6 +193,7 @@ defmodule Finitomata do
         case Keyword.get(unquote(options), :impl_for, :all) do
           :all -> impls
           :none -> []
+          transition when is_atom(transition) -> [transition]
           list when is_list(list) -> list
         end
 

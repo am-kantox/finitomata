@@ -1,4 +1,4 @@
-defmodule Finitomata.Test.P1 do
+defmodule Finitomata.Test.Plant do
   @moduledoc false
 
   @fsm """
@@ -25,13 +25,30 @@ defmodule Finitomata.Test.P1 do
   end
 end
 
-defmodule Finitomata.Test.P2 do
+defmodule Finitomata.Test.Log do
   @moduledoc false
 
   @fsm """
-  s1 --> |to_s2| s2
-  s1 --> |to_s3| s3
+  idle --> |accept| accepted
+  idle --> |reject| rejected
   """
 
   use Finitomata, fsm: @fsm, syntax: Finitomata.Mermaid, impl_for: :all
+end
+
+defmodule Finitomata.Test.Callback do
+  @moduledoc false
+
+  @fsm """
+  idle --> |process| processed
+  """
+
+  use Finitomata, fsm: @fsm
+
+  @impl Finitomata
+  def on_transition(:idle, :process, %{pid: pid}, state_payload) do
+    send(pid, :on_transition)
+
+    {:ok, :processed, Map.put(state_payload, :pid, pid)}
+  end
 end
