@@ -38,12 +38,13 @@ It reads a description of the FSM from a string in [PlantUML](https://plantuml.c
 - `on_enter/2` — optional
 - `on_exit/2` — optional
 - `on_terminate/1` — optional
+- `on_timer/2` — optional
 
 All the callbacks do have a default implementation, that would perfectly handle transitions having a single _to_ state and not requiring any additional business logic attached.
 
 Upon start, it moves to the next to initial state and sits there awaiting for the _transition request_. Then it would call an `on_transition/4` callback and move to the next state, or remain in the current one, according to the response.
 
-Upon reachiung a final state, it would terminate itself. The process keeps all the history of states it went through, and might have a payload in its state.
+Upon reaching a final state, it would terminate itself. The process keeps all the history of states it went through, and might have a payload in its state.
 
 ### Example
 
@@ -98,6 +99,19 @@ Finitomata.alive? "My first FSM"
 
 Typically, one would implement all the `on_transition/4` handlers, pattern matching on the state/event.
 
+### Recurrent Callback
+
+If `timer: non_neg_integer()` option is passed to `use Finitomata`, 
+then `Finitomata.on_timer/2` callback will be executed recurrently.
+This might be helpful if _FSM_ needs to update its state from the outside
+world on regular basis.
+
+### Special Events
+
+If the event name is ended with a bang (e. g. `idle --> |start!| started`) _and_
+this transition is the only one allowed from this state, it’d be considered as
+_determined_ and FSM will be transitioned into the new state instantly.
+
 ---
 
 ## Installation
@@ -112,6 +126,7 @@ end
 
 ## Changelog
 
+- `0.6.0` — `on_timer/2` and banged imminent transitions
 - `0.5.2` — `state()` type on generated FSMs
 - `0.5.1` — fixed specs [credits @egidijusz]
 - `0.5.0` — all callbacks but `on_transition/4` are optional, accept `impl_for:` param to `use Finitomata`
