@@ -102,7 +102,7 @@ Typically, one would implement all the `on_transition/4` handlers, pattern match
 ### Recurrent Callback
 
 If `timer: non_neg_integer()` option is passed to `use Finitomata`, 
-then `Finitomata.on_timer/2` callback will be executed recurrently.
+then `c:Finitomata.on_timer/2` callback will be executed recurrently.
 This might be helpful if _FSM_ needs to update its state from the outside
 world on regular basis.
 
