@@ -10,7 +10,7 @@ defmodule FinitomataTest do
   def setup_all do
   end
 
-  alias Finitomata.Test.{Callback, Log, Timer}
+  alias Finitomata.Test.{Auto, Callback, Log, Timer}
 
   test "exported types" do
     defmodule StatesTest do
@@ -32,7 +32,7 @@ defmodule FinitomataTest do
            end) =~
              ~r/\[→ ⇄\].*?\[✓ ⇄\].*?\[← ⇄\]/su
 
-    assert %Finitomata.State{current: :accepted, history: [:idle], payload: %{foo: :bar}} =
+    assert %Finitomata.State{current: :accepted, history: [:idle, :*], payload: %{foo: :bar}} =
              Finitomata.state("LogFSM")
 
     assert Finitomata.allowed?("LogFSM", :*)
@@ -58,7 +58,7 @@ defmodule FinitomataTest do
 
     assert_receive :on_transition
 
-    assert %Finitomata.State{current: :processed, history: [:idle], payload: %{pid: ^pid}} =
+    assert %Finitomata.State{current: :processed, history: [:idle, :*], payload: %{pid: ^pid}} =
              Finitomata.state(:callback)
 
     assert Finitomata.allowed?(:callback, :*)
@@ -87,7 +87,7 @@ defmodule FinitomataTest do
     Finitomata.start_fsm(Timer, :timer, %{pid: pid})
     assert_receive :on_transition, 500
 
-    assert %Finitomata.State{current: :processed, history: [:idle], payload: %{pid: ^pid}} =
+    assert %Finitomata.State{current: :processed, history: [:idle, :*], payload: %{pid: ^pid}} =
              Finitomata.state(:timer)
   end
 
@@ -103,5 +103,21 @@ defmodule FinitomataTest do
     assert_raise CompileError, fn ->
       Module.create(Finitomata.Test.MalformedTimer, ast, __ENV__)
     end
+  end
+
+  test "auto" do
+    start_supervised(Finitomata.Supervisor)
+    pid = self()
+
+    Finitomata.start_fsm(Auto, :auto, %{pid: pid})
+
+    assert_receive :on_start!, 500
+    assert_receive :on_do!, 500
+
+    assert %Finitomata.State{
+             current: :done,
+             history: [:started, :idle, :*],
+             payload: %{pid: ^pid}
+           } = Finitomata.state(:auto)
   end
 end

@@ -23,7 +23,7 @@ defmodule Finitomata do
             timer: non_neg_integer(),
             history: [Transition.state()]
           }
-    defstruct [:current, :payload, timer: false, history: []]
+    defstruct payload: %{}, current: :*, timer: false, history: []
   end
 
   @typedoc "The payload that can be passed to each call to `transition/3`"
@@ -148,9 +148,16 @@ defmodule Finitomata do
   def alive?(target), do: target |> fqn() |> GenServer.whereis() |> is_pid()
 
   @doc false
-  @spec child_spec(non_neg_integer()) :: Supervisor.child_spec()
+  @spec child_spec(any()) :: Supervisor.child_spec()
   def child_spec(id \\ 0),
     do: Supervisor.child_spec({Finitomata.Supervisor, []}, id: {Finitomata, id})
+
+  @doc false
+  @spec start_link(any()) ::
+          {:ok, pid} | {:error, {:already_started, pid()} | {:shutdown, term()} | term()}
+  def start_link(id \\ 0) do
+    Supervisor.start_link([Finitomata.child_spec(id)], strategy: :one_for_one)
+  end
 
   @doc false
   defmacro __using__(opts) when is_list(opts) do
@@ -236,6 +243,16 @@ defmodule Finitomata do
                   |> Enum.flat_map(&[&1.from, &1.to])
                   |> Enum.uniq()
 
+      @__determined__ @__fsm__
+                      |> Transition.determined()
+                      |> Enum.filter(fn {_, {event, _}} ->
+                        event
+                        |> to_string()
+                        |> String.ends_with?("!")
+                      end)
+
+      @__determined_states__ Keyword.keys(@__determined__)
+
       @__timer__ unquote(options)
                  |> Keyword.get(:timer)
                  |> (case do
@@ -276,7 +293,8 @@ defmodule Finitomata do
         if is_integer(@__timer__) and @__timer__ > 0,
           do: Process.send_after(self(), :on_timer, @__timer__)
 
-        {:ok, %State{current: Transition.entry(@__fsm__), timer: @__timer__, payload: payload}}
+        {:ok, %State{timer: @__timer__, payload: payload},
+         {:continue, {:transition, {:__start__, Transition.entry(@__fsm__)}}}}
       end
 
       @doc false
@@ -295,7 +313,13 @@ defmodule Finitomata do
 
       @doc false
       @impl GenServer
-      def handle_cast({event, payload}, state), do: transit({event, payload}, state)
+      def handle_cast({event, payload}, state),
+        do: {:noreply, state, {:continue, {:transition, {event, payload}}}}
+
+      @doc false
+      @impl GenServer
+      def handle_continue({:transition, {event, payload}}, state),
+        do: transit({event, payload}, state)
 
       @doc false
       @impl GenServer
@@ -303,8 +327,8 @@ defmodule Finitomata do
         safe_on_terminate(state)
       end
 
-      @spec do_history(Transition.state(), [Transition.state()]) :: [Transition.state()]
-      defp do_history(current, history) do
+      @spec history(Transition.state(), [Transition.state()]) :: [Transition.state()]
+      defp history(current, history) do
         case history do
           [^current | rest] -> [{current, 2} | rest]
           [{^current, count} | rest] -> [{current, count + 1} | rest]
@@ -320,17 +344,20 @@ defmodule Finitomata do
                safe_on_transition(state.current, event, payload, state.payload),
              {:allowed, true} <-
                {:allowed, Transition.allowed?(@__fsm__, state.current, new_current)},
-             new_history = do_history(state.current, state.history),
+             new_history = history(state.current, state.history),
              state = %State{
                state
                | payload: new_payload,
                  current: new_current,
                  history: new_history
              },
-             {:on_entry, :ok} <- {:on_entry, safe_on_enter(new_current, state)} do
+             {:on_enter, :ok} <- {:on_enter, safe_on_enter(new_current, state)} do
           case new_current do
             :* ->
               {:stop, :normal, state}
+
+            determined when determined in @__determined_states__ ->
+              {:noreply, state, {:continue, {:transition, @__determined__[determined]}}}
 
             _ ->
               {:noreply, state}

@@ -15,6 +15,7 @@ defmodule Finitomata.PlantUML do
   event =
     ascii_char([?a..?z])
     |> optional(ascii_string(@alphanumeric, min: 1))
+    |> optional(ascii_char([??, ?!]))
     |> reduce({IO, :iodata_to_binary, []})
 
   state = choice([string("[*]"), event])

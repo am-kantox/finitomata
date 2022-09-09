@@ -68,3 +68,24 @@ defmodule Finitomata.Test.Timer do
     {:transition, :process, %{}}
   end
 end
+
+defmodule Finitomata.Test.Auto do
+  @moduledoc false
+
+  @fsm """
+  idle --> |start!| started
+  started --> |do!| done
+  """
+
+  use Finitomata, fsm: @fsm
+
+  def on_transition(:idle, :start!, :started, %{pid: pid} = state) do
+    send(pid, :on_start!)
+    {:ok, :started, state}
+  end
+
+  def on_transition(:started, :do!, :done, %{pid: pid} = state) do
+    send(pid, :on_do!)
+    {:ok, :done, state}
+  end
+end
