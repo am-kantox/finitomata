@@ -20,9 +20,10 @@ defmodule Finitomata do
             __struct__: State,
             current: Transition.state(),
             payload: payload(),
+            timer: non_neg_integer(),
             history: [Transition.state()]
           }
-    defstruct [:current, :payload, history: []]
+    defstruct [:current, :payload, timer: false, history: []]
   end
 
   @typedoc "The payload that can be passed to each call to `transition/3`"
@@ -40,7 +41,7 @@ defmodule Finitomata do
               event_payload(),
               State.payload()
             ) ::
-              {:ok, Transition.state(), State.payload()} | :error
+              {:ok, Transition.state(), State.payload()} | {:error, any()}
 
   @doc """
   This callback will be called if the transition failed to complete to allow
@@ -64,7 +65,16 @@ defmodule Finitomata do
   """
   @callback on_terminate(State.t()) :: :ok
 
-  @optional_callbacks on_failure: 3, on_enter: 2, on_exit: 2, on_terminate: 1
+  @doc """
+  This callback will be called recurrently if `timer: pos_integer()`
+    option has been given to `use Finitomata`.
+  """
+  @callback on_timer(Transition.state(), State.t()) ::
+              :ok
+              | {:transition, Transition.event(), event_payload()}
+              | {:reschedule, non_neg_integer()}
+
+  @optional_callbacks on_failure: 3, on_enter: 2, on_exit: 2, on_terminate: 1, on_timer: 2
 
   @doc """
   Starts the FSM instance.
@@ -156,9 +166,9 @@ defmodule Finitomata do
       raise CompileError, raise_opts.("options to `use Finitomata` must be a keyword list")
     end
 
-    if Keyword.keys(opts) -- ~w|syntax impl_for|a != [:fsm] do
+    if Keyword.keys(opts) -- ~w|syntax impl_for timer|a != [:fsm] do
       raise CompileError,
-            raise_opts.("`fsm:` key is mandatory, allowed: `syntax:` and `impl_for:`")
+            raise_opts.("`fsm:` key is mandatory, allowed: `syntax:`, `timer:`, and `impl_for:`")
     end
 
     ast(opts)
@@ -187,7 +197,7 @@ defmodule Finitomata do
                     Application.compile_env(:finitomata, :syntax, Finitomata.Mermaid)
                   )
 
-      impls = ~w|on_transition on_failure on_enter on_exit on_terminate|a
+      impls = ~w|on_transition on_failure on_enter on_exit on_terminate on_timer|a
 
       impl_for =
         case Keyword.get(unquote(options), :impl_for, :all) do
@@ -226,6 +236,14 @@ defmodule Finitomata do
                   |> Enum.flat_map(&[&1.from, &1.to])
                   |> Enum.uniq()
 
+      @__timer__ unquote(options)
+                 |> Keyword.get(:timer)
+                 |> (case do
+                       value when is_integer(value) and value >= 0 -> value
+                       true -> Application.compile_env(:finitomata, :timer, 5_000)
+                       _ -> false
+                     end)
+
       @doc false
       def start_link(payload: payload, name: name),
         do: start_link(name: name, payload: payload)
@@ -254,8 +272,12 @@ defmodule Finitomata do
 
       @doc false
       @impl GenServer
-      def init(payload),
-        do: {:ok, %State{current: Transition.entry(@__fsm__), payload: payload}}
+      def init(payload) do
+        if is_integer(@__timer__) and @__timer__ > 0,
+          do: Process.send_after(self(), :on_timer, @__timer__)
+
+        {:ok, %State{current: Transition.entry(@__fsm__), timer: @__timer__, payload: payload}}
+      end
 
       @doc false
       @impl GenServer
@@ -273,17 +295,37 @@ defmodule Finitomata do
 
       @doc false
       @impl GenServer
-      def handle_cast({event, payload}, state) do
+      def handle_cast({event, payload}, state), do: transit({event, payload}, state)
+
+      @doc false
+      @impl GenServer
+      def terminate(reason, state) do
+        safe_on_terminate(state)
+      end
+
+      @spec do_history(Transition.state(), [Transition.state()]) :: [Transition.state()]
+      defp do_history(current, history) do
+        case history do
+          [^current | rest] -> [{current, 2} | rest]
+          [{^current, count} | rest] -> [{current, count + 1} | rest]
+          _ -> [current | history]
+        end
+      end
+
+      @spec transit({Transition.event(), Finitomata.event_payload()}, State.t()) ::
+              {:noreply, State.t()} | {:stop, :normal, State.t()}
+      defp transit({event, payload}, state) do
         with {:on_exit, :ok} <- {:on_exit, safe_on_exit(state.current, state)},
              {:ok, new_current, new_payload} <-
                safe_on_transition(state.current, event, payload, state.payload),
              {:allowed, true} <-
                {:allowed, Transition.allowed?(@__fsm__, state.current, new_current)},
+             new_history = do_history(state.current, state.history),
              state = %State{
                state
                | payload: new_payload,
                  current: new_current,
-                 history: [state.current | state.history]
+                 history: new_history
              },
              {:on_entry, :ok} <- {:on_entry, safe_on_enter(new_current, state)} do
           case new_current do
@@ -301,10 +343,34 @@ defmodule Finitomata do
         end
       end
 
-      @doc false
-      @impl GenServer
-      def terminate(reason, state) do
-        safe_on_terminate(state)
+      if @__timer__ do
+        @impl GenServer
+        @doc false
+        def handle_info(:on_timer, state) do
+          state.current
+          |> safe_on_timer(state)
+          |> case do
+            :ok ->
+              {:noreply, state}
+
+            {:transition, event, event_payload} ->
+              transit({event, event_payload}, state)
+
+            {:reschedule, value} when is_integer(value) and value >= 0 ->
+              {:noreply, %State{state | timer: value}}
+
+            weird ->
+              Logger.warn("[⚑ ⇄] on_timer returned a garbage " <> inspect(weird))
+              {:noreply, state}
+          end
+          |> tap(fn
+            {:noreply, %State{timer: timer}} when is_integer(timer) and timer > 0 ->
+              Process.send_after(self(), :on_timer, timer)
+
+            _ ->
+              :ok
+          end)
+        end
       end
 
       @spec safe_on_transition(
@@ -313,7 +379,9 @@ defmodule Finitomata do
               Finitomata.event_payload(),
               State.payload()
             ) ::
-              {:ok, Transition.state(), State.payload()} | :error
+              {:ok, Transition.state(), State.payload()}
+              | {:error, any()}
+              | {:error, :on_transition_raised}
       defp safe_on_transition(current, event, event_payload, state_payload) do
         on_transition(current, event, event_payload, state_payload)
       rescue
@@ -353,6 +421,18 @@ defmodule Finitomata do
           else: :ok
       rescue
         err -> Logger.warn("[⚑ ⇄] on_exit raised " <> inspect(err))
+      end
+
+      @spec safe_on_timer(Transition.state(), State.t()) ::
+              :ok
+              | {:transition, Transition.state(), State.payload()}
+              | {:reschedule, pos_integer()}
+      defp safe_on_timer(state, state_payload) do
+        if function_exported?(__MODULE__, :on_timer, 2),
+          do: apply(__MODULE__, :on_timer, [state, state_payload]),
+          else: :ok
+      rescue
+        err -> Logger.warn("[⚑ ⇄] on_timer raised " <> inspect(err))
       end
 
       @spec safe_on_terminate(State.t()) :: :ok

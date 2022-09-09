@@ -1,8 +1,10 @@
 defmodule Finitomata.Hook do
   @moduledoc false
 
-  defmacro __before_compile__(_env) do
-    quote generated: true, location: :keep, bind_quoted: [] do
+  defmacro __before_compile__(env) do
+    quote generated: true,
+          location: :keep,
+          bind_quoted: [module: env.module, file: env.file, line: env.line] do
       states = @__states__
       @type state :: unquote(Enum.reduce(states, &{:|, [], [&1, &2]}))
 
@@ -53,6 +55,22 @@ defmodule Finitomata.Hook do
         def on_terminate(state) do
           Logger.info("[◉ ⇄] " <> inspect(state: state))
         end
+      end
+
+      if :on_timer in @__impl_for__ do
+        @impl Finitomata
+        def on_timer(current_state, state) do
+          Logger.debug("[✓ ⇄] " <> inspect(current_state: current_state, state: state))
+        end
+      end
+
+      if is_integer(@__timer__) and not Module.defines?(module, {:on_timer, 2}) do
+        raise CompileError,
+          file: Path.relative_to_cwd(file),
+          line: line,
+          description:
+            "when `timer: non_neg_integer()` is given to `use Finitomata` " <>
+              "there must be `on_timer/2` callback defined"
       end
     end
   end

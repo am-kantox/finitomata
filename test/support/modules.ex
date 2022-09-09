@@ -52,3 +52,19 @@ defmodule Finitomata.Test.Callback do
     {:ok, :processed, Map.put(state_payload, :pid, pid)}
   end
 end
+
+defmodule Finitomata.Test.Timer do
+  @moduledoc false
+
+  @fsm """
+  idle --> |process| processed
+  """
+
+  use Finitomata, fsm: @fsm, timer: 100
+
+  @impl Finitomata
+  def on_timer(:idle, state) do
+    send(state.payload.pid, :on_transition)
+    {:transition, :process, %{}}
+  end
+end

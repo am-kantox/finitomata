@@ -10,7 +10,7 @@ defmodule FinitomataTest do
   def setup_all do
   end
 
-  alias Finitomata.Test.{Callback, Log}
+  alias Finitomata.Test.{Callback, Log, Timer}
 
   test "exported types" do
     defmodule StatesTest do
@@ -78,5 +78,30 @@ defmodule FinitomataTest do
 
     refute_receive :on_transition, 500
     assert_receive :on_transition, 500
+  end
+
+  test "timer" do
+    start_supervised(Finitomata.Supervisor)
+    pid = self()
+
+    Finitomata.start_fsm(Timer, :timer, %{pid: pid})
+    assert_receive :on_transition, 500
+
+    assert %Finitomata.State{current: :processed, history: [:idle], payload: %{pid: ^pid}} =
+             Finitomata.state(:timer)
+  end
+
+  test "malformed timer definition" do
+    ast =
+      quote do
+        @fsm """
+        idle --> |process| processed
+        """
+        use Finitomata, fsm: @fsm, timer: 100, impl_for: :on_transition
+      end
+
+    assert_raise CompileError, fn ->
+      Module.create(Finitomata.Test.MalformedTimer, ast, __ENV__)
+    end
   end
 end
