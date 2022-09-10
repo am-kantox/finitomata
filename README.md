@@ -126,6 +126,7 @@ end
 
 ## Changelog
 
+- `0.6.2` — `ensure_entry:` option to retry a transition
 - `0.6.1` — code cleanup + `auto_terminate:` option to make `:__end__` transition imminent
 - `0.6.0` — `on_timer/2` and banged imminent transitions
 - `0.5.2` — `state()` type on generated FSMs
