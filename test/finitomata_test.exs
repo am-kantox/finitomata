@@ -10,7 +10,7 @@ defmodule FinitomataTest do
   def setup_all do
   end
 
-  alias Finitomata.Test.{Auto, Callback, Log, Timer}
+  alias Finitomata.Test.{Auto, Callback, EnsureEntry, Log, Timer}
 
   test "exported types" do
     defmodule StatesTest do
@@ -117,5 +117,20 @@ defmodule FinitomataTest do
 
     Process.sleep(200)
     refute Finitomata.alive?(:auto)
+  end
+
+  test "ensure entry" do
+    start_supervised(Finitomata.Supervisor)
+    pid = self()
+
+    Finitomata.start_fsm(EnsureEntry, :ee, %{pid: pid})
+
+    assert_receive :retrying_1, 500
+    assert_receive :retrying_2, 500
+    assert_receive :exhausted, 500
+    assert_receive :on_process!, 500
+
+    Process.sleep(200)
+    refute Finitomata.alive?(:ee)
   end
 end

@@ -162,7 +162,7 @@ defmodule Finitomata do
 
   @doc false
   defmacro __using__(opts) when is_list(opts) do
-    allowed_opts = ~w|syntax impl_for timer auto_terminate|a
+    allowed_opts = ~w|syntax impl_for timer auto_terminate ensure_entry|a
 
     raise_opts = fn description ->
       [
@@ -272,6 +272,18 @@ defmodule Finitomata do
             |> String.ends_with?("!")
         end)
 
+      ensure_entry =
+        unquote(options)
+        |> Keyword.get(
+          :ensure_entry,
+          Application.compile_env(:finitomata, :ensure_entry, [])
+        )
+        |> case do
+          list when is_list(list) -> list
+          true -> [Transition.entry(fsm)]
+          _ -> []
+        end
+
       timer =
         unquote(options)
         |> Keyword.get(:timer)
@@ -286,6 +298,7 @@ defmodule Finitomata do
         fsm: fsm,
         impl_for: impl_for,
         auto_terminate: auto_terminate,
+        ensure_entry: ensure_entry,
         states: states,
         determined: determined,
         timer: timer
@@ -325,7 +338,8 @@ defmodule Finitomata do
           do: Process.send_after(self(), :on_timer, @__config__[:timer])
 
         {:ok, %State{timer: @__config__[:timer], payload: payload},
-         {:continue, {:transition, {:__start__, Transition.entry(@__config__[:fsm])}}}}
+         {:continue,
+          {:transition, event_payload({:__start__, Transition.entry(@__config__[:fsm])})}}}
       end
 
       @doc false
@@ -367,6 +381,14 @@ defmodule Finitomata do
         end
       end
 
+      @spec event_payload({Transition.event(), Finitomata.event_payload()}) ::
+              {Transition.event(), Finitomata.event_payload()}
+      defp event_payload({event, %{} = payload}),
+        do: {event, Map.update(payload, :retries, 1, &(&1 + 1))}
+
+      defp event_payload({event, payload}),
+        do: event_payload({event, %{payload: payload}})
+
       @spec transit({Transition.event(), Finitomata.event_payload()}, State.t()) ::
               {:noreply, State.t()} | {:stop, :normal, State.t()}
       defp transit({event, payload}, state) do
@@ -388,16 +410,24 @@ defmodule Finitomata do
               {:stop, :normal, state}
 
             determined when determined in @__config_determined_states__ ->
-              {:noreply, state, {:continue, {:transition, @__config__[:determined][determined]}}}
+              {:noreply, state,
+               {:continue, {:transition, event_payload(@__config__[:determined][determined])}}}
 
             _ ->
               {:noreply, state}
           end
         else
           err ->
-            Logger.warn("[⚐ ⇄] transition failed " <> inspect(err))
-            safe_on_failure(event, payload, state)
-            {:noreply, state}
+            @__config__[:fsm]
+            |> Transition.allowed(state.current, event)
+            |> Enum.all?(&(&1 in @__config__[:ensure_entry]))
+            |> if do
+              {:noreply, state, {:continue, {:transition, event_payload({event, payload})}}}
+            else
+              Logger.warn("[⚐ ⇄] transition failed " <> inspect(err))
+              safe_on_failure(event, payload, state)
+              {:noreply, state}
+            end
         end
       end
 

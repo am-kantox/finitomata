@@ -79,18 +79,52 @@ defmodule Finitomata.Test.Auto do
 
   use Finitomata, fsm: @fsm, auto_terminate: true
 
-  def on_transition(:idle, :start!, :started, %{pid: pid} = state) do
+  @impl Finitomata
+  def on_transition(:idle, :start!, _, %{pid: pid} = state) do
     send(pid, :on_start!)
     {:ok, :started, state}
   end
 
-  def on_transition(:started, :do!, :done, %{pid: pid} = state) do
+  @impl Finitomata
+  def on_transition(:started, :do!, _, %{pid: pid} = state) do
     send(pid, :on_do!)
     {:ok, :done, state}
   end
 
-  def on_transition(:done, :__end__, :*, %{pid: pid} = state) do
+  @impl Finitomata
+  def on_transition(:done, :__end__, _, %{pid: pid} = state) do
     send(pid, :on_end)
     {:ok, :*, state}
+  end
+end
+
+defmodule Finitomata.Test.EnsureEntry do
+  @moduledoc false
+
+  @fsm """
+  idle --> |process!| processed
+  """
+
+  use Finitomata, fsm: @fsm, ensure_entry: true, auto_terminate: true
+
+  @impl Finitomata
+  def on_transition(:*, :__start__, %{retries: 3} = payload, %{pid: pid} = state) do
+    Logger.debug("[:*] Exhausted: " <> inspect({payload, state}))
+    send(pid, :exhausted)
+    {:ok, :idle, state}
+  end
+
+  @impl Finitomata
+  def on_transition(:*, :__start__, %{retries: retries} = payload, %{pid: pid} = state) do
+    Logger.debug("[:*] State: " <> inspect({payload, state}))
+    send(pid, :"retrying_#{retries}")
+    {:error, :not_yet}
+  end
+
+  @impl Finitomata
+  def on_transition(:idle, :process!, payload, %{pid: pid} = state) do
+    Logger.debug("[:idle] State: " <> inspect({payload, state}))
+    send(pid, :on_process!)
+    {:ok, :processed, state}
   end
 end
