@@ -113,11 +113,9 @@ defmodule FinitomataTest do
 
     assert_receive :on_start!, 500
     assert_receive :on_do!, 500
+    assert_receive :on_end, 500
 
-    assert %Finitomata.State{
-             current: :done,
-             history: [:started, :idle, :*],
-             payload: %{pid: ^pid}
-           } = Finitomata.state(:auto)
+    Process.sleep(200)
+    refute Finitomata.alive?(:auto)
   end
 end

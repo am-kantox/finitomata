@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Refactor.LongQuoteBlocks
 defmodule Finitomata do
   @moduledoc "README.md" |> File.read!() |> String.split("\n---") |> Enum.at(1)
 
@@ -161,6 +162,8 @@ defmodule Finitomata do
 
   @doc false
   defmacro __using__(opts) when is_list(opts) do
+    allowed_opts = ~w|syntax impl_for timer auto_terminate|a
+
     raise_opts = fn description ->
       [
         file: Path.relative_to_cwd(__CALLER__.file),
@@ -173,9 +176,9 @@ defmodule Finitomata do
       raise CompileError, raise_opts.("options to `use Finitomata` must be a keyword list")
     end
 
-    if Keyword.keys(opts) -- ~w|syntax impl_for timer|a != [:fsm] do
+    if Keyword.keys(opts) -- allowed_opts != [:fsm] do
       raise CompileError,
-            raise_opts.("`fsm:` key is mandatory, allowed: `syntax:`, `timer:`, and `impl_for:`")
+            raise_opts.("`fsm:` key is mandatory, allowed: " <> inspect(allowed_opts))
     end
 
     ast(opts)
@@ -198,11 +201,19 @@ defmodule Finitomata do
 
       @before_compile Finitomata.Hook
 
-      @__syntax__ Keyword.get(
-                    unquote(options),
-                    :syntax,
-                    Application.compile_env(:finitomata, :syntax, Finitomata.Mermaid)
-                  )
+      syntax =
+        Keyword.get(
+          unquote(options),
+          :syntax,
+          Application.compile_env(:finitomata, :syntax, Finitomata.Mermaid)
+        )
+
+      auto_terminate =
+        Keyword.get(
+          unquote(options),
+          :auto_terminate,
+          Application.compile_env(:finitomata, :auto_terminate, false)
+        )
 
       impls = ~w|on_transition on_failure on_enter on_exit on_terminate on_timer|a
 
@@ -220,46 +231,66 @@ defmodule Finitomata do
             "allowed `impl_for:` values are: `:all`, `:none`, or any combination of `#{inspect(impls)}`"
       end
 
-      @__impl_for__ impl_for
+      fsm =
+        case syntax.parse(unquote(options[:fsm])) do
+          {:ok, result} ->
+            result
 
-      @__fsm__ (case @__syntax__.parse(unquote(options[:fsm])) do
-                  {:ok, result} ->
-                    result
+          {:error, description, snippet, _, {line, column}, _} ->
+            raise SyntaxError,
+              file: "lib/finitomata.ex",
+              line: line,
+              column: column,
+              description: description,
+              snippet: %{content: snippet, offset: 0}
 
-                  {:error, description, snippet, _, {line, column}, _} ->
-                    raise SyntaxError,
-                      file: "lib/finitomata.ex",
-                      line: line,
-                      column: column,
-                      description: description,
-                      snippet: %{content: snippet, offset: 0}
+          {:error, error} ->
+            raise TokenMissingError,
+              description: "description is incomplete, error: #{error}"
+        end
 
-                  {:error, error} ->
-                    raise TokenMissingError,
-                      description: "description is incomplete, error: #{error}"
-                end)
+      states =
+        fsm
+        |> Enum.flat_map(&[&1.from, &1.to])
+        |> Enum.uniq()
 
-      @__states__ @__fsm__
-                  |> Enum.flat_map(&[&1.from, &1.to])
-                  |> Enum.uniq()
+      determined =
+        fsm
+        |> Transition.determined()
+        |> Enum.filter(fn
+          {state, {:__end__, :*}} ->
+            case auto_terminate do
+              ^state -> true
+              true -> true
+              list when is_list(list) -> state in list
+              _ -> false
+            end
 
-      @__determined__ @__fsm__
-                      |> Transition.determined()
-                      |> Enum.filter(fn {_, {event, _}} ->
-                        event
-                        |> to_string()
-                        |> String.ends_with?("!")
-                      end)
+          {state, {event, _}} ->
+            event
+            |> to_string()
+            |> String.ends_with?("!")
+        end)
 
-      @__determined_states__ Keyword.keys(@__determined__)
+      timer =
+        unquote(options)
+        |> Keyword.get(:timer)
+        |> case do
+          value when is_integer(value) and value >= 0 -> value
+          true -> Application.compile_env(:finitomata, :timer, 5_000)
+          _ -> false
+        end
 
-      @__timer__ unquote(options)
-                 |> Keyword.get(:timer)
-                 |> (case do
-                       value when is_integer(value) and value >= 0 -> value
-                       true -> Application.compile_env(:finitomata, :timer, 5_000)
-                       _ -> false
-                     end)
+      @__config__ %{
+        syntax: syntax,
+        fsm: fsm,
+        impl_for: impl_for,
+        auto_terminate: auto_terminate,
+        states: states,
+        determined: determined,
+        timer: timer
+      }
+      @__config_determined_states__ Keyword.keys(determined)
 
       @doc false
       def start_link(payload: payload, name: name),
@@ -276,8 +307,8 @@ defmodule Finitomata do
 
       FSM representation
 
-      ```#{@__syntax__ |> Module.split() |> List.last() |> Macro.underscore()}
-      #{@__syntax__.lint(unquote(options[:fsm]))}
+      ```#{@__config__[:syntax] |> Module.split() |> List.last() |> Macro.underscore()}
+      #{@__config__[:syntax].lint(unquote(options[:fsm]))}
       ```
       """
       def start_link(name: name, payload: payload),
@@ -290,11 +321,11 @@ defmodule Finitomata do
       @doc false
       @impl GenServer
       def init(payload) do
-        if is_integer(@__timer__) and @__timer__ > 0,
-          do: Process.send_after(self(), :on_timer, @__timer__)
+        if is_integer(@__config__[:timer]) and @__config__[:timer] > 0,
+          do: Process.send_after(self(), :on_timer, @__config__[:timer])
 
-        {:ok, %State{timer: @__timer__, payload: payload},
-         {:continue, {:transition, {:__start__, Transition.entry(@__fsm__)}}}}
+        {:ok, %State{timer: @__config__[:timer], payload: payload},
+         {:continue, {:transition, {:__start__, Transition.entry(@__config__[:fsm])}}}}
       end
 
       @doc false
@@ -304,12 +335,12 @@ defmodule Finitomata do
       @doc false
       @impl GenServer
       def handle_call({:allowed?, to}, _from, state),
-        do: {:reply, Transition.allowed?(@__fsm__, state.current, to), state}
+        do: {:reply, Transition.allowed?(@__config__[:fsm], state.current, to), state}
 
       @doc false
       @impl GenServer
       def handle_call({:responds?, event}, _from, state),
-        do: {:reply, Transition.responds?(@__fsm__, state.current, event), state}
+        do: {:reply, Transition.responds?(@__config__[:fsm], state.current, event), state}
 
       @doc false
       @impl GenServer
@@ -343,7 +374,7 @@ defmodule Finitomata do
              {:ok, new_current, new_payload} <-
                safe_on_transition(state.current, event, payload, state.payload),
              {:allowed, true} <-
-               {:allowed, Transition.allowed?(@__fsm__, state.current, new_current)},
+               {:allowed, Transition.allowed?(@__config__[:fsm], state.current, new_current)},
              new_history = history(state.current, state.history),
              state = %State{
                state
@@ -356,8 +387,8 @@ defmodule Finitomata do
             :* ->
               {:stop, :normal, state}
 
-            determined when determined in @__determined_states__ ->
-              {:noreply, state, {:continue, {:transition, @__determined__[determined]}}}
+            determined when determined in @__config_determined_states__ ->
+              {:noreply, state, {:continue, {:transition, @__config__[:determined][determined]}}}
 
             _ ->
               {:noreply, state}
@@ -370,7 +401,7 @@ defmodule Finitomata do
         end
       end
 
-      if @__timer__ do
+      if @__config__[:timer] do
         @impl GenServer
         @doc false
         def handle_info(:on_timer, state) do

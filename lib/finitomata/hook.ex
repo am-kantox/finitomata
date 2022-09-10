@@ -5,10 +5,10 @@ defmodule Finitomata.Hook do
     quote generated: true,
           location: :keep,
           bind_quoted: [module: env.module, file: env.file, line: env.line] do
-      states = @__states__
+      states = @__config__[:states]
       @type state :: unquote(Enum.reduce(states, &{:|, [], [&1, &2]}))
 
-      if :on_transition in @__impl_for__ do
+      if :on_transition in @__config__[:impl_for] do
         @impl Finitomata
         def on_transition(current, event, event_payload, state_payload) do
           Logger.debug(
@@ -21,7 +21,7 @@ defmodule Finitomata.Hook do
               )
           )
 
-          case Finitomata.Transition.allowed(@__fsm__, current, event) do
+          case Finitomata.Transition.allowed(@__config__[:fsm], current, event) do
             [new_current] -> {:ok, new_current, state_payload}
             [] -> {:error, {:undefined_transition, {current, event}}}
             other -> {:error, {:ambiguous_transition, {current, event}, other}}
@@ -29,42 +29,42 @@ defmodule Finitomata.Hook do
         end
       end
 
-      if :on_failure in @__impl_for__ do
+      if :on_failure in @__config__[:impl_for] do
         @impl Finitomata
         def on_failure(event, payload, state) do
           Logger.warn("[✗ ⇄] " <> inspect(state: state, event: event, payload: payload))
         end
       end
 
-      if :on_enter in @__impl_for__ do
+      if :on_enter in @__config__[:impl_for] do
         @impl Finitomata
         def on_enter(entering, state) do
           Logger.debug("[← ⇄] " <> inspect(state: state, entering: entering))
         end
       end
 
-      if :on_exit in @__impl_for__ do
+      if :on_exit in @__config__[:impl_for] do
         @impl Finitomata
         def on_exit(exiting, state) do
           Logger.debug("[→ ⇄] " <> inspect(state: state, exiting: exiting))
         end
       end
 
-      if :on_terminate in @__impl_for__ do
+      if :on_terminate in @__config__[:impl_for] do
         @impl Finitomata
         def on_terminate(state) do
           Logger.info("[◉ ⇄] " <> inspect(state: state))
         end
       end
 
-      if :on_timer in @__impl_for__ do
+      if :on_timer in @__config__[:impl_for] do
         @impl Finitomata
         def on_timer(current_state, state) do
           Logger.debug("[✓ ⇄] " <> inspect(current_state: current_state, state: state))
         end
       end
 
-      if is_integer(@__timer__) and not Module.defines?(module, {:on_timer, 2}) do
+      if is_integer(@__config__[:timer]) and not Module.defines?(module, {:on_timer, 2}) do
         raise CompileError,
           file: Path.relative_to_cwd(file),
           line: line,

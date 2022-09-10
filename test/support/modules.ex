@@ -77,7 +77,7 @@ defmodule Finitomata.Test.Auto do
   started --> |do!| done
   """
 
-  use Finitomata, fsm: @fsm
+  use Finitomata, fsm: @fsm, auto_terminate: true
 
   def on_transition(:idle, :start!, :started, %{pid: pid} = state) do
     send(pid, :on_start!)
@@ -87,5 +87,10 @@ defmodule Finitomata.Test.Auto do
   def on_transition(:started, :do!, :done, %{pid: pid} = state) do
     send(pid, :on_do!)
     {:ok, :done, state}
+  end
+
+  def on_transition(:done, :__end__, :*, %{pid: pid} = state) do
+    send(pid, :on_end)
+    {:ok, :*, state}
   end
 end
