@@ -1,4 +1,6 @@
 # credo:disable-for-this-file Credo.Check.Refactor.LongQuoteBlocks
+# credo:disable-for-this-file Credo.Check.Refactor.CyclomaticComplexity
+
 defmodule Finitomata do
   @moduledoc "README.md" |> File.read!() |> String.split("\n---") |> Enum.at(1)
 
@@ -272,6 +274,16 @@ defmodule Finitomata do
             |> String.ends_with?("!")
         end)
 
+      soft =
+        fsm
+        |> Transition.determined()
+        |> Enum.filter(fn
+          {state, {event, _}} ->
+            event
+            |> to_string()
+            |> String.ends_with?("?")
+        end)
+
       ensure_entry =
         unquote(options)
         |> Keyword.get(
@@ -301,8 +313,10 @@ defmodule Finitomata do
         ensure_entry: ensure_entry,
         states: states,
         determined: determined,
+        soft: soft,
         timer: timer
       }
+      @__config_soft_events__ Enum.map(soft, fn {_, {event, _}} -> event end)
       @__config_determined_states__ Keyword.keys(determined)
 
       @doc false
@@ -418,15 +432,20 @@ defmodule Finitomata do
           end
         else
           err ->
-            @__config__[:fsm]
-            |> Transition.allowed(state.current, event)
-            |> Enum.all?(&(&1 in @__config__[:ensure_entry]))
-            |> if do
-              {:noreply, state, {:continue, {:transition, event_payload({event, payload})}}}
-            else
-              Logger.warn("[⚐ ⇄] transition failed " <> inspect(err))
-              safe_on_failure(event, payload, state)
-              {:noreply, state}
+            cond do
+              event in @__config_soft_events__ ->
+                Logger.debug("[⚐ ⇄] transition softly failed " <> inspect(err))
+                {:noreply, state}
+
+              @__config__[:fsm]
+              |> Transition.allowed(state.current, event)
+              |> Enum.all?(&(&1 in @__config__[:ensure_entry])) ->
+                {:noreply, state, {:continue, {:transition, event_payload({event, payload})}}}
+
+              true ->
+                Logger.warn("[⚐ ⇄] transition failed " <> inspect(err))
+                safe_on_failure(event, payload, state)
+                {:noreply, state}
             end
         end
       end
