@@ -275,10 +275,8 @@ defmodule Finitomata do
         end)
 
       soft =
-        fsm
-        |> Transition.determined()
-        |> Enum.filter(fn
-          {state, {event, _}} ->
+        Enum.filter(fsm, fn
+          %Transition{event: event} ->
             event
             |> to_string()
             |> String.ends_with?("?")
@@ -316,7 +314,7 @@ defmodule Finitomata do
         soft: soft,
         timer: timer
       }
-      @__config_soft_events__ Enum.map(soft, fn {_, {event, _}} -> event end)
+      @__config_soft_events__ Enum.map(soft, & &1.event)
       @__config_determined_states__ Keyword.keys(determined)
 
       @doc false

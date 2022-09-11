@@ -10,7 +10,7 @@ defmodule FinitomataTest do
   def setup_all do
   end
 
-  alias Finitomata.Test.{Auto, Callback, EnsureEntry, Log, Timer}
+  alias Finitomata.Test.{Auto, Callback, EnsureEntry, Log, Soft, Timer}
 
   test "exported types" do
     defmodule StatesTest do
@@ -28,7 +28,7 @@ defmodule FinitomataTest do
 
     assert capture_log(fn ->
              Finitomata.transition("LogFSM", {:accept, nil})
-             Process.sleep(1_000)
+             Process.sleep(200)
            end) =~
              ~r/\[→ ⇄\].*?\[✓ ⇄\].*?\[← ⇄\]/su
 
@@ -40,7 +40,7 @@ defmodule FinitomataTest do
 
     assert capture_log(fn ->
              Finitomata.transition("LogFSM", {:__end__, nil})
-             Process.sleep(1_000)
+             Process.sleep(200)
            end) =~
              "[◉ ⇄]"
 
@@ -132,5 +132,20 @@ defmodule FinitomataTest do
 
     Process.sleep(200)
     refute Finitomata.alive?(:ee)
+  end
+
+  test "soft" do
+    start_supervised(Finitomata.Supervisor)
+
+    Finitomata.start_fsm(Soft, "SoftFSM", %{foo: :bar})
+
+    assert capture_log(fn ->
+             Finitomata.transition("SoftFSM", {:do?, nil})
+             Process.sleep(200)
+           end) =~ "[⚐ ⇄] transition softly failed {:error, :not_allowed}"
+
+    Process.sleep(200)
+    assert %Finitomata.State{current: :started} = Finitomata.state("SoftFSM")
+    assert Finitomata.alive?("SoftFSM")
   end
 end

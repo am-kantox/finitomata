@@ -128,3 +128,19 @@ defmodule Finitomata.Test.EnsureEntry do
     {:ok, :processed, state}
   end
 end
+
+defmodule Finitomata.Test.Soft do
+  @moduledoc false
+
+  @fsm """
+  idle --> |start!| started
+  started --> |do?| done
+  """
+
+  use Finitomata, fsm: @fsm, auto_terminate: true
+
+  @impl Finitomata
+  def on_transition(:started, :do?, _payload, _state) do
+    {:error, :not_allowed}
+  end
+end
