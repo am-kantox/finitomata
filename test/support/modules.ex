@@ -108,14 +108,14 @@ defmodule Finitomata.Test.EnsureEntry do
   use Finitomata, fsm: @fsm, ensure_entry: true, auto_terminate: true
 
   @impl Finitomata
-  def on_transition(:*, :__start__, %{retries: 3} = payload, %{pid: pid} = state) do
+  def on_transition(:*, :__start__, %{__retries__: 3} = payload, %{pid: pid} = state) do
     Logger.debug("[:*] Exhausted: " <> inspect({payload, state}))
     send(pid, :exhausted)
     {:ok, :idle, state}
   end
 
   @impl Finitomata
-  def on_transition(:*, :__start__, %{retries: retries} = payload, %{pid: pid} = state) do
+  def on_transition(:*, :__start__, %{__retries__: retries} = payload, %{pid: pid} = state) do
     Logger.debug("[:*] State: " <> inspect({payload, state}))
     send(pid, :"retrying_#{retries}")
     {:error, :not_yet}

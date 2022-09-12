@@ -2,17 +2,15 @@
 
 **The FSM boilerplate based on callbacks**
 
-## Introduction
-
 ---
 
-### Bird View
+## Bird View
 
 `Finitomata` provides a boilerplate for [FSM](https://en.wikipedia.org/wiki/Finite-state_machine) implementation, allowing to concentrate on the business logic rather than on the process management and transitions/events consistency tweaking.
 
 It reads a description of the FSM from a string in [PlantUML](https://plantuml.com/en/state-diagram), [Mermaid](https://mermaid.live), or even custom format. Basically, it looks more or less like this
 
-#### `PlantUML`
+### `PlantUML`
 
     [*] --> s1 : to_s1
     s1 --> s2 : to_s2
@@ -20,12 +18,12 @@ It reads a description of the FSM from a string in [PlantUML](https://plantuml.c
     s2 --> [*] : ok
     s3 --> [*] : ok
 
-#### `Mermaid`
+### `Mermaid`
 
     s1 --> |to_s2| s2
     s1 --> |to_s3| s3
 
-> #### Note {: .tip}
+> ### Note {: .tip}
 >
 > `mermaid` does not allow to explicitly specify transitions (and hence event names)
 > from the starting state and to the end state(s), these states names are implicitly set to `:*`
@@ -46,7 +44,41 @@ Upon start, it moves to the next to initial state and sits there awaiting for th
 
 Upon reaching a final state, it would terminate itself. The process keeps all the history of states it went through, and might have a payload in its state.
 
-### Example
+## Special Events
+
+If the event name is ended with a bang (e. g. `idle --> |start!| started`) _and_
+this transition is the only one allowed from this state, it’d be considered as
+_determined_ and FSM will be transitioned into the new state instantly.
+
+If the event name is ended with a question mark (e. g. `idle --> |start?| started`,)
+the transition is considered as expected to fail; no `on_failure/2` callback would
+be called on failure and no log warning will be printed.
+
+## FSM Tuning and Configuration
+### Recurrent Callback
+
+If `timer: non_neg_integer()` option is passed to `use Finitomata`,
+then `c:Finitomata.on_timer/2` callback will be executed recurrently.
+This might be helpful if _FSM_ needs to update its state from the outside
+world on regular basis.
+
+## Automatic FSM Termination
+
+If `auto_terminate: true() | state() | [state()]` option is passed to `use Finitomata`,
+the special `__end__` event to transition to the end state will be called automatically
+under the hood, if the current state is either listed explicitly, or if the value of
+the parameter is `true`.
+
+### Ensuring State Entry
+
+If `ensure_entry: true() | [state()]` option is passed to `use Finitomata`, the transition
+attempt will be retried with `{:continue, {:transition, {event(), event_payload()}}}` message
+until succeeded. Neither `on_failure/2` callback is called nor warning message is logged.
+
+The payload would be updated to hold `__retries__: pos_integer()` key. If the payload was not a map,
+it will be converted to a map `%{payload: payload}`.
+
+## Example
 
 Let’s define the FSM instance
 
@@ -98,19 +130,6 @@ Finitomata.alive? "My first FSM"
 ```
 
 Typically, one would implement all the `on_transition/4` handlers, pattern matching on the state/event.
-
-### Recurrent Callback
-
-If `timer: non_neg_integer()` option is passed to `use Finitomata`, 
-then `c:Finitomata.on_timer/2` callback will be executed recurrently.
-This might be helpful if _FSM_ needs to update its state from the outside
-world on regular basis.
-
-### Special Events
-
-If the event name is ended with a bang (e. g. `idle --> |start!| started`) _and_
-this transition is the only one allowed from this state, it’d be considered as
-_determined_ and FSM will be transitioned into the new state instantly.
 
 ---
 

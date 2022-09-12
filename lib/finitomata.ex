@@ -396,7 +396,7 @@ defmodule Finitomata do
       @spec event_payload({Transition.event(), Finitomata.event_payload()}) ::
               {Transition.event(), Finitomata.event_payload()}
       defp event_payload({event, %{} = payload}),
-        do: {event, Map.update(payload, :retries, 1, &(&1 + 1))}
+        do: {event, Map.update(payload, :__retries__, 1, &(&1 + 1))}
 
       defp event_payload({event, payload}),
         do: event_payload({event, %{payload: payload}})
