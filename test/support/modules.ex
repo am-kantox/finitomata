@@ -65,7 +65,7 @@ defmodule Finitomata.Test.Timer do
   @impl Finitomata
   def on_timer(:idle, state) do
     send(state.payload.pid, :on_transition)
-    {:transition, :process, %{}}
+    {:transition, :process, state.payload}
   end
 end
 
