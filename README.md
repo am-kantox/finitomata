@@ -145,6 +145,7 @@ end
 
 ## Changelog
 
+- `0.7.2` — [FIX] `banged!` transitions must not be determined
 - `0.6.3` — `soft?` events which do not call `on_failure/2` and do not log errors
 - `0.6.2` — `ensure_entry:` option to retry a transition
 - `0.6.1` — code cleanup + `auto_terminate:` option to make `:__end__` transition imminent
