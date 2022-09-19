@@ -181,9 +181,10 @@ defmodule Finitomata.Transition do
       ...>     "idle --> |to_s1| s1\n" <>
       ...>     "s1 --> |to_s2| s2\n" <>
       ...>     "s1 --> |to_s3| s3\n" <>
-      ...>     "s2 --> |to_s3| s3")
+      ...>     "s2 --> |determined| s3\n" <>
+      ...>     "s2 --> |determined| s4")
       ...> Finitomata.Transition.determined(transitions)
-      [s3: {:__end__, :*}, s2: {:to_s3, :s3}, idle: {:to_s1, :s1}]
+      [s4: :__end__, s3: :__end__, s2: :determined, idle: :to_s1]
   """
   @spec determined([t()]) :: [{state(), {event(), state()}}]
   def determined(transitions) do
@@ -192,8 +193,10 @@ defmodule Finitomata.Transition do
     |> Enum.reduce([], fn state, acc ->
       transitions
       |> allowed(from: state)
+      |> Enum.group_by(fn {state, _, event} -> {state, event} end)
+      |> Map.to_list()
       |> case do
-        [{^state, target, event}] -> [{state, {event, target}} | acc]
+        [{{^state, event}, [_ | _]}] -> [{state, event} | acc]
         _ -> acc
       end
     end)

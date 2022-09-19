@@ -259,8 +259,9 @@ defmodule Finitomata do
 
       hard =
         fsm
+        |> Transition.determined()
         |> Enum.filter(fn
-          %Transition{from: state, to: :*, event: :__end__} ->
+          {state, :__end__} ->
             case auto_terminate do
               ^state -> true
               true -> true
@@ -268,12 +269,11 @@ defmodule Finitomata do
               _ -> false
             end
 
-          %Transition{from: state, event: event} ->
+          {state, event} ->
             event
             |> to_string()
             |> String.ends_with?("!")
         end)
-        |> Enum.map(&{&1.from, {&1.event, &1.to}})
 
       soft =
         Enum.filter(fsm, fn
@@ -394,13 +394,16 @@ defmodule Finitomata do
         end
       end
 
-      @spec event_payload({Transition.event(), Finitomata.event_payload()}) ::
+      @spec event_payload(Transition.event() | {Transition.event(), Finitomata.event_payload()}) ::
               {Transition.event(), Finitomata.event_payload()}
       defp event_payload({event, %{} = payload}),
         do: {event, Map.update(payload, :__retries__, 1, &(&1 + 1))}
 
       defp event_payload({event, payload}),
         do: event_payload({event, %{payload: payload}})
+
+      defp event_payload(event),
+        do: event_payload({event, %{}})
 
       @spec transit({Transition.event(), Finitomata.event_payload()}, State.t()) ::
               {:noreply, State.t()} | {:stop, :normal, State.t()}
