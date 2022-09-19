@@ -256,11 +256,10 @@ defmodule Finitomata do
         |> Enum.flat_map(&[&1.from, &1.to])
         |> Enum.uniq()
 
-      determined =
+      hard =
         fsm
-        |> Transition.determined()
         |> Enum.filter(fn
-          {state, {:__end__, :*}} ->
+          %Transition{from: state, to: :*, event: :__end__} ->
             case auto_terminate do
               ^state -> true
               true -> true
@@ -268,11 +267,12 @@ defmodule Finitomata do
               _ -> false
             end
 
-          {state, {event, _}} ->
+          %Transition{from: state, event: event} ->
             event
             |> to_string()
             |> String.ends_with?("!")
         end)
+        |> Enum.map(&{&1.from, {&1.event, &1.to}})
 
       soft =
         Enum.filter(fsm, fn
@@ -310,12 +310,12 @@ defmodule Finitomata do
         auto_terminate: auto_terminate,
         ensure_entry: ensure_entry,
         states: states,
-        determined: determined,
+        hard: hard,
         soft: soft,
         timer: timer
       }
       @__config_soft_events__ Enum.map(soft, & &1.event)
-      @__config_determined_states__ Keyword.keys(determined)
+      @__config_hard_states__ Keyword.keys(hard)
 
       @doc false
       def start_link(payload: payload, name: name),
@@ -421,9 +421,9 @@ defmodule Finitomata do
             :* ->
               {:stop, :normal, state}
 
-            determined when determined in @__config_determined_states__ ->
+            hard when hard in @__config_hard_states__ ->
               {:noreply, state,
-               {:continue, {:transition, event_payload(@__config__[:determined][determined])}}}
+               {:continue, {:transition, event_payload(@__config__[:hard][hard])}}}
 
             _ ->
               {:noreply, state}
