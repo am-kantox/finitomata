@@ -74,7 +74,8 @@ defmodule Finitomata do
   """
   @callback on_timer(Transition.state(), State.t()) ::
               :ok
-              | {:transition, Transition.event(), event_payload()}
+              | {:transition, {Transition.event(), event_payload()}, State.payload()}
+              | {:transition, Transition.event(), State.payload()}
               | {:reschedule, non_neg_integer()}
 
   @optional_callbacks on_failure: 3, on_enter: 2, on_exit: 2, on_terminate: 1, on_timer: 2
@@ -458,8 +459,11 @@ defmodule Finitomata do
             :ok ->
               {:noreply, state}
 
-            {:transition, event, event_payload} ->
-              transit({event, event_payload}, state)
+            {:transition, {event, event_payload}, state_payload} ->
+              transit({event, event_payload}, %State{state | payload: state_payload})
+
+            {:transition, event, state_payload} ->
+              transit({event, nil}, %State{state | payload: state_payload})
 
             {:reschedule, value} when is_integer(value) and value >= 0 ->
               {:noreply, %State{state | timer: value}}
@@ -530,6 +534,7 @@ defmodule Finitomata do
 
       @spec safe_on_timer(Transition.state(), State.t()) ::
               :ok
+              | {:transition, {Transition.state(), Finitomata.event_payload()}, State.payload()}
               | {:transition, Transition.state(), State.payload()}
               | {:reschedule, pos_integer()}
       defp safe_on_timer(state, state_payload) do
