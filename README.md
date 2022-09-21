@@ -47,8 +47,8 @@ Upon reaching a final state, it would terminate itself. The process keeps all th
 ## Special Events
 
 If the event name is ended with a bang (e. g. `idle --> |start!| started`) _and_
-this transition is the only one allowed from this state, it’d be considered as
-_determined_ and FSM will be transitioned into the new state instantly.
+this event is the only one allowed from this state (there might be several transitions though,)
+it’d be considered as _determined_ and FSM will be transitioned into the new state instantly.
 
 If the event name is ended with a question mark (e. g. `idle --> |start?| started`,)
 the transition is considered as expected to fail; no `on_failure/2` callback would
