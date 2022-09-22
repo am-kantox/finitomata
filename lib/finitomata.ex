@@ -5,7 +5,12 @@ defmodule Finitomata do
   @moduledoc "README.md" |> File.read!() |> String.split("\n---") |> Enum.at(1)
 
   require Logger
-  use Boundary, top_level?: true, deps: [], exports: [Supervisor, Transition]
+
+  use Boundary,
+    top_level?: true,
+    deps: [],
+    exports: [Hook, Mix.Events, State, Supervisor, Transition]
+
   alias Finitomata.Transition
 
   defmodule State do
@@ -199,9 +204,14 @@ defmodule Finitomata do
   defp ast(options \\ []) do
     quote location: :keep, generated: true do
       require Logger
+
       alias Finitomata.Transition, as: Transition
+
       use GenServer, restart: :transient, shutdown: 5_000
 
+      Module.register_attribute(__MODULE__, :finitomata_on_transition_clauses, accumulate: true)
+
+      @on_definition Finitomata.Hook
       @before_compile Finitomata.Hook
 
       syntax =

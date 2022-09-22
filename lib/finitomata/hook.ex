@@ -1,6 +1,38 @@
 defmodule Finitomata.Hook do
   @moduledoc false
 
+  @type ast_meta :: keyword()
+  @type ast_tuple :: {atom(), ast_meta(), any()}
+  @type info :: %{
+          env: Macro.Env.t(),
+          kind: :def | :defp,
+          fun: atom(),
+          arity: arity(),
+          args: [ast_tuple()],
+          guards: [ast_tuple()],
+          body: [{:do, ast_tuple()}],
+          payload: map()
+        }
+  defstruct ~w|env kind fun arity args guards body payload|a
+
+  def __on_definition__(env, kind, :on_transition, args, guards, body) do
+    Module.put_attribute(
+      env.module,
+      :finitomata_on_transition_clauses,
+      struct(__MODULE__,
+        env: env,
+        kind: kind,
+        fun: :on_transition,
+        arity: length(args),
+        args: args |> IO.inspect(label: "\nARGS"),
+        guards: guards,
+        body: body
+      )
+    )
+  end
+
+  def __on_definition__(_env, _kind, _fun, _args, _guards, _body), do: :ok
+
   defmacro __before_compile__(env) do
     quote generated: true,
           location: :keep,
