@@ -5,25 +5,32 @@ defmodule Finitomata.Mix.Events do
 
   use Agent
 
-  def start_link,
-    do: Agent.start_link(fn -> %{events: %{}, diagnostics: MapSet.new()} end, name: __MODULE__)
+  @type diagnostics :: MapSet.t(Mix.Task.Compiler.Diagnostic.t())
+  @type hooks :: MapSet.t(Finitomata.Hook.t())
+  @type state :: %{hooks: hooks(), diagnostics: diagnostics()}
 
+  def start_link,
+    do:
+      Agent.start_link(
+        fn -> %{hooks: MapSet.new(), diagnostics: MapSet.new()} end,
+        name: __MODULE__
+      )
+
+  @spec all :: state()
   def all, do: Agent.get(__MODULE__, & &1)
 
-  def put(:event, {module, event}) do
+  @spec hooks(module()) :: hooks()
+  def hooks(module),
+    do:
+      Agent.get(
+        __MODULE__,
+        &MapSet.filter(&1[:hooks], fn hook -> match?(%Finitomata.Hook{module: ^module}, hook) end)
+      )
+
+  def put(key, value) do
     Agent.update(
       __MODULE__,
-      &update_in(&1, [:events, module], fn
-        nil -> MapSet.new([event])
-        events -> MapSet.put(events, event)
-      end)
+      &Map.update!(&1, key, fn values -> MapSet.put(values, value) end)
     )
   end
-
-  def put(:diagnostic, diagnostic),
-    do:
-      Agent.update(
-        __MODULE__,
-        &Map.update!(&1, :diagnostics, fn diagnostics -> MapSet.put(diagnostics, diagnostic) end)
-      )
 end

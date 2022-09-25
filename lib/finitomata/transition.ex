@@ -169,8 +169,9 @@ defmodule Finitomata.Transition do
   end
 
   @doc ~S"""
-  Returns `Finitomata.Transition.event()` if there is a determined transition
-    from the current state.
+  Returns keyword list of
+    `{Finitomata.Transition.state(), Finitomata.Transition.event()}` tuples
+    for determined transition from the current state.
 
   The transition is determined, if it is the only transition allowed from the state.
 
@@ -181,10 +182,13 @@ defmodule Finitomata.Transition do
       ...>     "idle --> |to_s1| s1\n" <>
       ...>     "s1 --> |to_s2| s2\n" <>
       ...>     "s1 --> |to_s3| s3\n" <>
-      ...>     "s2 --> |determined| s3\n" <>
-      ...>     "s2 --> |determined| s4")
+      ...>     "s2 --> |to_s1| s3\n" <>
+      ...>     "s2 --> |ambiguous| s3\n" <>
+      ...>     "s2 --> |ambiguous| s4\n" <>
+      ...>     "s3 --> |determined| s3\n" <>
+      ...>     "s3 --> |determined| s4\n")
       ...> Finitomata.Transition.determined(transitions)
-      [s4: :__end__, s3: :__end__, s2: :determined, idle: :to_s1]
+      [s4: :__end__, s3: :determined, idle: :to_s1]
   """
   @spec determined([t()]) :: [{state(), {event(), state()}}]
   def determined(transitions) do
@@ -231,6 +235,46 @@ defmodule Finitomata.Transition do
       [{^state, target, event}] -> {:ok, {event, target}}
       _ -> :error
     end
+  end
+
+  @doc ~S"""
+  Returns keyword list of
+    `{Finitomata.Transition.state(), [Finitomata.Transition.event()]}` for transitions
+    which do not have a determined _to_ state.
+
+  Used internally for the validations.
+
+      iex> {:ok, transitions} =
+      ...>   Finitomata.Mermaid.parse(
+      ...>     "idle --> |to_s1| s1\n" <>
+      ...>     "s1 --> |to_s2| s2\n" <>
+      ...>     "s1 --> |to_s3| s3\n" <>
+      ...>     "s2 --> |to_s1| s3\n" <>
+      ...>     "s2 --> |ambiguous| s3\n" <>
+      ...>     "s2 --> |ambiguous| s4\n" <>
+      ...>     "s3 --> |determined| s3\n" <>
+      ...>     "s3 --> |determined| s4\n")
+      ...> Finitomata.Transition.ambiguous(transitions)
+      [s3: {:determined, [:s3, :s4]}, s2: {:ambiguous, [:s3, :s4]}]
+  """
+  @spec ambiguous([t()]) :: [{state(), {event(), state()}}]
+  def ambiguous(transitions) do
+    transitions
+    |> states()
+    |> Enum.reduce([], fn state, acc ->
+      transitions
+      |> allowed(from: state)
+      |> Enum.group_by(fn {state, _, event} -> {state, event} end)
+      |> Map.filter(&match?({_, [_, _ | _]}, &1))
+      |> Map.to_list()
+      |> case do
+        [{{^state, event}, ambiguous}] ->
+          [{state, {event, Enum.map(ambiguous, &elem(&1, 1))}} | acc]
+
+        _ ->
+          acc
+      end
+    end)
   end
 
   @doc ~S"""

@@ -209,8 +209,6 @@ defmodule Finitomata do
 
       use GenServer, restart: :transient, shutdown: 5_000
 
-      Module.register_attribute(__MODULE__, :finitomata_on_transition_clauses, accumulate: true)
-
       @on_definition Finitomata.Hook
       @before_compile Finitomata.Hook
 

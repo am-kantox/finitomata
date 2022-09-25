@@ -1,34 +1,72 @@
 defmodule Finitomata.Hook do
   @moduledoc false
 
+  alias Finitomata.Mix.Events
+
   @type ast_meta :: keyword()
   @type ast_tuple :: {atom(), ast_meta(), any()}
-  @type info :: %{
+  @type t :: %{
+          __struct__: __MODULE__,
           env: Macro.Env.t(),
+          module: module(),
           kind: :def | :defp,
           fun: atom(),
           arity: arity(),
           args: [ast_tuple()],
           guards: [ast_tuple()],
-          body: [{:do, ast_tuple()}],
-          payload: map()
+          body: [{:do, ast_tuple()}]
         }
-  defstruct ~w|env kind fun arity args guards body payload|a
+  defstruct ~w|env module kind fun arity args guards body|a
 
-  def __on_definition__(env, kind, :on_transition, args, guards, body) do
-    Module.put_attribute(
-      env.module,
-      :finitomata_on_transition_clauses,
-      struct(__MODULE__,
-        env: env,
-        kind: kind,
-        fun: :on_transition,
-        arity: length(args),
-        args: args |> IO.inspect(label: "\nARGS"),
-        guards: guards,
-        body: body
+  defimpl Inspect do
+    @moduledoc false
+
+    import Inspect.Algebra
+
+    @spec inspect(Finitomata.Hook.t(), Inspect.Opts.t()) ::
+            :doc_line
+            | :doc_nil
+            | binary
+            | {:doc_collapse, pos_integer}
+            | {:doc_force, any}
+            | {:doc_break | :doc_color | :doc_cons | :doc_fits | :doc_group | :doc_string, any,
+               any}
+            | {:doc_nest, any, :cursor | :reset | non_neg_integer, :always | :break}
+    def inspect(%Finitomata.Hook{module: module, fun: fun, args: args, guards: guards}, _opts) do
+      args = args |> Macro.to_string() |> String.slice(1..-2)
+
+      guards =
+        case guards do
+          [] -> ""
+          guards -> " when " <> (guards |> Macro.to_string() |> String.slice(1..-2))
+        end
+
+      concat(["#Finitomata.Hook<#{inspect(module)}.#{fun}(", args, ")", guards, ">"])
+    end
+  end
+
+  def __on_definition__(env, :def, :on_transition, [_, _, _, _] = args, guards, body) do
+    Events
+    |> Process.whereis()
+    |> then(fn
+      pid when is_pid(pid) -> Process.alive?(pid)
+      _ -> false
+    end)
+    |> if do
+      Events.put(
+        :hooks,
+        struct(__MODULE__,
+          env: env,
+          module: env.module,
+          kind: :def,
+          fun: :on_transition,
+          arity: 4,
+          args: args,
+          guards: guards,
+          body: body
+        )
       )
-    )
+    end
   end
 
   def __on_definition__(_env, _kind, _fun, _args, _guards, _body), do: :ok
@@ -106,4 +144,11 @@ defmodule Finitomata.Hook do
       end
     end
   end
+
+  @spec details(t()) :: [
+          {:args, [ast_tuple()]} | {:body, [{:do, ast_tuple()}]} | {:guards, [ast_tuple()]}
+        ]
+  @doc false
+  def details(%__MODULE__{args: args, guards: guards, body: body}),
+    do: [args: args, guards: guards, body: body]
 end
