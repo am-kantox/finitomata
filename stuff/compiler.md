@@ -20,7 +20,7 @@ graph TD
   s4 --> |determined| s5
 ```
 
-Here we have transitions which do not require a handler (events `to_s1!`, `to_s1`, `to_s2`, and `to_s3` define the target state, so just sending the event to the _FSM_ in the respective state would be enough.) Also we have `ambiguous` and `determined` events (don’t ask about the name of the latter,) which wouldn’t succeed without the respective `Finitomata.on_transition/4` handler declared. This handler must route the event to one of two possible states, conditionally returning `{:ok, :s3, state}` or `{:ok, :s4, state}` based on the state, the payload, or the event payload.
+Here we have transitions which do not require a handler (events `to_s1!`, `to_s1`, `to_s2`, and `to_s3` define the target state, so just sending the event to the _FSM_ in the respective state would be enough.) Also we have `ambiguous` and `determined` events (don’t ask about the name of the latter,) which wouldn’t succeed without the respective `c:Finitomata.on_transition/4` handler declared. This handler must route the event to one of two possible states, conditionally returning `{:ok, :s3, state}` or `{:ok, :s4, state}` based on the state, the payload, or the event payload.
 
 An attempt to call `ambiguous` event from state `s2` without this handler defined would result in runtime error of the shape
 
