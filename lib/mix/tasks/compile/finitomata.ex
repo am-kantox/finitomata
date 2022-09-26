@@ -35,12 +35,16 @@ defmodule Mix.Tasks.Compile.Finitomata do
   @doc false
   def trace({remote, meta, Finitomata, :__using__, 1}, env)
       when remote in ~w|remote_macro imported_macro|a do
-    pos = if Keyword.keyword?(meta), do: Keyword.get(meta, :line, env.line)
-    message = "This file contains Finitomata implementation"
-
     Events.put(
-      :diagnostics,
-      diagnostic(message, severity: :hint, details: env.context, position: pos, file: env.file)
+      :declarations,
+      struct(Finitomata.Hook,
+        env: env,
+        module: env.module,
+        kind: :defmacro,
+        fun: :__using__,
+        arity: 1,
+        args: meta
+      )
     )
 
     :ok
@@ -52,7 +56,8 @@ defmodule Mix.Tasks.Compile.Finitomata do
     module
     |> Events.hooks()
     |> to_diagnostics(module |> Module.get_attribute(:__config__) |> Map.get(:fsm))
-    |> amend_using_info()
+    |> add_diagnostics()
+    |> amend_using_info(module)
   end
 
   def trace(_event, _env), do: :ok
@@ -60,17 +65,13 @@ defmodule Mix.Tasks.Compile.Finitomata do
   @spec after_compiler({status, [Mix.Task.Compiler.Diagnostic.t()]}, any()) ::
           {status, [Mix.Task.Compiler.Diagnostic.t()]}
         when status: atom()
-  defp after_compiler({status, diagnostics}, _argv) do
+  defp after_compiler({_status, diagnostics}, _argv) do
     tracers = Enum.reject(Code.get_compiler_option(:tracers), &(&1 == __MODULE__))
     Code.put_compiler_option(:tracers, tracers)
 
-    %{hooks: hooks, diagnostics: finitomata_diagnostics} = Events.all()
+    %{diagnostics: finitomata_diagnostics} = Events.all()
 
-    {_full, _added, _removed} = manifest(hooks)
-    IO.inspect(finitomata_diagnostics)
-    IO.inspect({status, diagnostics})
-    IO.inspect(hooks)
-
+    {status, _full, _added, _removed} = manifest(finitomata_diagnostics)
     {status, diagnostics ++ MapSet.to_list(finitomata_diagnostics)}
   end
 
@@ -87,93 +88,186 @@ defmodule Mix.Tasks.Compile.Finitomata do
     |> Map.merge(Map.new(opts))
   end
 
-  @spec hook(Hook.t()) :: module()
-  defp hook(%Hook{module: module}), do: module
+  @type ambiguous ::
+          {Finitomata.Transition.state(),
+           {Finitomata.Transition.event(), [Finitomata.Transition.state()]}}
+  @type disambiguated ::
+          {Finitomata.Transition.state(),
+           {Finitomata.Transition.event(), [Finitomata.Transition.state()], Hook.t()}}
+  @type diagnostics :: %{
+          explicit: [disambiguated()],
+          partial: [disambiguated()],
+          implicit: [disambiguated()],
+          unhandled: [ambiguous()]
+        }
 
-  @spec to_diagnostics(Events.hooks(), [Transition.t()]) :: Events.diagnostics()
+  @spec to_diagnostics(Events.hooks(), [Transition.t()]) :: diagnostics()
   defp to_diagnostics(hooks, fsm) do
     declared = Enum.group_by(hooks, &hd(&1.args))
-
-    IO.inspect({declared, Transition.ambiguous(fsm)}, label: "HOOKS")
+    initial = %{explicit: [], partial: [], implicit: [], unhandled: []}
 
     fsm
     |> Transition.ambiguous()
-    |> Enum.reduce([], fn {from, {event, tos}}, acc ->
+    |> Enum.reduce(initial, fn {from, {event, tos}}, acc ->
       declared
       |> Map.get(from, [])
-      |> Enum.filter(&match?(%Hook{args: [^from, ^event, _, _]}, &1))
-      |> case do
-        [] ->
-          [{from, {event, tos}} | acc]
-
-        some ->
-          Enum.each(some, fn
-            %Hook{} = hook ->
-              message =
-                "Ambiguous transition ‹#{from} -- <#{event}> --> #{inspect(tos)}› seems to be handled.\n" <>
-                  "Make sure all possible targte states are reachable!"
-
-              Events.put(
-                :diagnostics,
-                diagnostic(message,
-                  severity: :hint,
-                  details: Hook.details(hook),
-                  position: hook.env.line,
-                  file: hook.env.file
-                )
-              )
-          end)
-
-          acc
-      end
+      |> add_diagnostic({from, {event, tos}}, acc)
     end)
   end
 
-  @spec amend_using_info([
-          {Finitomata.Transition.state(),
-           {Finitomata.Transition.event(), [Finitomata.Transition.state()]}}
-        ]) :: :ok
-  defp amend_using_info([]), do: :ok
-  defp amend_using_info(unhandled), do: IO.puts(inspect(unhandled, label: "UNHANDLED"))
+  @spec add_diagnostic([Hook.t()], ambiguous(), diagnostics()) :: diagnostics()
+  defp add_diagnostic([], {from, {event, tos}}, diagnostics),
+    do: %{diagnostics | unhandled: [{from, {event, tos}} | diagnostics.unhandled]}
+
+  defp add_diagnostic(hooks, {from, {event, tos}}, diagnostics) do
+    Enum.reduce(hooks, diagnostics, fn
+      %Hook{args: [^from, ^event, _, _]} = hook, acc ->
+        %{acc | explicit: [{from, {event, tos, hook}} | acc.explicit]}
+
+      # [AM] check guards
+      # %Hook{args: [from, {event, _, _}, _, _], guards: _} = hook, acc when is_atom(event) ->
+      #   %{acc | implicit: [hook | acc.implicit]}
+
+      %Hook{args: [^from, {event, _, _}, _, _]} = hook, acc when is_atom(event) ->
+        %{acc | implicit: [{from, {event, tos, hook}} | acc.implicit]}
+    end)
+  end
+
+  @spec add_diagnostics(diagnostics()) :: diagnostics()
+  defp add_diagnostics(%{explicit: _, partial: _, implicit: _} = hooks) do
+    hooks
+    |> Map.take(~w|explicit partial implicit|a)
+    |> Enum.each(fn {type, hooks} ->
+      Enum.each(hooks, fn
+        {_from, {_event, _tos, %Hook{} = hook}} = info ->
+          Events.put(
+            :diagnostics,
+            type
+            |> disambiguated_message(info)
+            |> diagnostic(
+              severity: disambiguated_security(type),
+              details: Hook.details(hook),
+              position: hook.env.line,
+              file: hook.env.file
+            )
+          )
+      end)
+    end)
+
+    hooks
+  end
+
+  @spec disambiguated_security(:explicit | :partial | :implicit) :: :hint | :info
+  def disambiguated_security(:explicit), do: :hint
+  def disambiguated_security(:partial), do: :hint
+  def disambiguated_security(:implicit), do: :information
+
+  @spec disambiguated_message(:explicit | :partial | :implicit, disambiguated()) :: String.t()
+  defp disambiguated_message(:explicit, {from, {event, tos, %Hook{} = _hook}}) do
+    "Ambiguous transition ‹#{from} -- <#{event}> --> #{inspect(tos)}› seems to be explicitly handled.\n" <>
+      "Make sure all possible target states are reachable!"
+  end
+
+  defp disambiguated_message(:implicit, {from, {event, tos, %Hook{} = _hook}}) do
+    "Ambiguous transition ‹#{from} -- <#{event}> --> #{inspect(tos)}› seems to be implicitly handled.\n" <>
+      "Make sure all possible target states are reachable!"
+  end
+
+  @spec amend_using_info(diagnostics(), module()) :: :ok
+  defp amend_using_info(%{unhandled: []}, _module), do: :ok
+
+  defp amend_using_info(%{unhandled: unhandled}, module) do
+    module
+    |> Events.declaration()
+    |> case do
+      %Hook{} = hook ->
+        pos = if Keyword.keyword?(hook.args), do: Keyword.get(hook.args, :line, hook.env.line)
+
+        message =
+          [
+            "This FSM declaration contains ambiguous transitions which are not handled:"
+            | Enum.map(unhandled, fn {from, {event, tos}} ->
+                "    ‹#{from} -- <#{event}> --> #{inspect(tos)}› must be handled"
+              end)
+          ]
+          |> Enum.join("\n")
+
+        Events.put(
+          :diagnostics,
+          diagnostic(message,
+            severity: :warning,
+            details: Hook.details(hook),
+            position: pos,
+            file: hook.env.file
+          )
+        )
+
+      nil ->
+        Mix.shell().info([
+          [:bright, :yellow, "warning: ", :reset],
+          "inconsistent FSM data collected from ",
+          [:bright, :blue, inspect(module), :reset]
+        ])
+    end
+  end
 
   @doc experimental: true, todo: true
   @spec manifest(MapSet.t(Hook.t())) ::
-          {MapSet.t(Hook.t()), MapSet.t(Hook.t()), MapSet.t(Hook.t())}
-  defp manifest(hooks) do
-    hooks = hooks |> Enum.map(&hook/1) |> Enum.frequencies()
-
+          {:ok | :noop, MapSet.t(Hook.t()), MapSet.t(Hook.t()), MapSet.t(Hook.t())}
+  defp manifest(diagnostics) do
     {full, added, removed} =
       @manifest_events
       |> read_manifest()
-      |> IO.inspect(label: "MANIFEST")
       |> case do
         nil ->
-          {hooks, hooks, %{}}
+          {diagnostics, diagnostics, []}
 
         old ->
-          {maybe_changed_new, added} = Map.split(hooks, Map.keys(old))
-          {maybe_changed_old, preserved} = Map.split(old, Map.keys(hooks))
+          old_by_module = Enum.group_by(old, & &1.file)
+          diagnostics_by_module = Enum.group_by(diagnostics, & &1.file)
 
-          {
-            maybe_changed_old
-            |> Map.merge(maybe_changed_new)
-            |> Map.merge(preserved)
-            |> Map.merge(added),
-            added,
-            preserved
-          }
+          full =
+            old_by_module
+            |> Map.merge(diagnostics_by_module)
+            |> Map.values()
+            |> List.flatten()
+            |> MapSet.new()
+
+          old =
+            old_by_module
+            |> Map.take(Map.keys(diagnostics_by_module))
+            |> Map.values()
+            |> List.flatten()
+            |> MapSet.new()
+
+          {full, MapSet.difference(diagnostics, old), MapSet.difference(old, diagnostics)}
       end
 
     write_manifest(@manifest_events, full)
 
-    [added: added, removed: removed]
-    |> Enum.map(fn {k, v} -> {k, Enum.map(v, &inspect(&1, limit: :infinity))} end)
-    |> case do
-      events ->
-        Mix.shell().info("Finitomata events: " <> inspect(events))
-    end
+    status =
+      [added, removed]
+      |> Enum.map(fn diagnostics ->
+        diagnostics
+        |> Enum.filter(&match?(%Mix.Task.Compiler.Diagnostic{severity: :warning}, &1))
+        |> Enum.map_join("\n", fn %Mix.Task.Compiler.Diagnostic{} = diagnostic ->
+          loc = Enum.join([Path.relative_to_cwd(diagnostic.file), diagnostic.position], ":")
+          diagnostic.message <> "\n  " <> loc
+        end)
+      end)
+      |> case do
+        ["", ""] ->
+          :noop
 
-    {full, added, removed}
+        [_added, _removed] ->
+          # Mix.shell().info("Finitomata report >>>>>>>>")
+          # if removed != "", do: Mix.shell().info("---- removed ----\n" <> removed)
+          # if added != "", do: Mix.shell().info("++++ added ++++\n" <> added)
+          # Mix.shell().info("Finitomata report <<<<<<<<")
+          :ok
+      end
+
+    {status, full, added, removed}
   end
 
   @spec manifest_path(binary()) :: binary()

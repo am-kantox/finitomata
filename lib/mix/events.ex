@@ -7,12 +7,12 @@ defmodule Finitomata.Mix.Events do
 
   @type diagnostics :: MapSet.t(Mix.Task.Compiler.Diagnostic.t())
   @type hooks :: MapSet.t(Finitomata.Hook.t())
-  @type state :: %{hooks: hooks(), diagnostics: diagnostics()}
+  @type state :: %{hooks: hooks(), declarations: hooks(), diagnostics: diagnostics()}
 
   def start_link,
     do:
       Agent.start_link(
-        fn -> %{hooks: MapSet.new(), diagnostics: MapSet.new()} end,
+        fn -> %{hooks: MapSet.new(), declarations: MapSet.new(), diagnostics: MapSet.new()} end,
         name: __MODULE__
       )
 
@@ -24,7 +24,19 @@ defmodule Finitomata.Mix.Events do
     do:
       Agent.get(
         __MODULE__,
-        &MapSet.filter(&1[:hooks], fn hook -> match?(%Finitomata.Hook{module: ^module}, hook) end)
+        &MapSet.filter(&1[:hooks], fn hook ->
+          match?(%{__struct__: Finitomata.Hook, module: ^module}, hook)
+        end)
+      )
+
+  @spec declaration(module()) :: Finitomata.Hook.t() | nil
+  def declaration(module),
+    do:
+      Agent.get(
+        __MODULE__,
+        &Enum.find(&1[:declarations], fn hook ->
+          match?(%{__struct__: Finitomata.Hook, module: ^module}, hook)
+        end)
       )
 
   def put(key, value) do

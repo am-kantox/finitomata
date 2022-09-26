@@ -46,13 +46,7 @@ defmodule Finitomata.Hook do
   end
 
   def __on_definition__(env, :def, :on_transition, [_, _, _, _] = args, guards, body) do
-    Events
-    |> Process.whereis()
-    |> then(fn
-      pid when is_pid(pid) -> Process.alive?(pid)
-      _ -> false
-    end)
-    |> if do
+    if compiler?() do
       Events.put(
         :hooks,
         struct(__MODULE__,
@@ -72,6 +66,21 @@ defmodule Finitomata.Hook do
   def __on_definition__(_env, _kind, _fun, _args, _guards, _body), do: :ok
 
   defmacro __before_compile__(env) do
+    if not compiler?() and Mix.Project.get() != Finitomata.MixProject do
+      Mix.shell().info([
+        [:bright, :yellow, "warning: ", :reset],
+        "unhandled finitomata declaration found in ",
+        [:bright, :blue, inspect(env.module), :reset],
+        ",\n         but we were unable to analyse the correctness of the FSM.\n         Add ",
+        [:bright, :cyan, ":finitomata", :reset],
+        " compiler to ",
+        [:bright, :cyan, "compilers:", :reset],
+        " in your ",
+        [:bright, :cyan, "mix.exs", :reset],
+        "!\n  #{Path.relative_to_cwd(env.file)}:#{env.line}"
+      ])
+    end
+
     quote generated: true,
           location: :keep,
           bind_quoted: [module: env.module, file: env.file, line: env.line] do
@@ -151,4 +160,14 @@ defmodule Finitomata.Hook do
   @doc false
   def details(%__MODULE__{args: args, guards: guards, body: body}),
     do: [args: args, guards: guards, body: body]
+
+  @spec compiler? :: boolean()
+  defp compiler? do
+    Events
+    |> Process.whereis()
+    |> then(fn
+      pid when is_pid(pid) -> Process.alive?(pid)
+      _ -> false
+    end)
+  end
 end
