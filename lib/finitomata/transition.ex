@@ -315,7 +315,7 @@ defmodule Finitomata.Transition do
         _ ->
           # ‹#{from} -- <#{event}> --> #{inspect(tos)}›
           concat([
-            "‹",
+            "⥯‹",
             to_doc(from, opts),
             " ⥓ ",
             to_doc(event, opts),
