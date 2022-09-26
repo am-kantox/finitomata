@@ -24,9 +24,11 @@ defmodule Finitomata.Mix.Events do
     do:
       Agent.get(
         __MODULE__,
-        &MapSet.filter(&1[:hooks], fn hook ->
-          match?(%{__struct__: Finitomata.Hook, module: ^module}, hook)
-        end)
+        fn all ->
+          all[:hooks]
+          |> Enum.filter(&match?(%{__struct__: Finitomata.Hook, module: ^module}, &1))
+          |> MapSet.new()
+        end
       )
 
   @spec declaration(module()) :: Finitomata.Hook.t() | nil
