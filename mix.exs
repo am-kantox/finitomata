@@ -23,6 +23,7 @@ defmodule Finitomata.MixProject do
       dialyzer: [
         plt_file: {:no_warn, ".dialyzer/dialyzer.plt"},
         plt_add_deps: :transitive,
+        plt_add_apps: [:mix],
         list_unused_filters: true,
         ignore_warnings: ".dialyzer/ignore.exs"
       ]
