@@ -265,8 +265,7 @@ defmodule Finitomata.Transition do
       transitions
       |> allowed(from: state)
       |> Enum.group_by(fn {state, _, event} -> {state, event} end)
-      |> Map.filter(&match?({_, [_, _ | _]}, &1))
-      |> Map.to_list()
+      |> Enum.filter(&match?({_, [_, _ | _]}, &1))
       |> case do
         [{{^state, event}, ambiguous}] ->
           [{state, {event, Enum.map(ambiguous, &elem(&1, 1))}} | acc]
