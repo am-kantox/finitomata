@@ -16,7 +16,7 @@ defmodule Mix.Tasks.Compile.Finitomata do
   def run(argv) do
     Events.start_link()
 
-    Compiler.after_compiler(:app, &after_compiler(&1, argv))
+    Compiler.after_compiler(:finitomata, &after_compiler(&1, argv))
 
     tracers = Code.get_compiler_option(:tracers)
     Code.put_compiler_option(:tracers, [__MODULE__ | tracers])
@@ -64,14 +64,22 @@ defmodule Mix.Tasks.Compile.Finitomata do
 
   @spec after_compiler({status, [Mix.Task.Compiler.Diagnostic.t()]}, any()) ::
           {status, [Mix.Task.Compiler.Diagnostic.t()]}
-        when status: atom()
-  defp after_compiler({_status, diagnostics}, _argv) do
+        when status: Mix.Task.Compiler.status()
+  defp after_compiler({status, diagnostics}, _argv) do
     tracers = Enum.reject(Code.get_compiler_option(:tracers), &(&1 == __MODULE__))
     Code.put_compiler_option(:tracers, tracers)
 
     %{diagnostics: finitomata_diagnostics} = Events.all()
 
-    {status, _full, _added, _removed} = manifest(finitomata_diagnostics)
+    {finitomata_status, _full, _added, _removed} = manifest(finitomata_diagnostics)
+
+    status =
+      case {status, finitomata_status} do
+        {:error, _} -> :error
+        {:noop, status} -> status
+        {:ok, _} -> :ok
+      end
+
     {status, diagnostics ++ MapSet.to_list(finitomata_diagnostics)}
   end
 
@@ -213,7 +221,7 @@ defmodule Mix.Tasks.Compile.Finitomata do
 
   @doc experimental: true, todo: true
   @spec manifest(MapSet.t(Hook.t())) ::
-          {:ok | :noop, MapSet.t(Hook.t()), MapSet.t(Hook.t()), MapSet.t(Hook.t())}
+          {Mix.Task.Compiler.status(), MapSet.t(Hook.t()), MapSet.t(Hook.t()), MapSet.t(Hook.t())}
   defp manifest(diagnostics) do
     {full, added, removed} =
       @manifest_events
