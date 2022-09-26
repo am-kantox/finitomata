@@ -30,7 +30,7 @@ defmodule FinitomataTest do
              Finitomata.transition("LogFSM", {:accept, nil})
              Process.sleep(200)
            end) =~
-             ~r/\[→ ⇄\].*?\[✓ ⇄\].*?\[← ⇄\]/su
+             ~r/\[→⥯\].*?\[✓ ⇄\].*?\[←⥯\]/su
 
     assert %Finitomata.State{current: :accepted, history: [:idle, :*], payload: %{foo: :bar}} =
              Finitomata.state("LogFSM")
@@ -42,7 +42,7 @@ defmodule FinitomataTest do
              Finitomata.transition("LogFSM", {:__end__, nil})
              Process.sleep(200)
            end) =~
-             "[◉ ⇄]"
+             "[◉⥯]"
 
     Finitomata.transition("LogFSM", {:__end__, nil})
     Process.sleep(200)
@@ -142,7 +142,7 @@ defmodule FinitomataTest do
     assert capture_log(fn ->
              Finitomata.transition("SoftFSM", {:do?, nil})
              Process.sleep(200)
-           end) =~ "[⚐ ⇄] transition softly failed {:error, :not_allowed}"
+           end) =~ "[⚐⥯] transition softly failed {:error, :not_allowed}"
 
     Process.sleep(200)
     assert %Finitomata.State{current: :started} = Finitomata.state("SoftFSM")
