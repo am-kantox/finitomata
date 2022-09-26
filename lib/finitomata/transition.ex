@@ -18,7 +18,7 @@ defmodule Finitomata.Transition do
   @type t :: %{
           __struct__: Transition,
           from: state(),
-          to: state(),
+          to: state() | [state()],
           event: event()
         }
   defstruct [:from, :to, :event]
@@ -290,5 +290,40 @@ defmodule Finitomata.Transition do
     |> Enum.flat_map(fn %Transition{from: from, to: to} -> [from, to] end)
     |> Enum.uniq()
     |> Enum.reject(&(&1 == :*))
+  end
+
+  defimpl Inspect do
+    @moduledoc false
+
+    import Inspect.Algebra
+
+    @spec inspect(Finitomata.Transition.t(), Inspect.Opts.t()) ::
+            :doc_line
+            | :doc_nil
+            | binary
+            | {:doc_collapse, pos_integer}
+            | {:doc_force, any}
+            | {:doc_break | :doc_color | :doc_cons | :doc_fits | :doc_group | :doc_string, any,
+               any}
+            | {:doc_nest, any, :cursor | :reset | non_neg_integer, :always | :break}
+    def inspect(%Finitomata.Transition{from: from, to: to, event: event}, opts) do
+      case Keyword.get(opts.custom_options, :fancy, true) do
+        false ->
+          inner = [from: from, to: to, event: event]
+          concat(["#Finitomata.Transition<", to_doc(inner, opts), ">"])
+
+        _ ->
+          # ‹#{from} -- <#{event}> --> #{inspect(tos)}›
+          concat([
+            "‹",
+            to_doc(from, opts),
+            " ⥓ ",
+            to_doc(event, opts),
+            " ⥛ ",
+            to_doc(to, opts),
+            "›"
+          ])
+      end
+    end
   end
 end

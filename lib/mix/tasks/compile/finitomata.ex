@@ -16,7 +16,7 @@ defmodule Mix.Tasks.Compile.Finitomata do
   def run(argv) do
     Events.start_link()
 
-    Compiler.after_compiler(:finitomata, &after_compiler(&1, argv))
+    Compiler.after_compiler(:app, &after_compiler(&1, argv))
 
     tracers = Code.get_compiler_option(:tracers)
     Code.put_compiler_option(:tracers, [__MODULE__ | tracers])
@@ -172,12 +172,16 @@ defmodule Mix.Tasks.Compile.Finitomata do
 
   @spec disambiguated_message(:explicit | :partial | :implicit, disambiguated()) :: String.t()
   defp disambiguated_message(:explicit, {from, {event, tos, %Hook{} = _hook}}) do
-    "Ambiguous transition ‹#{from} -- <#{event}> --> #{inspect(tos)}› seems to be explicitly handled.\n" <>
+    "Ambiguous transition " <>
+      inspect(%Transition{from: from, to: tos, event: event}) <>
+      " seems to be explicitly handled.\n" <>
       "Make sure all possible target states are reachable!"
   end
 
   defp disambiguated_message(:implicit, {from, {event, tos, %Hook{} = _hook}}) do
-    "Ambiguous transition ‹#{from} -- <#{event}> --> #{inspect(tos)}› seems to be implicitly handled.\n" <>
+    "Ambiguous transition " <>
+      inspect(%Transition{from: from, to: tos, event: event}) <>
+      " seems to be implicitly handled.\n" <>
       "Make sure all possible target states are reachable!"
   end
 
@@ -195,7 +199,9 @@ defmodule Mix.Tasks.Compile.Finitomata do
           [
             "This FSM declaration contains ambiguous transitions which are not handled:"
             | Enum.map(unhandled, fn {from, {event, tos}} ->
-                "    ‹#{from} -- <#{event}> --> #{inspect(tos)}› must be handled"
+                "    " <>
+                  inspect(%Transition{from: from, to: tos, event: event}) <>
+                  " must be handled"
               end)
           ]
           |> Enum.join("\n")
@@ -258,22 +264,28 @@ defmodule Mix.Tasks.Compile.Finitomata do
       |> Enum.map(fn diagnostics ->
         diagnostics
         |> Enum.filter(&match?(%Mix.Task.Compiler.Diagnostic{severity: :warning}, &1))
-        |> Enum.map_join("\n", fn %Mix.Task.Compiler.Diagnostic{} = diagnostic ->
+        |> Enum.map(fn %Mix.Task.Compiler.Diagnostic{} = diagnostic ->
           loc = Enum.join([Path.relative_to_cwd(diagnostic.file), diagnostic.position], ":")
-          diagnostic.message <> "\n  " <> loc
+          {diagnostic.message, loc}
         end)
       end)
       |> case do
-        ["", ""] ->
-          :noop
-
-        [_added, _removed] ->
-          # Mix.shell().info("Finitomata report >>>>>>>>")
-          # if removed != "", do: Mix.shell().info("---- removed ----\n" <> removed)
-          # if added != "", do: Mix.shell().info("++++ added ++++\n" <> added)
-          # Mix.shell().info("Finitomata report <<<<<<<<")
-          :ok
+        [[], []] -> :noop
+        [_added, _removed] -> :ok
       end
+
+    full
+    |> Enum.filter(&match?(%Mix.Task.Compiler.Diagnostic{severity: :warning}, &1))
+    |> Enum.each(fn %Mix.Task.Compiler.Diagnostic{} = diagnostic ->
+      loc = Enum.join([Path.relative_to_cwd(diagnostic.file), diagnostic.position], ":")
+
+      Mix.shell().info([
+        [:bright, :yellow, "warning: ", :reset],
+        diagnostic.message,
+        "\n  ",
+        loc
+      ])
+    end)
 
     {status, full, added, removed}
   end
