@@ -85,7 +85,7 @@ defmodule Finitomata.MixProject do
       logo: "stuff/#{@app}-48x48.png",
       source_url: "https://github.com/am-kantox/#{@app}",
       assets: "stuff/images",
-      extras: ~w[README.md stuff/fsm.md],
+      extras: ~w[README.md stuff/fsm.md stuff/compiler.md],
       groups_for_modules: [],
       before_closing_body_tag: &before_closing_body_tag/1
     ]
