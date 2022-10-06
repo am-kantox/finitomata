@@ -73,7 +73,9 @@ defmodule Finitomata.Hook do
   def __on_definition__(_env, _kind, _fun, _args, _guards, _body), do: :ok
 
   defmacro __before_compile__(env) do
-    if not compiler?() and Mix.Project.get() != Finitomata.MixProject do
+    deps? = [depth: 1] |> Mix.Project.deps_scms() |> Map.take([:finitomata, :siblings]) |> map_size() |> Kernel.>(0)
+
+    if not compiler?() and deps? do
       Mix.shell().info([
         [:bright, :yellow, "warning: ", :reset],
         "unhandled finitomata declaration found in ",
