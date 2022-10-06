@@ -8,7 +8,14 @@
 
 `Finitomata` provides a boilerplate for [FSM](https://en.wikipedia.org/wiki/Finite-state_machine) implementation, allowing to concentrate on the business logic rather than on the process management and transitions/events consistency tweaking.
 
-It reads a description of the FSM from a string in [PlantUML](https://plantuml.com/en/state-diagram), [Mermaid](https://mermaid.live), or even custom format. Basically, it looks more or less like this
+It reads a description of the FSM from a string in [PlantUML](https://plantuml.com/en/state-diagram), [Mermaid](https://mermaid.live), or even custom format. 
+
+> ### Syntax Definition {: .tip}
+>
+> `Mermaid` **state diagram** format is literally the same as `PlantUML`, so if you want to use it, specify `syntax: Finitomata.PlantUML` and
+> if you want to use **mermaid graph**, specify `syntax: Finitomata.Mermaid`. The latter is the default.
+
+Basically, it looks more or less like this
 
 ### `PlantUML`
 
@@ -23,9 +30,9 @@ It reads a description of the FSM from a string in [PlantUML](https://plantuml.c
     s1 --> |to_s2| s2
     s1 --> |to_s3| s3
 
-> ### Note {: .tip}
+> ### Using Mermaid Graph Syntax {: .tip}
 >
-> `mermaid` does not allow to explicitly specify transitions (and hence event names)
+> `Mermaid` does not allow to explicitly specify transitions (and hence event names)
 > from the starting state and to the end state(s), these states names are implicitly set to `:*`
 > and events to `:__start__` and `:__end__` respectively.
 
@@ -55,6 +62,7 @@ the transition is considered as expected to fail; no `on_failure/2` callback wou
 be called on failure and no log warning will be printed.
 
 ## FSM Tuning and Configuration
+
 ### Recurrent Callback
 
 If `timer: non_neg_integer()` option is passed to `use Finitomata`,
@@ -145,6 +153,7 @@ end
 
 ## Changelog
 
+- `0.8.1` — improvements to `:finitomata` compiler
 - `0.8.0` — `:finitomata` compiler to warn/hint about not implemented ambiguous transitions
 - `0.7.2` — [FIX] `banged!` transitions must not be determined
 - `0.6.3` — `soft?` events which do not call `on_failure/2` and do not log errors

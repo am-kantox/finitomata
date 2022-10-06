@@ -97,11 +97,9 @@ defmodule Mix.Tasks.Compile.Finitomata do
   end
 
   @type ambiguous ::
-          {Finitomata.Transition.state(),
-           {Finitomata.Transition.event(), [Finitomata.Transition.state()]}}
+          {Transition.state(), {Transition.event(), [Transition.state()]}}
   @type disambiguated ::
-          {Finitomata.Transition.state(),
-           {Finitomata.Transition.event(), [Finitomata.Transition.state()], Hook.t()}}
+          {Transition.state(), {Transition.event(), [Transition.state()], Hook.t()}}
   @type diagnostics :: %{
           explicit: [disambiguated()],
           partial: [disambiguated()],
@@ -111,15 +109,13 @@ defmodule Mix.Tasks.Compile.Finitomata do
 
   @spec to_diagnostics(Events.hooks(), [Transition.t()]) :: diagnostics()
   defp to_diagnostics(hooks, fsm) do
-    declared = Enum.group_by(hooks, &hd(&1.args))
+    declared = MapSet.to_list(hooks)
     initial = %{explicit: [], partial: [], implicit: [], unhandled: []}
 
     fsm
     |> Transition.ambiguous()
     |> Enum.reduce(initial, fn {from, {event, tos}}, acc ->
-      declared
-      |> Map.get(from, [])
-      |> add_diagnostic({from, {event, tos}}, acc)
+      add_diagnostic(declared, {from, {event, tos}}, acc)
     end)
   end
 
@@ -132,12 +128,21 @@ defmodule Mix.Tasks.Compile.Finitomata do
       %Hook{args: [^from, ^event, _, _]} = hook, acc ->
         %{acc | explicit: [{from, {event, tos, hook}} | acc.explicit]}
 
-      # [AM] check guards
-      # %Hook{args: [from, {event, _, _}, _, _], guards: _} = hook, acc when is_atom(event) ->
-      #   %{acc | implicit: [hook | acc.implicit]}
+      %Hook{args: [^from, {e, _, _}, _, _], guards: []} = hook, acc when is_atom(e) ->
+        %{acc | partial: [{from, {event, tos, hook}} | acc.partial]}
 
-      %Hook{args: [^from, {event, _, _}, _, _]} = hook, acc when is_atom(event) ->
+      %Hook{args: [{f, _, _}, ^event, _, _], guards: []} = hook, acc when is_atom(f) ->
+        %{acc | partial: [{from, {event, tos, hook}} | acc.partial]}
+
+      %Hook{args: [{f, _, _}, {e, _, _}, _, _], guards: []} = hook, acc
+      when is_atom(f) and is_atom(e) ->
         %{acc | implicit: [{from, {event, tos, hook}} | acc.implicit]}
+
+      %Hook{args: args, guards: guards} = hook, acc ->
+        cover(args, {from, {event, tos, hook}}, guards, acc)
+
+      %Hook{}, acc ->
+        acc
     end)
   end
 
@@ -165,16 +170,84 @@ defmodule Mix.Tasks.Compile.Finitomata do
     hooks
   end
 
+  @spec cover(
+          {Transition.state(), Transition.event()}
+          | [Hook.ast_tuple()],
+          {Transition.state(), {Transition.event(), [Transition.state()], Hook.t()}},
+          [Hook.ast_tuple()],
+          diagnostics()
+        ) :: diagnostics()
+  defp cover({f, e}, {from, {event, tos, _} = event_tos_hook}, guards, acc)
+       when is_atom(f) and is_atom(e) do
+    case covered?({f, e}, {from, event}, guards) do
+      3 -> %{acc | explicit: [{from, event_tos_hook} | acc.explicit]}
+      2 -> %{acc | partial: [{from, event_tos_hook} | acc.partial]}
+      1 -> %{acc | implicit: [{from, event_tos_hook} | acc.implicit]}
+      0 -> %{acc | unhandled: [{from, {event, tos}} | acc.unhandled]}
+    end
+  end
+
+  defp cover([f, {e, _, _}, _, _], {from, event}, guards, acc) when is_atom(f),
+    do: cover({f, e}, {from, event}, guards, acc)
+
+  defp cover([{f, _, _}, e, _, _], {from, event}, guards, acc) when is_atom(e),
+    do: cover({f, e}, {from, event}, guards, acc)
+
+  defp cover([{f, _, _}, {e, _, _}, _, _], {from, event}, guards, acc),
+    do: cover({f, e}, {from, event}, guards, acc)
+
+  # TODO [AM] more cases with pattern matching etc
+  defp cover(_, _, _guards, acc), do: acc
+
+  @spec covered?(
+          {Transition.state(), Transition.event()},
+          {Transition.state(), Transition.event()},
+          [Hook.ast_tuple()]
+        ) :: 0 | 1 | 2 | 3
+  defp covered?({f, e}, {from, event}, guards) do
+    guards
+    |> Macro.prewalk(0, fn
+      {:in, _, [{^f, _, _}, list]} = t, acc ->
+        {t, if(from in Macro.expand(list, __ENV__), do: Enum.max([acc, 2]), else: acc)}
+
+      {:in, _, [{^e, _, _}, list]} = t, acc ->
+        {t, if(event in Macro.expand(list, __ENV__), do: Enum.max([acc, 2]), else: acc)}
+
+      {:==, _, [{^f, _, _}, ^from]} = t, _acc ->
+        {t, 3}
+
+      {:==, _, [^from, {^f, _, _}]} = t, _acc ->
+        {t, 3}
+
+      {:==, _, [{^e, _, _}, ^event]} = t, _acc ->
+        {t, 3}
+
+      {:==, _, [^event, {^e, _, _}]} = t, _acc ->
+        {t, 3}
+
+      t, acc ->
+        {t, acc}
+    end)
+    |> elem(1)
+  end
+
   @spec disambiguated_security(:explicit | :partial | :implicit) :: :hint | :info
-  def disambiguated_security(:explicit), do: :hint
-  def disambiguated_security(:partial), do: :hint
-  def disambiguated_security(:implicit), do: :information
+  defp disambiguated_security(:explicit), do: :hint
+  defp disambiguated_security(:partial), do: :hint
+  defp disambiguated_security(:implicit), do: :information
 
   @spec disambiguated_message(:explicit | :partial | :implicit, disambiguated()) :: String.t()
   defp disambiguated_message(:explicit, {from, {event, tos, %Hook{} = _hook}}) do
     "Ambiguous transition " <>
       inspect(%Transition{from: from, to: tos, event: event}) <>
       " seems to be explicitly handled.\n" <>
+      "Make sure all possible target states are reachable!"
+  end
+
+  defp disambiguated_message(:partial, {from, {event, tos, %Hook{} = _hook}}) do
+    "Ambiguous transition " <>
+      inspect(%Transition{from: from, to: tos, event: event}) <>
+      " seems to be partially handled.\n" <>
       "Make sure all possible target states are reachable!"
   end
 
@@ -237,7 +310,7 @@ defmodule Mix.Tasks.Compile.Finitomata do
           {diagnostics, diagnostics, []}
 
         old ->
-          old_by_module = Enum.group_by(old, & &1.file)
+          old_by_module = old |> Enum.filter(&File.exists?(&1.file)) |> Enum.group_by(& &1.file)
           diagnostics_by_module = Enum.group_by(diagnostics, & &1.file)
 
           full =
