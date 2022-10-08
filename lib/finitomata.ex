@@ -29,9 +29,10 @@ defmodule Finitomata do
             current: Transition.state(),
             payload: payload(),
             timer: non_neg_integer(),
-            history: [Transition.state()]
+            history: [Transition.state()],
+            error: any()
           }
-    defstruct payload: %{}, current: :*, timer: false, history: []
+    defstruct payload: %{}, current: :*, timer: false, history: [], error: nil
   end
 
   @typedoc "The payload that can be passed to each call to `transition/3`"
@@ -442,20 +443,21 @@ defmodule Finitomata do
           end
         else
           err ->
+            state_with_error = struct(state, error: err)
             cond do
               event in @__config_soft_events__ ->
                 Logger.debug("[⚐⥯] transition softly failed " <> inspect(err))
-                {:noreply, state}
+                {:noreply, state_with_error}
 
               @__config__[:fsm]
               |> Transition.allowed(state.current, event)
               |> Enum.all?(&(&1 in @__config__[:ensure_entry])) ->
-                {:noreply, state, {:continue, {:transition, event_payload({event, payload})}}}
+                {:noreply, state_with_error, {:continue, {:transition, event_payload({event, payload})}}}
 
               true ->
                 Logger.warn("[⚐⥯] transition failed " <> inspect(err))
-                safe_on_failure(event, payload, state)
-                {:noreply, state}
+                safe_on_failure(event, payload, state_with_error)
+                {:noreply, state_with_error}
             end
         end
       end
