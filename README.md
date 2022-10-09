@@ -153,6 +153,7 @@ end
 
 ## Changelog
 
+- `0.8.2` — last error is now kept in the state (credits to @egidijusz)
 - `0.8.1` — improvements to `:finitomata` compiler
 - `0.8.0` — `:finitomata` compiler to warn/hint about not implemented ambiguous transitions
 - `0.7.2` — [FIX] `banged!` transitions must not be determined
