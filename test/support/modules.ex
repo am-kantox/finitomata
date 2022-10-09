@@ -144,3 +144,25 @@ defmodule Finitomata.Test.Soft do
     {:error, :not_allowed}
   end
 end
+
+defmodule Finitomata.Test.ErrorAttach do
+  @moduledoc false
+
+  @fsm """
+  idle --> |start| started
+  """
+
+  use Finitomata, fsm: @fsm, auto_terminate: true
+
+  @impl Finitomata
+  def on_transition(:idle, :start, _payload, _state) do
+    raise "Test error"
+  end
+
+  @impl Finitomata
+  def on_failure(_event, _payload, %{last_error: last_error} = _state) do
+    Logger.debug("[failure] " <> inspect(last_error.error))
+    Logger.debug("[failure] state: " <> inspect(last_error.state))
+    Logger.debug("[failure] event: " <> inspect(last_error.event))
+  end
+end

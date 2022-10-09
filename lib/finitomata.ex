@@ -23,15 +23,20 @@ defmodule Finitomata do
     @typedoc "The payload that has been passed to the FSM instance on startup"
     @type payload :: any()
 
+    @typedoc "The map that holds last error which happened on transition (at given state and event)."
+    @type last_error ::
+            %{state: Transition.state(), event: Transition.event(), error: any()} | nil
+
     @typedoc "The internal representation of the FSM state"
     @type t :: %{
             __struct__: State,
             current: Transition.state(),
             payload: payload(),
             timer: non_neg_integer(),
-            history: [Transition.state()]
+            history: [Transition.state()],
+            last_error: last_error()
           }
-    defstruct payload: %{}, current: :*, timer: false, history: []
+    defstruct payload: %{}, current: :*, timer: false, history: [], last_error: nil
   end
 
   @typedoc "The payload that can be passed to each call to `transition/3`"
@@ -442,6 +447,8 @@ defmodule Finitomata do
           end
         else
           err ->
+            state = %State{state | last_error: %{state: state.current, event: event, error: err}}
+
             cond do
               event in @__config_soft_events__ ->
                 Logger.debug("[⚐⥯] transition softly failed " <> inspect(err))

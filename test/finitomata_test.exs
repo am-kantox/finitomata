@@ -10,7 +10,7 @@ defmodule FinitomataTest do
   def setup_all do
   end
 
-  alias Finitomata.Test.{Auto, Callback, EnsureEntry, Log, Soft, Timer}
+  alias Finitomata.Test.{Auto, Callback, EnsureEntry, ErrorAttach, Log, Soft, Timer}
 
   test "exported types" do
     defmodule StatesTest do
@@ -147,5 +147,21 @@ defmodule FinitomataTest do
     Process.sleep(200)
     assert %Finitomata.State{current: :started} = Finitomata.state("SoftFSM")
     assert Finitomata.alive?("SoftFSM")
+  end
+
+  test "error attached" do
+    start_supervised(Finitomata.Supervisor)
+    fsm = "ErrorFSM"
+    Finitomata.start_fsm(ErrorAttach, fsm, %{foo: :bar})
+
+    captured_log =
+      capture_log(fn ->
+        Finitomata.transition(fsm, {:start, nil})
+        Process.sleep(200)
+      end)
+
+    assert captured_log =~ "[failure] {:error, \"Test error\"}"
+    assert captured_log =~ "[failure] state: :idle"
+    assert captured_log =~ "[failure] event: :start"
   end
 end
