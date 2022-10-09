@@ -160,7 +160,9 @@ defmodule Finitomata.Test.ErrorAttach do
   end
 
   @impl Finitomata
-  def on_failure(_event, _payload, state) do
-    Logger.debug("[failure] " <> inspect(state.error))
+  def on_failure(_event, _payload, %{last_error: last_error} = _state) do
+    Logger.debug("[failure] " <> inspect(last_error.error))
+    Logger.debug("[failure] state: " <> inspect(last_error.state))
+    Logger.debug("[failure] event: " <> inspect(last_error.event))
   end
 end
