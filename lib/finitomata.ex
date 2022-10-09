@@ -447,17 +447,17 @@ defmodule Finitomata do
             cond do
               event in @__config_soft_events__ ->
                 Logger.debug("[⚐⥯] transition softly failed " <> inspect(err))
-                {:noreply, state_with_error}
+                {:noreply, state}
 
               @__config__[:fsm]
               |> Transition.allowed(state.current, event)
               |> Enum.all?(&(&1 in @__config__[:ensure_entry])) ->
-                {:noreply, state_with_error, {:continue, {:transition, event_payload({event, payload})}}}
+                {:noreply, state, {:continue, {:transition, event_payload({event, payload})}}}
 
               true ->
                 Logger.warn("[⚐⥯] transition failed " <> inspect(err))
-                safe_on_failure(event, payload, state_with_error)
-                {:noreply, state_with_error}
+                safe_on_failure(event, payload, state)
+                {:noreply, state}
             end
         end
       end
