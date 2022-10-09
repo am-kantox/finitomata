@@ -443,7 +443,7 @@ defmodule Finitomata do
           end
         else
           err ->
-            state_with_error = struct(state, error: err)
+            state = %State{state | error: err}
             cond do
               event in @__config_soft_events__ ->
                 Logger.debug("[⚐⥯] transition softly failed " <> inspect(err))
