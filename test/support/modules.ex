@@ -162,6 +162,5 @@ defmodule Finitomata.Test.ErrorAttach do
   @impl Finitomata
   def on_failure(_event, _payload, state) do
     Logger.debug("[failure] " <> inspect(state.error))
-    :ok
   end
 end
