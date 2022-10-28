@@ -527,7 +527,7 @@ defmodule Finitomata do
       defp safe_on_failure(event, event_payload, state_payload) do
         if function_exported?(__MODULE__, :on_failure, 3) do
           with other when other != :ok <-
-                 __MODULE__.on_failure(event, event_payload, state_payload) do
+                 apply(__MODULE__, :on_failure, [event, event_payload, state_payload]) do
             Logger.info("Unexpected return from a callback [#{inspect(other)}], must be :ok")
             :ok
           end
@@ -541,7 +541,7 @@ defmodule Finitomata do
       @spec safe_on_enter(Transition.state(), State.t()) :: :ok
       defp safe_on_enter(state, state_payload) do
         if function_exported?(__MODULE__, :on_enter, 2) do
-          with other when other != :ok <- __MODULE__.on_enter(state, state_payload) do
+          with other when other != :ok <- apply(__MODULE__, :on_enter, [state, state_payload]) do
             Logger.info("Unexpected return from a callback [#{inspect(other)}], must be :ok")
             :ok
           end
@@ -555,7 +555,7 @@ defmodule Finitomata do
       @spec safe_on_exit(Transition.state(), State.t()) :: :ok
       defp safe_on_exit(state, state_payload) do
         if function_exported?(__MODULE__, :on_exit, 2) do
-          with other when other != :ok <- __MODULE__.on_exit(state, state_payload) do
+          with other when other != :ok <- apply(__MODULE__, :on_exit, [state, state_payload]) do
             Logger.info("Unexpected return from a callback [#{inspect(other)}], must be :ok")
             :ok
           end
@@ -569,7 +569,7 @@ defmodule Finitomata do
       @spec safe_on_terminate(State.t()) :: :ok
       defp safe_on_terminate(state) do
         if function_exported?(__MODULE__, :on_terminate, 1) do
-          with other when other != :ok <- __MODULE__.on_terminate(state) do
+          with other when other != :ok <- apply(__MODULE__, :on_terminate, [state]) do
             Logger.info("Unexpected return from a callback [#{inspect(other)}], must be :ok")
             :ok
           end
@@ -587,7 +587,7 @@ defmodule Finitomata do
               | {:reschedule, pos_integer()}
       defp safe_on_timer(state, state_payload) do
         if function_exported?(__MODULE__, :on_timer, 2),
-          do: __MODULE__.on_timer(state, state_payload),
+          do: apply(__MODULE__, :on_timer, [state, state_payload]),
           else: :ok
       rescue
         err -> Logger.warn("[⚑⥯] on_timer raised " <> inspect(err))
