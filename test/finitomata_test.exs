@@ -164,4 +164,17 @@ defmodule FinitomataTest do
     assert captured_log =~ "[failure] state: :idle"
     assert captured_log =~ "[failure] event: :start"
   end
+
+  test "persistense" do
+    start_supervised(Finitomata.Supervisor)
+    fsm = "PersistentFSM"
+
+    Finitomata.start_fsm(Finitomata.Test.Persistency, fsm, %Finitomata.Test.Persistency{
+      pid: self()
+    })
+
+    assert_receive :on_start!
+    assert_receive :on_do!
+    assert_receive :on_end
+  end
 end

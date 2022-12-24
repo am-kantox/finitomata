@@ -1,8 +1,81 @@
 # credo:disable-for-this-file Credo.Check.Refactor.LongQuoteBlocks
 # credo:disable-for-this-file Credo.Check.Refactor.CyclomaticComplexity
+# credo:disable-for-this-file Credo.Check.Refactor.Nesting
 
 defmodule Finitomata do
-  @moduledoc "README.md" |> File.read!() |> String.split("\n---") |> Enum.at(1)
+  @doc false
+  def module?(value) do
+    case Code.ensure_compiled(value) do
+      {:module, ^value} ->
+        {:ok, value}
+
+      {:error, error} ->
+        {:error, "Cannot find the requested module ‘" <> inspect(value) <> "’ (#{error})"}
+    end
+  end
+
+  using_schema = [
+    fsm: [
+      required: true,
+      type: :string,
+      doc: "The FSM declaration with the syntax defined by `syntax` option."
+    ],
+    syntax: [
+      required: false,
+      type: {:custom, Finitomata, :module?, []},
+      default: Finitomata.Mermaid,
+      doc: "The FSM dialect parser to convert the declaration to internal FSM representation."
+    ],
+    impl_for: [
+      required: false,
+      type: {:or, [{:in, [:all, :none]}, :atom, {:list, :atom}]},
+      default: :all,
+      doc: "The list of transitions to inject default implementation for."
+    ],
+    timer: [
+      required: false,
+      type: :pos_integer,
+      default: 5_000,
+      doc: "The interval to call `on_timer/2` recurrent event."
+    ],
+    auto_terminate: [
+      required: false,
+      type: {:or, [:boolean, :atom, {:list, :atom}]},
+      default: false,
+      doc: "When `true`, the transition to the end state is initiated automatically."
+    ],
+    ensure_entry: [
+      required: false,
+      type: {:or, [{:list, :atom}, :boolean]},
+      default: [],
+      doc: "The list of states to retry transition to until succeeded."
+    ],
+    shutdown: [
+      required: false,
+      type: :pos_integer,
+      default: 5_000,
+      doc: "The shutdown interval for the `GenServer` behind the FSM."
+    ],
+    persistency: [
+      required: false,
+      type: {:or, [{:in, [nil]}, {:custom, Finitomata, :module?, []}]},
+      default: nil,
+      doc:
+        "The implementation of `Finitomata.Persistency` behaviour to backup FSM with a persistent storage."
+    ]
+  ]
+
+  @using_schema NimbleOptions.new!(using_schema)
+
+  doc_options = """
+  ## Options to `use Finitomata`
+
+  #{NimbleOptions.docs(@using_schema)}
+  """
+
+  doc_readme = "README.md" |> File.read!() |> String.split("\n---") |> Enum.at(1)
+
+  @moduledoc doc_readme <> "\n" <> doc_options
 
   require Logger
 
@@ -12,6 +85,16 @@ defmodule Finitomata do
     exports: [Hook, Mix.Events, State, Supervisor, Transition]
 
   alias Finitomata.Transition
+
+  @typedoc "The payload that can be passed to each call to `transition/3`"
+  @type event_payload :: any()
+
+  @typedoc "The name of the FSM (might be any term, but it must be unique)"
+  @type fsm_name :: any()
+
+  @typedoc "The resolution of transition, when `{:error, _}` tuple, the transition is aborted"
+  @type transition_resolution ::
+          {:ok, Transition.state(), Finitomata.State.payload()} | {:error, any()}
 
   defmodule State do
     @moduledoc """
@@ -30,20 +113,15 @@ defmodule Finitomata do
     @typedoc "The internal representation of the FSM state"
     @type t :: %{
             __struct__: State,
+            name: Finitomata.fsm_name(),
             current: Transition.state(),
             payload: payload(),
             timer: non_neg_integer(),
             history: [Transition.state()],
             last_error: last_error()
           }
-    defstruct payload: %{}, current: :*, timer: false, history: [], last_error: nil
+    defstruct name: nil, payload: %{}, current: :*, timer: false, history: [], last_error: nil
   end
-
-  @typedoc "The payload that can be passed to each call to `transition/3`"
-  @type event_payload :: any()
-
-  @typedoc "The name of the FSM (might be any term, but it must be unique)"
-  @type fsm_name :: any()
 
   @doc """
   This callback will be called from each transition processor.
@@ -53,8 +131,7 @@ defmodule Finitomata do
               Transition.event(),
               event_payload(),
               State.payload()
-            ) ::
-              {:ok, Transition.state(), State.payload()} | {:error, any()}
+            ) :: transition_resolution()
 
   @doc """
   This callback will be called if the transition failed to complete to allow
@@ -102,9 +179,9 @@ defmodule Finitomata do
   The FSM is started supervised.
   """
   @spec start_fsm(module(), any(), any()) :: DynamicSupervisor.on_start_child()
-  def start_fsm(impl, name, payload),
-    do:
-      DynamicSupervisor.start_child(Finitomata.Manager, {impl, name: fqn(name), payload: payload})
+  def start_fsm(impl, name, payload) do
+    DynamicSupervisor.start_child(Finitomata.Manager, {impl, name: fqn(name), payload: payload})
+  end
 
   @doc """
   Initiates the transition.
@@ -175,8 +252,6 @@ defmodule Finitomata do
 
   @doc false
   defmacro __using__(opts) when is_list(opts) do
-    allowed_opts = ~w|syntax impl_for timer auto_terminate ensure_entry|a
-
     raise_opts = fn description ->
       [
         file: Path.relative_to_cwd(__CALLER__.file),
@@ -189,30 +264,27 @@ defmodule Finitomata do
       raise CompileError, raise_opts.("options to `use Finitomata` must be a keyword list")
     end
 
-    if Keyword.keys(opts) -- allowed_opts != [:fsm] do
-      raise CompileError,
-            raise_opts.("`fsm:` key is mandatory, allowed: " <> inspect(allowed_opts))
-    end
-
-    ast(opts)
+    ast(opts, @using_schema)
   end
 
   @doc false
   @doc deprecated: "Use `use fsm: …, syntax: …` instead"
-  defmacro __using__({fsm, syntax}), do: ast(fsm: fsm, syntax: syntax)
+  defmacro __using__({fsm, syntax}), do: ast([fsm: fsm, syntax: syntax], @using_schema)
 
   @doc false
   @doc deprecated: "Use `use fsm: …, syntax: …` instead"
-  defmacro __using__(fsm), do: ast(fsm: fsm)
+  defmacro __using__(fsm), do: ast([fsm: fsm], @using_schema)
 
   @doc false
-  defp ast(options \\ []) do
+  defp ast(options, schema) do
     quote location: :keep, generated: true do
+      with {:error, ex} <-
+             NimbleOptions.validate(unquote(options), unquote(Macro.escape(schema))),
+           do: raise(ex)
+
       require Logger
 
       alias Finitomata.Transition, as: Transition
-
-      use GenServer, restart: :transient, shutdown: 5_000
 
       @on_definition Finitomata.Hook
       @before_compile Finitomata.Hook
@@ -224,12 +296,27 @@ defmodule Finitomata do
           Application.compile_env(:finitomata, :syntax, Finitomata.Mermaid)
         )
 
+      shutdown =
+        Keyword.get(
+          unquote(options),
+          :shutdown,
+          Application.compile_env(:finitomata, :shutdown, 5_000)
+        )
+
       auto_terminate =
         Keyword.get(
           unquote(options),
           :auto_terminate,
           Application.compile_env(:finitomata, :auto_terminate, false)
         )
+
+      @persistency Keyword.get(
+                     unquote(options),
+                     :persistency,
+                     Application.compile_env(:finitomata, :persistency, nil)
+                   )
+
+      use GenServer, restart: :transient, shutdown: shutdown
 
       impls = ~w|on_transition on_failure on_enter on_exit on_terminate on_timer|a
 
@@ -350,20 +437,35 @@ defmodule Finitomata do
       #{@__config__[:syntax].lint(unquote(options[:fsm]))}
       ```
       """
-      def start_link(name: name, payload: payload),
-        do: GenServer.start_link(__MODULE__, payload, name: name)
+      case @persistency do
+        nil ->
+          def start_link(name: name, payload: payload) do
+            GenServer.start_link(__MODULE__, %{name: name, payload: payload}, name: name)
+          end
+
+        module when is_atom(module) ->
+          def start_link(name: name, payload: payload) do
+            payload = @persistency.load(name, payload)
+
+            GenServer.start_link(
+              __MODULE__,
+              %{name: name, payload: payload, loaded?: true},
+              name: name
+            )
+          end
+      end
 
       @doc false
       def start_link(payload),
-        do: GenServer.start_link(__MODULE__, payload)
+        do: GenServer.start_link(__MODULE__, %{payload: payload})
 
       @doc false
       @impl GenServer
-      def init(payload) do
+      def init(%{payload: payload} = state) do
         if is_integer(@__config__[:timer]) and @__config__[:timer] > 0,
           do: Process.send_after(self(), :on_timer, @__config__[:timer])
 
-        {:ok, %State{timer: @__config__[:timer], payload: payload},
+        {:ok, %State{name: state.name, timer: @__config__[:timer], payload: payload},
          {:continue,
           {:transition, event_payload({:__start__, Transition.entry(@__config__[:fsm])})}}}
       end
@@ -423,7 +525,7 @@ defmodule Finitomata do
       defp transit({event, payload}, state) do
         with {:on_exit, :ok} <- {:on_exit, safe_on_exit(state.current, state)},
              {:ok, new_current, new_payload} <-
-               safe_on_transition(state.current, event, payload, state.payload),
+               safe_on_transition(state.name, state.current, event, payload, state.payload),
              {:allowed, true} <-
                {:allowed, Transition.allowed?(@__config__[:fsm], state.current, new_current)},
              new_history = history(state.current, state.history),
@@ -501,6 +603,7 @@ defmodule Finitomata do
       end
 
       @spec safe_on_transition(
+              Finitomata.fsm_name(),
               Transition.state(),
               Transition.event(),
               Finitomata.event_payload(),
@@ -509,8 +612,10 @@ defmodule Finitomata do
               {:ok, Transition.state(), State.payload()}
               | {:error, any()}
               | {:error, :on_transition_raised}
-      defp safe_on_transition(current, event, event_payload, state_payload) do
-        on_transition(current, event, event_payload, state_payload)
+      defp safe_on_transition(name, current, event, event_payload, state_payload) do
+        current
+        |> on_transition(event, event_payload, state_payload)
+        |> maybe_store(name, current, event, event_payload, state_payload)
       rescue
         err ->
           case err do
@@ -591,6 +696,65 @@ defmodule Finitomata do
           else: :ok
       rescue
         err -> Logger.warn("[⚑⥯] on_timer raised " <> inspect(err))
+      end
+
+      @spec maybe_store(
+              Finitomata.transition_resolution(),
+              Finitomata.fsm_name(),
+              Transition.state(),
+              Transition.event(),
+              Finitomata.event_payload(),
+              State.payload()
+            ) :: Finitomata.transition_resolution()
+      case @persistency do
+        nil ->
+          # TODO Make it a macro
+          defp maybe_store(result, _, _, _, _, _), do: result
+
+        module when is_atom(module) ->
+          defp maybe_store(
+                 {:error, reason} = error,
+                 name,
+                 current,
+                 event,
+                 event_payload,
+                 state_payload
+               ) do
+            if function_exported?(@persistency, :store_error, 2) do
+              name
+              |> @persistency.store_error(reason, {current, event, event_payload, state_payload})
+              |> case do
+                :ok ->
+                  error
+
+                {:error, persistency_error_reason} ->
+                  {:error, transition: reason, persistency: persistency_error_reason}
+              end
+            end
+          end
+
+          defp maybe_store(
+                 {:ok, new_state, new_state_payload} = result,
+                 name,
+                 current,
+                 event,
+                 event_payload,
+                 state_payload
+               ) do
+            name
+            |> @persistency.store(
+              {new_state, new_state_payload},
+              {current, event, event_payload, state_payload}
+            )
+            |> case do
+              :ok -> result
+              {:error, reason} -> {:error, {:persistency, reason}}
+            end
+          end
+
+          defp maybe_store(result, _, _, _, _, _) do
+            {:error, {:unexpected_transition_resolution, result}}
+          end
       end
 
       @behaviour Finitomata
