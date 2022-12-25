@@ -39,6 +39,7 @@ defmodule Finitomata.MixProject do
   defp deps do
     [
       {:nimble_parsec, "~> 1.0"},
+      {:nimble_options, "~> 0.5", runtime: false},
       {:boundary, "~> 0.4", runtime: false},
       # dev / test
       {:credo, "~> 1.0", only: [:dev, :ci]},
@@ -86,7 +87,17 @@ defmodule Finitomata.MixProject do
       source_url: "https://github.com/am-kantox/#{@app}",
       assets: "stuff/images",
       extras: ~w[README.md stuff/fsm.md stuff/compiler.md],
-      groups_for_modules: [],
+      groups_for_modules: [
+        FSM: [Finitomata],
+        Internals: [
+          Finitomata.State,
+          Finitomata.Transition
+        ],
+        Persistence: [
+          Finitomata.Persistence,
+          Finitomata.Persistence.Persistable
+        ]
+      ],
       before_closing_body_tag: &before_closing_body_tag/1
     ]
   end
