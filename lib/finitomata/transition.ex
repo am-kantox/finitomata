@@ -46,8 +46,7 @@ defmodule Finitomata.Transition do
   """
   @spec entry([t()]) :: state()
   def entry(transitions) do
-    transition = Enum.find(transitions, &match?(%Transition{from: :*}, &1))
-    transition.to
+    Enum.find(transitions, &match?(%Transition{from: :*}, &1)).to
   end
 
   @doc ~S"""

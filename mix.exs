@@ -39,7 +39,7 @@ defmodule Finitomata.MixProject do
   defp deps do
     [
       {:nimble_parsec, "~> 1.0"},
-      {:nimble_options, "~> 0.5", runtime: false},
+      {:nimble_options, "~> 0.5"},
       {:boundary, "~> 0.4", runtime: false},
       # dev / test
       {:credo, "~> 1.0", only: [:dev, :ci]},

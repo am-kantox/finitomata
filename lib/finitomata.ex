@@ -419,6 +419,19 @@ defmodule Finitomata do
       @__config_hard_states__ Keyword.keys(hard)
 
       @doc false
+      def fsm, do: Map.get(@__config__, :fsm)
+
+      @doc false
+      def states(purge_internal \\ false)
+      def states(false), do: fsm() |> Enum.flat_map(&[&1.from, &1.to]) |> Enum.uniq()
+      def states(true), do: false |> states() |> Kernel.--([:*])
+
+      @doc false
+      def events(purge_internal \\ false)
+      def events(false), do: fsm() |> Enum.map(& &1.event) |> Enum.uniq()
+      def events(true), do: false |> events() |> Kernel.--([:__start__, :__end__])
+
+      @doc false
       def start_link(payload: payload, name: name),
         do: start_link(name: name, payload: payload)
 

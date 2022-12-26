@@ -27,8 +27,10 @@ defmodule Finitomata.Persistency do
   """
   @callback store(
               name :: Finitomata.fsm_name(),
-              state :: Transition.state(),
-              payload :: State.payload()
+              state :: {Transition.state(), State.payload()},
+              payload ::
+                {Transition.state(), Transition.event(), Finitomata.event_payload(),
+                 State.payload()}
             ) ::
               :ok | {:error, any()}
   @doc """
@@ -38,7 +40,9 @@ defmodule Finitomata.Persistency do
   @callback store_error(
               name :: Finitomata.fsm_name(),
               reason :: any(),
-              payload :: State.payload()
+              payload ::
+                {Transition.state(), Transition.event(), Finitomata.event_payload(),
+                 State.payload()}
             ) ::
               :ok | {:error, any()}
 
