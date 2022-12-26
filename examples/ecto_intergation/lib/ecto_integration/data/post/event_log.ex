@@ -27,7 +27,7 @@ defmodule EctoIntegration.Data.Post.EventLog do
           {:ok, any}
           | {:error, [{atom(), Changeset.error()}]}
           | {:error, Multi.name(), any(), %{required(Multi.name()) => any()}}
-  def update(post_id, %{current_state: _state} = params, post) when is_binary(post_id) do
+  def update(post_id, %{current_state: state} = params, post) when is_binary(post_id) do
     params
     |> Map.put(:post_id, post_id)
     |> EventLog.changeset()
@@ -39,10 +39,14 @@ defmodule EctoIntegration.Data.Post.EventLog do
           :post,
           Post.update_changeset(
             Repo.get!(Post, post_id),
-            Map.take(post, Post.__schema__(:fields))
+            post |> Map.take(Post.__schema__(:fields)) |> Map.put(:state, state)
           )
         )
         |> Repo.transaction()
+        |> case do
+          {:ok, %{post: %Post{} = post}} -> {:ok, post}
+          {:error, error} -> {:error, error}
+        end
 
       %Changeset{errors: errors} ->
         {:error, errors}

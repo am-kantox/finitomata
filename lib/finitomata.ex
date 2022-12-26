@@ -777,7 +777,7 @@ defmodule Finitomata do
             )
             |> case do
               :ok -> result
-              {:ok, _new_state} -> result
+              {:ok, updated_state_payload} -> {:ok, new_state, updated_state_payload}
               {:error, reason} -> {:error, {:persistency, reason}}
             end
           end

@@ -36,7 +36,7 @@ defmodule EctoIntegration.Data.Post do
 
   def update_changeset(%Post{} = post, %{} = params) do
     post
-    |> Changeset.cast(params, @user_fields)
+    |> Changeset.cast(params, [:state | @user_fields])
     |> Changeset.validate_inclusion(:state, @states)
   end
 end
