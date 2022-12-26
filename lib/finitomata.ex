@@ -536,7 +536,9 @@ defmodule Finitomata do
       @spec transit({Transition.event(), Finitomata.event_payload()}, State.t()) ::
               {:noreply, State.t()} | {:stop, :normal, State.t()}
       defp transit({event, payload}, state) do
-        with {:on_exit, :ok} <- {:on_exit, safe_on_exit(state.current, state)},
+        with {:responds, true} <-
+               {:responds, Transition.responds?(@__config__[:fsm], state.current, event)},
+             {:on_exit, :ok} <- {:on_exit, safe_on_exit(state.current, state)},
              {:ok, new_current, new_payload} <-
                safe_on_transition(state.name, state.current, event, payload, state.payload),
              {:allowed, true} <-
@@ -561,6 +563,16 @@ defmodule Finitomata do
               {:noreply, state}
           end
         else
+          {err, false} ->
+            Logger.warn("[⚐⥯] transition not exists or not allowed (:#{err})")
+            safe_on_failure(event, payload, state)
+            {:noreply, state}
+
+          {err, :ok} ->
+            Logger.warn("[⚐⥯] callback failed to return `:ok` (:#{err})")
+            safe_on_failure(event, payload, state)
+            {:noreply, state}
+
           err ->
             state = %State{state | last_error: %{state: state.current, event: event, error: err}}
 
@@ -633,6 +645,8 @@ defmodule Finitomata do
         err ->
           case err do
             %{__exception__: true} ->
+              {ex, st} = Exception.blame(:error, err, __STACKTRACE__)
+              Logger.debug(Exception.format(:error, ex, st))
               {:error, Exception.message(err)}
 
             _ ->
@@ -743,6 +757,8 @@ defmodule Finitomata do
                 {:error, persistency_error_reason} ->
                   {:error, transition: reason, persistency: persistency_error_reason}
               end
+            else
+              error
             end
           end
 
@@ -761,6 +777,7 @@ defmodule Finitomata do
             )
             |> case do
               :ok -> result
+              {:ok, _new_state} -> result
               {:error, reason} -> {:error, {:persistency, reason}}
             end
           end

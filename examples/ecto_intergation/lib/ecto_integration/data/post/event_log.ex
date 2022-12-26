@@ -5,8 +5,8 @@ defmodule EctoIntegration.Data.Post.EventLog do
   alias EctoIntegration.Data.{Post, Post.EventLog, Post.FSM}
   alias EctoIntegration.Repo
 
-  @states FSM.states(true)
-  @events FSM.events(true)
+  @states FSM.states(false)
+  @events FSM.events(false)
 
   @user_fields ~w|previous_state current_state event post_id|a
 
@@ -23,22 +23,25 @@ defmodule EctoIntegration.Data.Post.EventLog do
     timestamps()
   end
 
-  @spec store(Ecto.UUID.t(), map()) ::
+  @spec update(Ecto.UUID.t(), map(), Post.t()) ::
           {:ok, any}
           | {:error, [{atom(), Changeset.error()}]}
           | {:error, Multi.name(), any(), %{required(Multi.name()) => any()}}
-  def store(post_id, %{current_state: state} = params) do
+  def update(post_id, %{current_state: _state} = params, post) when is_binary(post_id) do
     params
     |> Map.put(:post_id, post_id)
     |> EventLog.changeset()
     |> case do
       %Changeset{valid?: true} = changeset ->
         Multi.new()
+        |> Multi.insert(:event_log, changeset)
         |> Multi.update(
           :post,
-          Post.state_update_changeset(Repo.get!(Post, post_id), %{state: state})
+          Post.update_changeset(
+            Repo.get!(Post, post_id),
+            Map.take(post, Post.__schema__(:fields))
+          )
         )
-        |> Multi.insert(:event_log, changeset)
         |> Repo.transaction()
 
       %Changeset{errors: errors} ->
@@ -49,11 +52,8 @@ defmodule EctoIntegration.Data.Post.EventLog do
   def changeset(%{post_id: post_id} = params) when is_binary(post_id) do
     %EventLog{}
     |> Changeset.cast(params, @user_fields)
-    |> IO.inspect(label: "1")
     |> Changeset.validate_required(@user_fields)
-    |> IO.inspect(label: "2")
     |> Changeset.validate_inclusion(:previous_state, @states)
-    |> IO.inspect(label: "3")
     |> Changeset.validate_inclusion(:current_state, @states)
     |> Changeset.validate_inclusion(:event, @events)
   end

@@ -4,7 +4,7 @@ defmodule EctoIntegration.Data.Post do
   alias Ecto.Changeset
   alias EctoIntegration.Data.{Post, Post.EventLog, Post.FSM}
 
-  @states FSM.states(true)
+  @states FSM.states(false)
 
   @user_fields ~w|title body|a
 
@@ -21,7 +21,7 @@ defmodule EctoIntegration.Data.Post do
 
   def new_changeset(%{} = params) do
     %Post{state: Finitomata.Transition.entry(FSM.fsm())}
-    |> Changeset.cast(params, @user_fields)
+    |> Changeset.cast(params, [:id | @user_fields])
     |> Changeset.validate_required(@user_fields)
     |> Changeset.validate_inclusion(:state, @states)
   end
@@ -31,6 +31,12 @@ defmodule EctoIntegration.Data.Post do
     post
     |> Changeset.cast(params, [:state])
     |> Changeset.validate_required([:state])
+    |> Changeset.validate_inclusion(:state, @states)
+  end
+
+  def update_changeset(%Post{} = post, %{} = params) do
+    post
+    |> Changeset.cast(params, @user_fields)
     |> Changeset.validate_inclusion(:state, @states)
   end
 end

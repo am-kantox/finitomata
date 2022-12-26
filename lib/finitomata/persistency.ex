@@ -32,7 +32,7 @@ defmodule Finitomata.Persistency do
                 {Transition.state(), Transition.event(), Finitomata.event_payload(),
                  State.payload()}
             ) ::
-              :ok | {:error, any()}
+              :ok | {:ok, State.payload()} | {:error, any()}
   @doc """
   The function to be called from `on_transition/4` handler on non successful
     transition to allow storing the failed attempt to transition to the persistent storage
