@@ -35,4 +35,5 @@ IEx.configure(
 
 alias Ecto.Changeset
 alias EctoIntegration.Data.{Post, Post.EventLog, Post.FSM}
+alias EctoIntegration.Repo
 

@@ -352,11 +352,6 @@ defmodule Finitomata do
               description: "description is incomplete, error: #{error}"
         end
 
-      states =
-        fsm
-        |> Enum.flat_map(&[&1.from, &1.to])
-        |> Enum.uniq()
-
       hard =
         fsm
         |> Transition.determined()
@@ -410,7 +405,8 @@ defmodule Finitomata do
         impl_for: impl_for,
         auto_terminate: auto_terminate,
         ensure_entry: ensure_entry,
-        states: states,
+        states: Transition.states(fsm),
+        events: Transition.events(fsm),
         hard: hard,
         soft: soft,
         timer: timer
@@ -422,14 +418,10 @@ defmodule Finitomata do
       def fsm, do: Map.get(@__config__, :fsm)
 
       @doc false
-      def states(purge_internal \\ false)
-      def states(false), do: fsm() |> Enum.flat_map(&[&1.from, &1.to]) |> Enum.uniq()
-      def states(true), do: false |> states() |> Kernel.--([:*])
+      def states, do: Map.get(@__config__, :states)
 
       @doc false
-      def events(purge_internal \\ false)
-      def events(false), do: fsm() |> Enum.map(& &1.event) |> Enum.uniq()
-      def events(true), do: false |> events() |> Kernel.--([:__start__, :__end__])
+      def events, do: Map.get(@__config__, :events)
 
       @doc false
       def start_link(payload: payload, name: name),

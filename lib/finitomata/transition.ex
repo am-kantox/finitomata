@@ -40,13 +40,31 @@ defmodule Finitomata.Transition do
   Returns the state _after_ starting one, so-called `entry` state.
 
       iex> {:ok, transitions} =
-      ...>   Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")
+      ...>   Finitomata.PlantUML.parse("[*] --> entry : foo\nentry --> exit : go\nexit --> [*] : terminate")
       ...> Finitomata.Transition.entry(transitions)
-      :s1
+      :entry
   """
   @spec entry([t()]) :: state()
   def entry(transitions) do
     Enum.find(transitions, &match?(%Transition{from: :*}, &1)).to
+  end
+
+  @doc ~S"""
+  Returns the states _before_ ending one, so-called `exit` states.
+
+      iex> {:ok, transitions} =
+      ...>   Finitomata.Mermaid.parse(
+      ...>     "entry --> |process| processing\nprocessing --> |ok| success\nprocessing --> |ko| error"
+      ...>   )
+      ...> Finitomata.Transition.exit(transitions)
+      [:error, :success]
+  """
+  @spec exit([t()]) :: [state()]
+  def exit(transitions) do
+    Enum.reduce(transitions, [], fn
+      %Transition{from: exit, to: :*}, acc -> [exit | acc]
+      _, acc -> acc
+    end)
   end
 
   @doc ~S"""
@@ -192,7 +210,7 @@ defmodule Finitomata.Transition do
   @spec determined([t()]) :: [{state(), {event(), state()}}]
   def determined(transitions) do
     transitions
-    |> states()
+    |> states(true)
     |> Enum.reduce([], fn state, acc ->
       transitions
       |> allowed(from: state)
@@ -276,20 +294,50 @@ defmodule Finitomata.Transition do
   end
 
   @doc ~S"""
-  Returns the not ordered list of states, excluding the starting and ending states `:*`.
+  Returns the not ordered list of states, including or excluding
+    the starting and ending states `:*` according to the second argument.
 
       iex> {:ok, transitions} =
       ...>   Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")
-      ...> Finitomata.Transition.states(transitions)
+      ...> Finitomata.Transition.states(transitions, true)
       [:s1, :s2]
+      ...> Finitomata.Transition.states(transitions)
+      [:*, :s1, :s2]
   """
-  @spec states([t()]) :: [state()]
-  def states(transitions) do
+  @spec states([t()], boolean()) :: [state()]
+  def states(transitions, purge_internal \\ false)
+
+  def states(transitions, false) do
     transitions
     |> Enum.flat_map(fn %Transition{from: from, to: to} -> [from, to] end)
     |> Enum.uniq()
-    |> Enum.reject(&(&1 == :*))
   end
+
+  def states(transitions, true), do: transitions |> states(false) |> Enum.reject(&(&1 == :*))
+
+  @doc ~S"""
+  Returns the not ordered list of events, including or excluding
+    the internal starting and ending transitions `:__start__` and `__end__`
+    according to the second argument.
+
+      iex> {:ok, transitions} =
+      ...>   Finitomata.Mermaid.parse("s1 --> |ok| s2\ns1 --> |ko| s3")
+      ...> Finitomata.Transition.events(transitions, true)
+      [:ok, :ko]
+      ...> Finitomata.Transition.events(transitions)
+      [:__start__, :ok, :ko, :__end__]
+  """
+  @spec events([t()], boolean()) :: [state()]
+  def events(transitions, purge_internal \\ false)
+
+  def events(transitions, false) do
+    transitions
+    |> Enum.map(fn %Transition{event: event} -> event end)
+    |> Enum.uniq()
+  end
+
+  def events(transitions, true),
+    do: transitions |> events(false) |> Enum.reject(&(&1 in ~w|__start__ __end__|a))
 
   defimpl Inspect do
     @moduledoc false

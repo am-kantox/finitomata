@@ -4,7 +4,7 @@ defmodule EctoIntegration.Application do
   use Application
 
   def start(_type, _args) do
-    children = [EctoIntegration.Repo]
+    children = [EctoIntegration.Repo, Finitomata.Supervisor]
 
     opts = [strategy: :one_for_one, name: EctoIntegration.Supervisor]
     Supervisor.start_link(children, opts)

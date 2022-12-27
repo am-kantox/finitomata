@@ -30,6 +30,6 @@ defmodule EctoIntergation.MixProject do
     ]
   end
 
-  defp compilers(:dev), do: [:finitomata | Mix.compilers()]
-  defp compilers(_), do: Mix.compilers()
+  defp compilers(:prod), do: Mix.compilers()
+  defp compilers(_), do: [:finitomata | Mix.compilers()]
 end

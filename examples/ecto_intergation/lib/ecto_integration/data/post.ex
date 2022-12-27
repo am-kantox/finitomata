@@ -4,7 +4,7 @@ defmodule EctoIntegration.Data.Post do
   alias Ecto.Changeset
   alias EctoIntegration.Data.{Post, Post.EventLog, Post.FSM}
 
-  @states FSM.states(false)
+  @states FSM.states()
 
   @user_fields ~w|title body|a
 
@@ -38,5 +38,15 @@ defmodule EctoIntegration.Data.Post do
     post
     |> Changeset.cast(params, [:state | @user_fields])
     |> Changeset.validate_inclusion(:state, @states)
+  end
+
+  def create(%{} = params) do
+    {id, post} = Map.pop(params, :id, Ecto.UUID.generate())
+
+    Finitomata.start_fsm(FSM, id, struct!(Post, post))
+  end
+
+  def find(id) do
+    Finitomata.state(id)
   end
 end
