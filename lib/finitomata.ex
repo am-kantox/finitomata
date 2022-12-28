@@ -450,6 +450,7 @@ defmodule Finitomata do
 
         module when is_atom(module) ->
           def start_link(name: name, payload: payload) do
+            # TODO move initialization/loading to init
             payload =
               case payload do
                 module when is_atom(module) ->
@@ -464,12 +465,11 @@ defmodule Finitomata do
                   @persistency.load({type, %{id => name}})
               end
 
-            payload =
-              GenServer.start_link(
-                __MODULE__,
-                %{name: name, payload: payload, loaded?: true},
-                name: name
-              )
+            GenServer.start_link(
+              __MODULE__,
+              %{name: name, payload: payload, loaded?: true},
+              name: name
+            )
           end
       end
 
@@ -483,6 +483,7 @@ defmodule Finitomata do
         if is_integer(@__config__[:timer]) and @__config__[:timer] > 0,
           do: Process.send_after(self(), :on_timer, @__config__[:timer])
 
+        # FIXME transition if and only not loaded
         {:ok, %State{name: state.name, timer: @__config__[:timer], payload: payload},
          {:continue,
           {:transition, event_payload({:__start__, Transition.entry(@__config__[:fsm])})}}}

@@ -25,8 +25,10 @@ defimpl Finitomata.Persistency.Persistable, for: EctoIntegration.Data.Post do
 
   def store(
         %Post{id: id} = post,
-        %{from: from, to: to, event: event, event_payload: event_payload, object: post}
+        %{from: from, to: to, event: event, event_payload: event_payload, object: post} = zz
       ) do
+    IO.inspect(zz, label: "★★★★★")
+
     EventLog.update(
       id,
       %{

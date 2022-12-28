@@ -13,14 +13,14 @@ defmodule EctoIntegration.Data.Post do
   schema "posts" do
     field(:title, :string)
     field(:body, :string)
-    field(:state, Ecto.Enum, values: @states)
+    field(:state, Ecto.Enum, values: @states, default: :*)
 
     has_many(:event_log, EventLog)
     timestamps()
   end
 
   def new_changeset(%{} = params) do
-    %Post{state: Finitomata.Transition.entry(FSM.fsm())}
+    %Post{}
     |> Changeset.cast(params, [:id | @user_fields])
     |> Changeset.validate_required(@user_fields)
     |> Changeset.validate_inclusion(:state, @states)
@@ -42,7 +42,7 @@ defmodule EctoIntegration.Data.Post do
 
   def create(%{} = params) do
     {id, post} = Map.pop(params, :id, Ecto.UUID.generate())
-
+    post = Map.put_new(post, :id, id)
     Finitomata.start_fsm(FSM, id, struct!(Post, post))
   end
 
