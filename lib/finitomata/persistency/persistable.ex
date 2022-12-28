@@ -54,7 +54,10 @@ end
 defimpl Finitomata.Persistency.Persistable, for: Tuple do
   alias Finitomata.Persistency.Persistable, as: Proto
 
-  def load({module, fields}) do
+  def load({module, fields}) when is_list(fields),
+    do: load({module, Map.new(fields)})
+
+  def load({module, fields}) when is_map(fields) do
     defines_struct? = fn module ->
       :functions
       |> module.__info__()
@@ -72,11 +75,15 @@ defimpl Finitomata.Persistency.Persistable, for: Tuple do
     end
   end
 
-  def store(data, _info) do
-    raise Protocol.UndefinedError, protocol: __MODULE__, value: data
+  def load({module, loader}) when is_function(loader, 1) do
+    loader.(module)
   end
 
-  def store_error(data, _reason, _info) do
-    raise Protocol.UndefinedError, protocol: __MODULE__, value: data
+  def store({data, storer}, info) when is_function(storer, 2) do
+    storer.(data, info)
+  end
+
+  def store_error({data, storer}, reason, info) when is_function(storer, 3) do
+    storer.(data, reason, info)
   end
 end

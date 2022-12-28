@@ -29,6 +29,7 @@ defmodule EctoIntegration.Data.Post.EventLog do
           | {:error, Multi.name(), any(), %{required(Multi.name()) => any()}}
   def update(post_id, %{current_state: state} = params, post) when is_binary(post_id) do
     IO.inspect({post_id, params, post}, label: "UPDATE")
+
     params
     |> Map.put(:post_id, post_id)
     |> EventLog.changeset()

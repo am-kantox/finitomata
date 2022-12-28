@@ -7,26 +7,31 @@ defimpl Finitomata.Persistency.Persistable, for: EctoIntegration.Data.Post do
 
   alias EctoIntegration.{Data.Post, Data.Post.EventLog, Repo}
 
-  def load(%Post{} = data, name) do
+  def load(%Post{id: id} = data) do
     Post
-    |> Repo.get(name)
+    |> Repo.get(id)
     |> case do
-      %Post{} = post -> post
-      nil -> data |> Map.from_struct() |> Map.take(Post.__schema__(:fields)) |> Map.put(:id, name) |> Post.new_changeset() |> Repo.insert!()
+      %Post{} = post ->
+        post
+
+      nil ->
+        data
+        |> Map.from_struct()
+        |> Map.take(Post.__schema__(:fields))
+        |> Post.new_changeset()
+        |> Repo.insert!()
     end
   end
 
   def store(
-        %Post{id: name} = post,
-        name,
-        {current_state, %Post{id: name} = post},
-        {previous_state, event, event_payload, _state_payload}
+        %Post{id: id} = post,
+        %{from: from, to: to, event: event, event_payload: event_payload, object: post}
       ) do
     EventLog.update(
-      name,
+      id,
       %{
-        previous_state: previous_state,
-        current_state: current_state,
+        previous_state: from,
+        current_state: to,
         event: event,
         event_payload: event_payload
       },
@@ -34,17 +39,14 @@ defimpl Finitomata.Persistency.Persistable, for: EctoIntegration.Data.Post do
     )
   end
 
-  def store_error(data, name, reason, {state, event, event_payload, state_payload}) do
+  def store_error(%Post{id: id} = post, reason, %{} = info) do
     metadata = Logger.metadata()
 
-    Logger.metadata(
-      id: name,
-      data: data,
-      state: state,
-      event: event,
-      event_payload: event_payload,
-      state_payload: state_payload
-    )
+    info
+    |> Map.put(:id, id)
+    |> Map.put(:data, post)
+    |> Map.to_list()
+    |> Logger.metadata()
 
     Logger.warn("[DB ERROR]: " <> reason)
     Logger.metadata(metadata)
