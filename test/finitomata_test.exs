@@ -165,7 +165,7 @@ defmodule FinitomataTest do
     assert captured_log =~ "[failure] event: :start"
   end
 
-  test "persistense" do
+  test "persistency" do
     start_supervised(Finitomata.Supervisor)
     fsm = "PersistentFSM"
 

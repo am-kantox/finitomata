@@ -15,13 +15,13 @@ defprotocol Finitomata.Persistency.Persistable do
   @fallback_to_any false
 
   @doc "Loads the entity from some external storage"
-  def load(data, name)
+  def load(data)
 
   @doc "Persists the transitioned entity to some external storage"
-  def store(data, name, updated_data, supplemental_data)
+  def store(data, info)
 
   @doc "Persists the error happened while an attempt to transition the entity"
-  def store_error(data, name, reason, supplemental_data)
+  def store_error(data, reason, info)
 end
 
 defimpl Finitomata.Persistency.Persistable,
@@ -36,18 +36,47 @@ defimpl Finitomata.Persistency.Persistable,
     Map,
     PID,
     Port,
-    Reference,
-    Tuple
+    Reference
   ] do
-  def load(data, _name) do
+  def load(data) do
     raise Protocol.UndefinedError, protocol: __MODULE__, value: data
   end
 
-  def store(data, _name, _updated_data, _supplemental_data) do
+  def store(data, _info) do
     raise Protocol.UndefinedError, protocol: __MODULE__, value: data
   end
 
-  def store_error(data, _name, _reason, _supplemental_data) do
+  def store_error(data, _reason, _info) do
+    raise Protocol.UndefinedError, protocol: __MODULE__, value: data
+  end
+end
+
+defimpl Finitomata.Persistency.Persistable, for: Tuple do
+  alias Finitomata.Persistency.Persistable, as: Proto
+
+  def load({module, fields}) do
+    defines_struct? = fn module ->
+      :functions
+      |> module.__info__()
+      |> Keyword.take([:__struct__])
+      |> Keyword.values() == [0, 1]
+    end
+
+    with true <- Code.ensure_loaded?(module),
+         true <- defines_struct?.(module),
+         %^module{} = result <- struct(module, fields),
+         impl when not is_nil(impl) <- Proto.impl_for(result) do
+      Proto.load(result)
+    else
+      _ -> nil
+    end
+  end
+
+  def store(data, _info) do
+    raise Protocol.UndefinedError, protocol: __MODULE__, value: data
+  end
+
+  def store_error(data, _reason, _info) do
     raise Protocol.UndefinedError, protocol: __MODULE__, value: data
   end
 end

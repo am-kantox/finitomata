@@ -11,40 +11,41 @@ defmodule Finitomata.Persistency do
 
   alias Finitomata.{State, Transition}
 
+  @type transition_info :: %{
+          from: Transition.state(),
+          to: Transition.state(),
+          event: Transition.event(),
+          event_payload: Finitomata.event_payload(),
+          object: State.payload()
+        }
+
   @doc """
   The function to be called from `init/1` callback upon FSM start to load the state and payload
     from the persistent storage
   """
-  @callback load(
-              name :: Finitomata.fsm_name(),
-              payload :: State.payload()
-            ) ::
-              State.payload()
+  @callback load(id :: Finitomata.fsm_name()) :: State.payload()
 
   @doc """
   The function to be called from `on_transition/4` handler to allow storing the state
     and payload to the persistent storage
   """
   @callback store(
-              name :: Finitomata.fsm_name(),
-              state :: {Transition.state(), State.payload()},
-              payload ::
-                {Transition.state(), Transition.event(), Finitomata.event_payload(),
-                 State.payload()}
+              id :: Finitomata.fsm_name(),
+              object :: State.payload(),
+              transition :: transition_info()
             ) ::
               :ok | {:ok, State.payload()} | {:error, any()}
+
   @doc """
   The function to be called from `on_transition/4` handler on non successful
     transition to allow storing the failed attempt to transition to the persistent storage
   """
   @callback store_error(
-              name :: Finitomata.fsm_name(),
+              id :: Finitomata.fsm_name(),
+              object :: State.payload(),
               reason :: any(),
-              payload ::
-                {Transition.state(), Transition.event(), Finitomata.event_payload(),
-                 State.payload()}
-            ) ::
-              :ok | {:error, any()}
+              transition :: transition_info()
+            ) :: :ok | {:error, any()}
 
-  @optional_callbacks store_error: 3
+  @optional_callbacks store_error: 4
 end

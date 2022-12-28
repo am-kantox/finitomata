@@ -450,13 +450,26 @@ defmodule Finitomata do
 
         module when is_atom(module) ->
           def start_link(name: name, payload: payload) do
-            payload = @persistency.load(name, payload)
+            payload =
+              case payload do
+                module when is_atom(module) ->
+                  @persistency.load({payload, id: name})
 
-            GenServer.start_link(
-              __MODULE__,
-              %{name: name, payload: payload, loaded?: true},
-              name: name
-            )
+                %struct{} = payload ->
+                  @persistency.load(
+                    {struct, payload |> Map.from_struct() |> Map.put_new(:id, name)}
+                  )
+
+                %{type: type, id: id} ->
+                  @persistency.load({type, %{id => name}})
+              end
+
+            payload =
+              GenServer.start_link(
+                __MODULE__,
+                %{name: name, payload: payload, loaded?: true},
+                name: name
+              )
           end
       end
 
@@ -732,25 +745,27 @@ defmodule Finitomata do
 
         module when is_atom(module) ->
           defp maybe_store(
-                 {:error, reason} = error,
+                 {:error, reason},
                  name,
                  current,
                  event,
                  event_payload,
                  state_payload
                ) do
-            if function_exported?(@persistency, :store_error, 2) do
-              name
-              |> @persistency.store_error(reason, {current, event, event_payload, state_payload})
-              |> case do
-                :ok ->
-                  error
-
-                {:error, persistency_error_reason} ->
-                  {:error, transition: reason, persistency: persistency_error_reason}
-              end
+            with true <- function_exported?(@persistency, :store_error, 4),
+                 info = %{
+                   from: current,
+                   to: nil,
+                   event: event,
+                   event_payload: event_payload,
+                   object: state_payload
+                 },
+                 {:error, persistency_error_reason} <-
+                   @persistency.store_error(name, state_payload, reason, info) do
+              {:error, transition: reason, persistency: persistency_error_reason}
             else
-              error
+              _ ->
+                {:error, transition: reason}
             end
           end
 
@@ -762,20 +777,25 @@ defmodule Finitomata do
                  event_payload,
                  state_payload
                ) do
+            info = %{
+              from: current,
+              to: new_state,
+              event: event,
+              event_payload: event_payload,
+              object: state_payload
+            }
+
             name
-            |> @persistency.store(
-              {new_state, new_state_payload},
-              {current, event, event_payload, state_payload}
-            )
+            |> @persistency.store(new_state_payload, info)
             |> case do
               :ok -> result
               {:ok, updated_state_payload} -> {:ok, new_state, updated_state_payload}
-              {:error, reason} -> {:error, {:persistency, reason}}
+              {:error, reason} -> {:error, persistency: reason}
             end
           end
 
           defp maybe_store(result, _, _, _, _, _) do
-            {:error, {:unexpected_transition_resolution, result}}
+            {:error, transition: result}
           end
       end
 
