@@ -114,13 +114,22 @@ defmodule Finitomata do
     @type t :: %{
             __struct__: State,
             name: Finitomata.fsm_name(),
+            lyfecycle: :loaded | :created | :unknown,
+            persistency: nil | module(),
             current: Transition.state(),
             payload: payload(),
             timer: non_neg_integer(),
             history: [Transition.state()],
             last_error: last_error()
           }
-    defstruct name: nil, payload: %{}, current: :*, timer: false, history: [], last_error: nil
+    defstruct name: nil,
+              lifecycle: :unknown,
+              persistency: nil,
+              payload: %{},
+              current: :*,
+              timer: false,
+              history: [],
+              last_error: nil
   end
 
   @doc """
@@ -448,45 +457,58 @@ defmodule Finitomata do
             GenServer.start_link(__MODULE__, %{name: name, payload: payload}, name: name)
           end
 
+          @doc false
+          def start_link(payload),
+            do: GenServer.start_link(__MODULE__, %{name: nil, payload: payload})
+
         module when is_atom(module) ->
           def start_link(name: name, payload: payload) do
-            # TODO move initialization/loading to init
-            payload =
-              case payload do
-                module when is_atom(module) ->
-                  @persistency.load({payload, id: name})
-
-                %struct{} = payload ->
-                  @persistency.load(
-                    {struct, payload |> Map.from_struct() |> Map.put_new(:id, name)}
-                  )
-
-                %{type: type, id: id} ->
-                  @persistency.load({type, %{id => name}})
-              end
-
             GenServer.start_link(
               __MODULE__,
-              %{name: name, payload: payload, loaded?: true},
+              %{name: name, payload: payload, with_persistency: @persistency},
               name: name
             )
           end
       end
 
       @doc false
-      def start_link(payload),
-        do: GenServer.start_link(__MODULE__, %{payload: payload})
-
-      @doc false
       @impl GenServer
-      def init(%{payload: payload} = state) do
+      def init(%{name: name, payload: payload, with_persistency: persistency} = state)
+          when not is_nil(name) and not is_nil(persistency) do
+        {lifecycle, payload} =
+          case payload do
+            module when is_atom(module) ->
+              persistency.load({payload, id: name})
+
+            %struct{} = payload ->
+              persistency.load({struct, payload |> Map.from_struct() |> Map.put_new(:id, name)})
+
+            %{type: type, id: id} ->
+              persistency.load({type, %{id => name}})
+          end
+
+        init(%{name: name, payload: payload, lifecycle: lifecycle, persistency: persistency})
+      end
+
+      def init(%{name: name, payload: payload} = init_arg) do
         if is_integer(@__config__[:timer]) and @__config__[:timer] > 0,
           do: Process.send_after(self(), :on_timer, @__config__[:timer])
 
-        # FIXME transition if and only not loaded
-        {:ok, %State{name: state.name, timer: @__config__[:timer], payload: payload},
-         {:continue,
-          {:transition, event_payload({:__start__, Transition.entry(@__config__[:fsm])})}}}
+        state = %State{
+          name: name,
+          lifecycle: Map.get(init_arg, :lifecycle, :unknown),
+          persistency: Map.get(init_arg, :persistency),
+          timer: @__config__[:timer],
+          payload: payload
+        }
+
+        if state.lifecycle == :loaded do
+          {:ok, state}
+        else
+          {:ok, state,
+           {:continue,
+            {:transition, event_payload({:__start__, Transition.entry(@__config__[:fsm])})}}}
+        end
       end
 
       @doc false

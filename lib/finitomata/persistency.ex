@@ -23,7 +23,7 @@ defmodule Finitomata.Persistency do
   The function to be called from `init/1` callback upon FSM start to load the state and payload
     from the persistent storage
   """
-  @callback load(id :: Finitomata.fsm_name()) :: State.payload()
+  @callback load(id :: Finitomata.fsm_name()) :: {:loaded | :created | :unknown, State.payload()}
 
   @doc """
   The function to be called from `on_transition/4` handler to allow storing the state

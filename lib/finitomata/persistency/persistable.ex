@@ -71,7 +71,7 @@ defimpl Finitomata.Persistency.Persistable, for: Tuple do
          impl when not is_nil(impl) <- Proto.impl_for(result) do
       Proto.load(result)
     else
-      _ -> nil
+      _ -> {:unknown, nil}
     end
   end
 

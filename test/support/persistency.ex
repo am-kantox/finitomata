@@ -35,7 +35,7 @@ defimpl Finitomata.Persistency.Persistable, for: Finitomata.Test.Persistency do
 
   def load(data) do
     Logger.debug(inspect(data, label: "[LOAD]"))
-    data
+    {:unknown, data}
   end
 
   def store(data, info) do

@@ -12,14 +12,17 @@ defimpl Finitomata.Persistency.Persistable, for: EctoIntegration.Data.Post do
     |> Repo.get(id)
     |> case do
       %Post{} = post ->
-        post
+        {:loaded, post}
 
       nil ->
-        data
-        |> Map.from_struct()
-        |> Map.take(Post.__schema__(:fields))
-        |> Post.new_changeset()
-        |> Repo.insert!()
+        new =
+          data
+          |> Map.from_struct()
+          |> Map.take(Post.__schema__(:fields))
+          |> Post.new_changeset()
+          |> Repo.insert!()
+
+        {:created, new}
     end
   end
 
