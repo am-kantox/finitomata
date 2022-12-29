@@ -1,0 +1,15 @@
+defmodule Finitomata.Listener do
+  @moduledoc """
+  The behaviour to be implemented and passed to `use Finitomata` to receive
+    all the state transitions notifications.
+  """
+
+  alias Finitomata.{State, Transition}
+
+  @doc "To be called upon a transition"
+  @callback after_transition(
+              id :: Finitomata.fsm_name(),
+              state :: Transition.state(),
+              payload :: State.payload()
+            ) :: :ok
+end

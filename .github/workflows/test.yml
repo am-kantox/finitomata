@@ -8,6 +8,16 @@ jobs:
     env:
       MIX_ENV: test
     name: OTP ${{matrix.pair.otp}} / Elixir ${{matrix.pair.elixir}}
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ecto_intergation_repo
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
     strategy:
       fail-fast: false
       matrix:
@@ -24,7 +34,12 @@ jobs:
         with:
           otp-version: ${{matrix.pair.otp}}
           elixir-version: ${{matrix.pair.elixir}}
-      - name: "Compile and Test Everything"
+      - name: "Compile and Test Library"
         run: |
+          mix do deps.get, deps.compile, compile
+          mix test
+      - name: "Compile and Test Examples"
+        run: |
+          cd examples/ecto_intergation
           mix do deps.get, deps.compile, compile
           mix test

@@ -33,16 +33,16 @@ defimpl Finitomata.Persistency.Persistable, for: Finitomata.Test.Persistency do
   @moduledoc false
   require Logger
 
-  def load(data, name) do
-    Logger.debug("[LOAD] " <> inspect({name, data}))
-    data
+  def load(data) do
+    Logger.debug(inspect(data, label: "[LOAD]"))
+    {:unknown, data}
   end
 
-  def store(data, name, updated_data, supplemental_data) do
-    Logger.debug("[STORE] " <> inspect({name, data, updated_data, supplemental_data}))
+  def store(data, info) do
+    Logger.debug("[STORE] " <> inspect({data, info}))
   end
 
-  def store_error(data, name, reason, supplemental_data) do
-    Logger.debug("[STORE ERROR] " <> inspect({name, data, reason, supplemental_data}))
+  def store_error(data, reason, info) do
+    Logger.debug("[STORE ERROR] " <> inspect({data, reason, info}))
   end
 end
