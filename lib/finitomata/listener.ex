@@ -7,5 +7,9 @@ defmodule Finitomata.Listener do
   alias Finitomata.{State, Transition}
 
   @doc "To be called upon a transition"
-  @callback after_transition(Finitomata.fsm_name(), Transition.state(), State.payload()) :: :ok
+  @callback after_transition(
+              id :: Finitomata.fsm_name(),
+              state :: Transition.state(),
+              payload :: State.payload()
+            ) :: :ok
 end
