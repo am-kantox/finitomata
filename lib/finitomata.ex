@@ -866,23 +866,23 @@ defmodule Finitomata do
 
       @spec maybe_pubsub(Finitomata.transition_resolution(), Finitomata.fsm_name()) :: :ok
       cond do
+        is_nil(@__config__[:listener]) ->
+          :ok
+
         is_atom(@__config__[:listener]) and
             function_exported?(@__config__[:listener], :after_transition, 3) ->
           defp maybe_pubsub({:ok, state, payload}, name) do
             with some when some != :ok <-
                    @__config__[:listener].after_transition(name, state, payload) do
               Logger.warn(
-                "[LISTENER] " <>
+                "[LISTENER] ‹" <>
                   inspect(Function.capture(@__config__[:listener], :after_transition, 3)) <>
-                  " returned unexpected ‹" <>
+                  "› returned unexpected ‹" <>
                   inspect(some) <>
                   "› when called with ‹" <> inspect([name, state, payload]) <> "›"
               )
             end
           end
-
-        is_nil(@__config__[:listener]) ->
-          :ok
 
         is_pid(@__config__[:listener]) or is_port(@__config__[:listener]) or
           is_atom(@__config__[:listener]) or is_tuple(@__config__[:listener]) ->
