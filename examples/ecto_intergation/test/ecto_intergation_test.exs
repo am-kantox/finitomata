@@ -32,7 +32,7 @@ defmodule EctoIntergation.Test do
                previous_state: :*,
                current_state: :empty,
                event: :__start__,
-               event_payload: %{"__retries__" => 1, "payload" => "empty"}
+               event_payload: %{"__retries__" => 1}
              }
            ] = post.(uuid).event_log
 
@@ -53,7 +53,40 @@ defmodule EctoIntergation.Test do
                previous_state: :*,
                current_state: :empty,
                event: :__start__,
-               event_payload: %{"__retries__" => 1, "payload" => "empty"}
+               event_payload: %{"__retries__" => 1}
+             }
+           ] = post.(uuid).event_log |> Enum.sort()
+
+    transition.(uuid, :delete, %{foo: :baz})
+    Process.sleep(100)
+
+    assert post.(uuid).state == :*
+    catch_exit(state.(uuid).current)
+
+    assert [
+             %EventLog{
+               previous_state: :deleted,
+               current_state: :*,
+               event: :__end__,
+               event_payload: %{"__retries__" => 1}
+             },
+             %EventLog{
+               previous_state: :draft,
+               current_state: :deleted,
+               event: :delete,
+               event_payload: %{"foo" => "baz"}
+             },
+             %EventLog{
+               previous_state: :empty,
+               current_state: :draft,
+               event: :edit,
+               event_payload: %{"foo" => "bar"}
+             },
+             %EventLog{
+               previous_state: :*,
+               current_state: :empty,
+               event: :__start__,
+               event_payload: %{"__retries__" => 1}
              }
            ] = post.(uuid).event_log |> Enum.sort()
   end

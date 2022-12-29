@@ -1,4 +1,5 @@
 defmodule EctoIntegration.Data.Post.FSM do
+  @moduledoc "FSM implementation for `EctoIntegration.Data.Post`"
   @fsm """
     empty --> |edit| draft
     draft --> |edit| draft

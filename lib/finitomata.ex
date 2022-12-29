@@ -547,13 +547,9 @@ defmodule Finitomata do
           payload: payload
         }
 
-        if state.lifecycle == :loaded do
-          {:ok, state}
-        else
-          {:ok, state,
-           {:continue,
-            {:transition, event_payload({:__start__, Transition.entry(@__config__[:fsm])})}}}
-        end
+        if state.lifecycle == :loaded,
+          do: {:ok, state},
+          else: {:ok, state, {:continue, {:transition, event_payload({:__start__, nil})}}}
       end
 
       @doc false

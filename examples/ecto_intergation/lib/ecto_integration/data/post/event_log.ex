@@ -1,4 +1,6 @@
 defmodule EctoIntegration.Data.Post.EventLog do
+  @moduledoc "Event log backing up `EctoIntegration.Data.Post`"
+
   use Ecto.Schema
 
   alias Ecto.{Changeset, Multi}

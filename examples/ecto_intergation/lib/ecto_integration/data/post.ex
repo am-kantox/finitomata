@@ -1,8 +1,11 @@
 defmodule EctoIntegration.Data.Post do
+  @moduledoc "Ecto Schema for the FSM-baked entity"
   use Ecto.Schema
 
   alias Ecto.Changeset
   alias EctoIntegration.Data.{Post, Post.EventLog, Post.FSM}
+
+  @type t :: Ecto.Schema.schema()
 
   @states FSM.states()
 
