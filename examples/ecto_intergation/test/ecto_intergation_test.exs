@@ -13,13 +13,14 @@ defmodule EctoIntergation.Test do
     %{uuid: uuid, post: post}
   end
 
-  test "`Post` lifecycle", %{uuid: uuid, post: _post} do
+  test "`Post` lifecycle", %{uuid: uuid, post: post} do
     post = fn uuid -> Post |> Repo.get(uuid) |> Repo.preload(:event_log) end
     state = &Finitomata.state/1
 
     transition = fn uuid, event, payload ->
       Finitomata.transition(uuid, {event, payload})
     end
+
 
     assert post.(uuid).state == :empty
     assert state.(uuid).current == :empty
@@ -29,7 +30,7 @@ defmodule EctoIntergation.Test do
                previous_state: :*,
                current_state: :empty,
                event: :__start__,
-               event_payload: nil
+               event_payload: %{"__retries__" => 1, "payload" => "empty"}
              }
            ] = post.(uuid).event_log
 

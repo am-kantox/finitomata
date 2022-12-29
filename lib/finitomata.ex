@@ -4,13 +4,33 @@
 
 defmodule Finitomata do
   @doc false
-  def module?(value) do
+  def behaviour(value, funs \\ [])
+
+  def behaviour(value, behaviour) when is_atom(behaviour) do
+    with {:module, ^behaviour} <- Code.ensure_compiled(behaviour),
+         true <- function_exported?(behaviour, :behaviour_info, 1),
+         funs when is_list(funs) <- behaviour.behaviour_info(:callbacks) do
+      behaviour(value, funs)
+    else
+      _ ->
+        {:error, "The behavoiur specified is invalid ‹" <> inspect(value) <> "›"}
+    end
+  end
+
+  def behaviour(value, funs) when is_atom(value) do
     case Code.ensure_compiled(value) do
       {:module, ^value} ->
-        {:ok, value}
+        if Enum.all?(funs, fn {fun, arity} -> function_exported?(value, fun, arity) end) do
+          {:ok, value}
+        else
+          {:error,
+           "The module specified ‹" <>
+             inspect(value) <>
+             "› does not implement requested callbacks ‹" <> inspect(funs) <> "›"}
+        end
 
       {:error, error} ->
-        {:error, "Cannot find the requested module ‘" <> inspect(value) <> "’ (#{error})"}
+        {:error, "Cannot find the requested module ‹" <> inspect(value) <> "› (#{error})"}
     end
   end
 
@@ -22,7 +42,7 @@ defmodule Finitomata do
     ],
     syntax: [
       required: false,
-      type: {:custom, Finitomata, :module?, []},
+      type: {:custom, Finitomata, :behaviour, []},
       default: Finitomata.Mermaid,
       doc: "The FSM dialect parser to convert the declaration to internal FSM representation."
     ],
@@ -58,10 +78,23 @@ defmodule Finitomata do
     ],
     persistency: [
       required: false,
-      type: {:or, [{:in, [nil]}, {:custom, Finitomata, :module?, []}]},
+      type: {:or, [{:in, [nil]}, {:custom, Finitomata, :behaviour, []}]},
       default: nil,
       doc:
         "The implementation of `Finitomata.Persistency` behaviour to backup FSM with a persistent storage."
+    ],
+    listener: [
+      required: false,
+      type:
+        {:or,
+         [
+           {:in, [nil]},
+           {:custom, Finitomata, :behaviour, [[handle_info: 2]]},
+           {:custom, Finitomata, :behaviour, [Finitomata.Listener]}
+         ]},
+      default: nil,
+      doc:
+        "The implementation of `Finitomata.Listener` behaviour _or_ a `t:GenServer.name()` to receive notification after transitions."
     ]
   ]
 
@@ -116,6 +149,7 @@ defmodule Finitomata do
             name: Finitomata.fsm_name(),
             lyfecycle: :loaded | :created | :unknown,
             persistency: nil | module(),
+            listener: nil | module(),
             current: Transition.state(),
             payload: payload(),
             timer: non_neg_integer(),
@@ -125,8 +159,9 @@ defmodule Finitomata do
     defstruct name: nil,
               lifecycle: :unknown,
               persistency: nil,
-              payload: %{},
+              listener: nil,
               current: :*,
+              payload: %{},
               timer: false,
               history: [],
               last_error: nil
@@ -319,11 +354,19 @@ defmodule Finitomata do
           Application.compile_env(:finitomata, :auto_terminate, false)
         )
 
-      @persistency Keyword.get(
-                     unquote(options),
-                     :persistency,
-                     Application.compile_env(:finitomata, :persistency, nil)
-                   )
+      persistency =
+        Keyword.get(
+          unquote(options),
+          :persistency,
+          Application.compile_env(:finitomata, :persistency, nil)
+        )
+
+      listener =
+        Keyword.get(
+          unquote(options),
+          :listener,
+          Application.compile_env(:finitomata, :listener, nil)
+        )
 
       use GenServer, restart: :transient, shutdown: shutdown
 
@@ -412,6 +455,8 @@ defmodule Finitomata do
         syntax: syntax,
         fsm: fsm,
         impl_for: impl_for,
+        persistency: persistency,
+        listener: listener,
         auto_terminate: auto_terminate,
         ensure_entry: ensure_entry,
         states: Transition.states(fsm),
@@ -451,7 +496,7 @@ defmodule Finitomata do
       #{@__config__[:syntax].lint(unquote(options[:fsm]))}
       ```
       """
-      case @persistency do
+      case @__config__[:persistency] do
         nil ->
           def start_link(name: name, payload: payload) do
             GenServer.start_link(__MODULE__, %{name: name, payload: payload}, name: name)
@@ -465,7 +510,7 @@ defmodule Finitomata do
           def start_link(name: name, payload: payload) do
             GenServer.start_link(
               __MODULE__,
-              %{name: name, payload: payload, with_persistency: @persistency},
+              %{name: name, payload: payload, with_persistency: @__config__[:persistency]},
               name: name
             )
           end
@@ -497,7 +542,7 @@ defmodule Finitomata do
         state = %State{
           name: name,
           lifecycle: Map.get(init_arg, :lifecycle, :unknown),
-          persistency: Map.get(init_arg, :persistency),
+          persistency: Map.get(init_arg, :persistency, nil),
           timer: @__config__[:timer],
           payload: payload
         }
@@ -669,6 +714,7 @@ defmodule Finitomata do
         current
         |> on_transition(event, event_payload, state_payload)
         |> maybe_store(name, current, event, event_payload, state_payload)
+        |> tap(&maybe_pubsub(&1, name))
       rescue
         err ->
           case err do
@@ -761,7 +807,7 @@ defmodule Finitomata do
               Finitomata.event_payload(),
               State.payload()
             ) :: Finitomata.transition_resolution()
-      case @persistency do
+      case @__config__[:persistency] do
         nil ->
           # TODO Make it a macro
           defp maybe_store(result, _, _, _, _, _), do: result
@@ -775,7 +821,7 @@ defmodule Finitomata do
                  event_payload,
                  state_payload
                ) do
-            with true <- function_exported?(@persistency, :store_error, 4),
+            with true <- function_exported?(@__config__[:persistency], :store_error, 4),
                  info = %{
                    from: current,
                    to: nil,
@@ -784,7 +830,7 @@ defmodule Finitomata do
                    object: state_payload
                  },
                  {:error, persistency_error_reason} <-
-                   @persistency.store_error(name, state_payload, reason, info) do
+                   @__config__[:persistency].store_error(name, state_payload, reason, info) do
               {:error, transition: reason, persistency: persistency_error_reason}
             else
               _ ->
@@ -809,7 +855,7 @@ defmodule Finitomata do
             }
 
             name
-            |> @persistency.store(new_state_payload, info)
+            |> @__config__[:persistency].store(new_state_payload, info)
             |> case do
               :ok -> result
               {:ok, updated_state_payload} -> {:ok, new_state, updated_state_payload}
@@ -821,6 +867,35 @@ defmodule Finitomata do
             {:error, transition: result}
           end
       end
+
+      @spec maybe_pubsub(Finitomata.transition_resolution(), Finitomata.fsm_name()) :: :ok
+      cond do
+        is_atom(@__config__[:listener]) and
+            function_exported?(@__config__[:listener], :after_transition, 3) ->
+          defp maybe_pubsub({:ok, state, payload}, name) do
+            with some when some != :ok <-
+                   @__config__[:listener].after_transition(name, state, payload) do
+              Logger.warn(
+                "[LISTENER] " <>
+                  inspect(Function.capture(@__config__[:listener], :after_transition, 3)) <>
+                  " returned unexpected ‹" <>
+                  inspect(some) <>
+                  "› when called with ‹" <> inspect([name, state, payload]) <> "›"
+              )
+            end
+          end
+
+        is_nil(@__config__[:listener]) ->
+          :ok
+
+        is_pid(@__config__[:listener]) or is_port(@__config__[:listener]) or
+          is_atom(@__config__[:listener]) or is_tuple(@__config__[:listener]) ->
+          defp maybe_pubsub({:ok, state, payload}, name) do
+            send(@__config__[:listener], {:finitomata, {:transition, state, payload}})
+          end
+      end
+
+      defp maybe_pubsub(_, _), do: :ok
 
       @behaviour Finitomata
     end
