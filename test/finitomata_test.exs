@@ -22,31 +22,31 @@ defmodule FinitomataTest do
   end
 
   test "callbacks (log)" do
-    start_supervised(Finitomata.Supervisor)
+    start_supervised({Finitomata.Supervisor, id: LogFSM})
 
-    Finitomata.start_fsm(Log, "LogFSM", %{foo: :bar})
+    Finitomata.start_fsm(LogFSM, Log, "LogFSM", %{foo: :bar})
 
     assert capture_log(fn ->
-             Finitomata.transition("LogFSM", {:accept, nil})
+             Finitomata.transition(LogFSM, "LogFSM", {:accept, nil})
              Process.sleep(200)
            end) =~
              ~r/\[→⥯\].*?\[✓ ⇄\].*?\[←⥯\]/su
 
     assert %Finitomata.State{current: :accepted, history: [:idle, :*], payload: %{foo: :bar}} =
-             Finitomata.state("LogFSM")
+             Finitomata.state(LogFSM, "LogFSM")
 
-    assert Finitomata.allowed?("LogFSM", :*)
-    refute Finitomata.responds?("LogFSM", :accept)
+    assert Finitomata.allowed?(LogFSM, "LogFSM", :*)
+    refute Finitomata.responds?(LogFSM, "LogFSM", :accept)
 
     assert capture_log(fn ->
-             Finitomata.transition("LogFSM", {:__end__, nil})
+             Finitomata.transition(LogFSM, "LogFSM", {:__end__, nil})
              Process.sleep(200)
            end) =~
              "[◉⥯]"
 
-    Finitomata.transition("LogFSM", {:__end__, nil})
+    Finitomata.transition(LogFSM, "LogFSM", {:__end__, nil})
     Process.sleep(200)
-    refute Finitomata.alive?("LogFSM")
+    refute Finitomata.alive?(LogFSM, "LogFSM")
   end
 
   test "callbacks (callback)" do

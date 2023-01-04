@@ -119,11 +119,17 @@ defmodule Finitomata do
 
   alias Finitomata.Transition
 
-  @typedoc "The payload that can be passed to each call to `transition/3`"
-  @type event_payload :: any()
+  @typedoc """
+  The ID of the `Finitomata` supervision tree, useful for the concurrent
+    using of different `Finitomata` supervision trees.
+  """
+  @type id :: any()
 
   @typedoc "The name of the FSM (might be any term, but it must be unique)"
   @type fsm_name :: any()
+
+  @typedoc "The payload that can be passed to each call to `transition/3`"
+  @type event_payload :: any()
 
   @typedoc "The resolution of transition, when `{:error, _}` tuple, the transition is aborted"
   @type transition_resolution ::
@@ -216,15 +222,20 @@ defmodule Finitomata do
 
   The arguments are
 
+  - the global name of `Finitomata` instance (optional, defaults to `Finitomata`)
   - the implementation of FSM (the module, having `use Finitomata`)
   - the name of the FSM (might be any term, but it must be unique)
   - the payload to be carried in the FSM state during the lifecycle
 
-  The FSM is started supervised.
+  The FSM is started supervised. If the global name/id is given, it should be passed
+    to all calls like `transition/4`
   """
-  @spec start_fsm(module(), any(), any()) :: DynamicSupervisor.on_start_child()
-  def start_fsm(impl, name, payload) do
-    DynamicSupervisor.start_child(Finitomata.Manager, {impl, name: fqn(name), payload: payload})
+  @spec start_fsm(id(), module(), any(), any()) :: DynamicSupervisor.on_start_child()
+  def start_fsm(id \\ nil, impl, name, payload) do
+    DynamicSupervisor.start_child(
+      Finitomata.Supervisor.fqn_name(id, Manager),
+      {impl, name: fqn(id, name), payload: payload}
+    )
   end
 
   @doc """
@@ -237,16 +248,20 @@ defmodule Finitomata do
     `on_transition/4` call
   - `delay` (optional) the interval in milliseconds to apply transition after
   """
-  @spec transition(fsm_name(), {Transition.event(), State.payload()}, non_neg_integer()) :: :ok
-  def transition(target, event_payload, delay \\ 0)
+  @spec transition(id(), fsm_name(), {Transition.event(), State.payload()}, non_neg_integer()) ::
+          :ok
+  def transition(id \\ nil, target, event_payload, delay \\ 0)
 
-  def transition(target, {event, payload}, 0),
-    do: target |> fqn() |> GenServer.cast({event, payload})
+  def transition(target, {event, payload}, delay, 0) when is_integer(delay),
+    do: transition(nil, target, {event, payload}, delay)
 
-  def transition(target, {event, payload}, delay) when is_integer(delay) and delay > 0 do
+  def transition(id, target, {event, payload}, 0),
+    do: id |> fqn(target) |> GenServer.cast({event, payload})
+
+  def transition(id, target, {event, payload}, delay) when is_integer(delay) and delay > 0 do
     fn ->
       Process.sleep(delay)
-      target |> fqn() |> GenServer.cast({event, payload})
+      id |> fqn(target) |> GenServer.cast({event, payload})
     end
     |> Task.start()
     |> elem(0)
@@ -255,42 +270,50 @@ defmodule Finitomata do
   @doc """
   The state of the FSM.
   """
-  @spec state(fsm_name()) :: State.t()
-  def state(target), do: target |> fqn() |> GenServer.call(:state)
+  @spec state(id(), fsm_name()) :: State.t()
+  def state(id \\ nil, target), do: id |> fqn(target) |> GenServer.call(:state)
 
   @doc """
   Returns `true` if the transition to the state `state` is possible, `false` otherwise.
   """
-  @spec allowed?(fsm_name(), Transition.state()) :: boolean()
-  def allowed?(target, state), do: target |> fqn() |> GenServer.call({:allowed?, state})
+  @spec allowed?(id(), fsm_name(), Transition.state()) :: boolean()
+  def allowed?(id \\ nil, target, state),
+    do: id |> fqn(target) |> GenServer.call({:allowed?, state})
 
   @doc """
   Returns `true` if the transition by the event `event` is possible, `false` otherwise.
   """
-  @spec responds?(fsm_name(), Transition.event()) :: boolean()
-  def responds?(target, event), do: target |> fqn() |> GenServer.call({:responds?, event})
+  @spec responds?(id(), fsm_name(), Transition.event()) :: boolean()
+  def responds?(id \\ nil, target, event),
+    do: id |> fqn(target) |> GenServer.call({:responds?, event})
 
   @doc """
   Returns `true` if the supervision tree is alive, `false` otherwise.
   """
-  @spec alive? :: boolean()
-  def alive?, do: is_pid(Process.whereis(Registry.Finitomata))
+  @spec sup_alive?(id()) :: boolean()
+  def sup_alive?(id \\ nil),
+    do: is_pid(Process.whereis(Finitomata.Supervisor.fqn_name(id, Registry)))
 
   @doc """
   Returns `true` if the FSM specified is alive, `false` otherwise.
   """
-  @spec alive?(fsm_name()) :: boolean()
-  def alive?(target), do: target |> fqn() |> GenServer.whereis() |> is_pid()
+  @spec alive?(any(), fsm_name()) :: boolean()
+  def alive?(id \\ nil, target), do: id |> fqn(target) |> GenServer.whereis() |> is_pid()
 
   @doc false
   @spec child_spec(any()) :: Supervisor.child_spec()
-  def child_spec(id \\ 0),
-    do: Supervisor.child_spec({Finitomata.Supervisor, []}, id: {Finitomata, id})
+  def child_spec(id \\ nil)
+
+  def child_spec(nil),
+    do: Supervisor.child_spec(Finitomata.Supervisor, [])
+
+  def child_spec(id),
+    do: Supervisor.child_spec({Finitomata.Supervisor, id}, id: {Finitomata, id})
 
   @doc false
   @spec start_link(any()) ::
           {:ok, pid} | {:error, {:already_started, pid()} | {:shutdown, term()} | term()}
-  def start_link(id \\ 0) do
+  def start_link(id \\ nil) do
     Supervisor.start_link([Finitomata.child_spec(id)], strategy: :one_for_one)
   end
 
@@ -927,6 +950,7 @@ defmodule Finitomata do
     end
   end
 
-  @spec fqn(fsm_name()) :: {:via, module(), {module, any()}}
-  defp fqn(name), do: {:via, Registry, {Registry.Finitomata, name}}
+  @spec fqn(any(), fsm_name()) :: {:via, module(), {module, any()}}
+  defp fqn(id, name),
+    do: {:via, Registry, {Finitomata.Supervisor.fqn_name(id, Registry), name}}
 end
