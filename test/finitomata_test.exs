@@ -32,10 +32,10 @@ defmodule FinitomataTest do
            end) =~
              ~r/\[→⥯\].*?\[✓ ⇄\].*?\[←⥯\]/su
 
-    assert %{foo: :bar} = Finitomata.state(LogFSM, "LogFSM")
+    assert %{foo: :bar} = Finitomata.state(LogFSM, "LogFSM", :payload)
 
     assert %Finitomata.State{current: :accepted, history: [:idle, :*], payload: %{foo: :bar}} =
-             Finitomata.state(LogFSM, "LogFSM", :full)
+             Finitomata.state(LogFSM, "LogFSM")
 
     assert Finitomata.allowed?(LogFSM, "LogFSM", :*)
     refute Finitomata.responds?(LogFSM, "LogFSM", :accept)
@@ -94,7 +94,7 @@ defmodule FinitomataTest do
     assert_receive :on_timer, 500
     assert_receive :on_timer, 500
 
-    assert %{pid: ^pid, processing: true} = Finitomata.state(:timer)
+    assert %{pid: ^pid, processing: true} = Finitomata.state(:timer, :payload)
   end
 
   test "malformed timer definition" do
