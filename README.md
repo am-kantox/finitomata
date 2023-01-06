@@ -153,6 +153,7 @@ end
 
 ## Changelog
 
+- `0.11.0` — `{:ok, state_payload}` return from `on_timer/2`, `:persistent_term` to cache state
 - `0.10.0` — support for several supervision trees with `id`s, experimental support for persistence scaffold
 - `0.9.0` — [FIX] malformed callbacks had the FSM broken
 - `0.8.2` — last error is now kept in the state (credits to @egidijusz)
