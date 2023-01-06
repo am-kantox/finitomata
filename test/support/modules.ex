@@ -57,7 +57,8 @@ defmodule Finitomata.Test.Timer do
   @moduledoc false
 
   @fsm """
-  idle --> |process| processed
+  idle --> |process| processing
+  processing --> |finish| finished
   """
 
   use Finitomata, fsm: @fsm, timer: 100
@@ -66,6 +67,11 @@ defmodule Finitomata.Test.Timer do
   def on_timer(:idle, state) do
     send(state.payload.pid, :on_transition)
     {:transition, :process, state.payload}
+  end
+
+  def on_timer(:processing, state) do
+    send(state.payload.pid, :on_timer)
+    {:ok, Map.put(state.payload, :processing, true)}
   end
 end
 

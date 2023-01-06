@@ -91,11 +91,10 @@ defmodule FinitomataTest do
 
     Finitomata.start_fsm(Timer, :timer, %{pid: pid})
     assert_receive :on_transition, 500
+    assert_receive :on_timer, 500
+    assert_receive :on_timer, 500
 
-    assert %Finitomata.State{current: :processed, history: [:idle, :*], payload: %{pid: ^pid}} =
-             Finitomata.state(:timer, :full)
-
-    assert %{pid: ^pid} = Finitomata.state(:timer)
+    assert %{pid: ^pid, processing: true} = Finitomata.state(:timer)
   end
 
   test "malformed timer definition" do
