@@ -90,12 +90,14 @@ defmodule Finitomata.MixProject do
       groups_for_modules: [
         FSM: [Finitomata],
         Internals: [
+          Finitomata.Listener,
           Finitomata.State,
           Finitomata.Transition
         ],
         Persistence: [
-          Finitomata.Persistence,
-          Finitomata.Persistence.Persistable
+          Finitomata.Persistency,
+          Finitomata.Persistency.Persistable,
+          Finitomata.Persistency.Protocol
         ]
       ],
       before_closing_body_tag: &before_closing_body_tag/1

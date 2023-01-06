@@ -94,7 +94,7 @@ defmodule Finitomata do
          ]},
       default: nil,
       doc:
-        "The implementation of `Finitomata.Listener` behaviour _or_ a `t:GenServer.name()` to receive notification after transitions."
+        "The implementation of `Finitomata.Listener` behaviour _or_ a `GenServer.name()` to receive notification after transitions."
     ]
   ]
 
@@ -211,6 +211,7 @@ defmodule Finitomata do
   """
   @callback on_timer(Transition.state(), State.t()) ::
               :ok
+              | {:ok, State.payload()}
               | {:transition, {Transition.event(), event_payload()}, State.payload()}
               | {:transition, Transition.event(), State.payload()}
               | {:reschedule, non_neg_integer()}
@@ -270,8 +271,24 @@ defmodule Finitomata do
   @doc """
   The state of the FSM.
   """
-  @spec state(id(), fsm_name()) :: State.t()
-  def state(id \\ nil, target), do: id |> fqn(target) |> GenServer.call(:state)
+  @spec state(id(), fsm_name(), reload? :: :cached | :payload | :full) :: State.t()
+  def state(id \\ nil, target, reload? \\ :payload)
+
+  def state(target, reload?, :payload) when reload? in ~w|cached payload full|a,
+    do: state(nil, target, reload?)
+
+  def state(id, target, reload?), do: id |> fqn(target) |> do_state(reload?)
+
+  @spec do_state(fqn :: GenServer.name(), reload? :: :cached | :payload | :full) ::
+          nil | State.t()
+  defp do_state(fqn, :cached), do: :persistent_term.get({Finitomata, fqn}, nil)
+  defp do_state(fqn, :payload), do: do_state(fqn, :cached) || do_state(fqn, :full).payload
+
+  defp do_state(fqn, :full) do
+    fqn
+    |> GenServer.call(:state)
+    |> tap(&:persistent_term.put({Finitomata, fqn}, &1.payload))
+  end
 
   @doc """
   Returns `true` if the transition to the state `state` is possible, `false` otherwise.
@@ -643,6 +660,8 @@ defmodule Finitomata do
                  history: new_history
              },
              {:on_enter, :ok} <- {:on_enter, safe_on_enter(new_current, state)} do
+          :persistent_term.put({Finitomata, state.name}, state.payload)
+
           case new_current do
             :* ->
               {:stop, :normal, state}
@@ -695,6 +714,10 @@ defmodule Finitomata do
           |> case do
             :ok ->
               {:noreply, state}
+
+            {:ok, state_payload} ->
+              :persistent_term.put({Finitomata, state.name}, state_payload)
+              {:noreply, %State{state | payload: state_payload}}
 
             {:transition, {event, event_payload}, state_payload} ->
               transit({event, event_payload}, %State{state | payload: state_payload})
@@ -807,6 +830,7 @@ defmodule Finitomata do
 
       @spec safe_on_timer(Transition.state(), State.t()) ::
               :ok
+              | {:ok, State.t()}
               | {:transition, {Transition.state(), Finitomata.event_payload()}, State.payload()}
               | {:transition, Transition.state(), State.payload()}
               | {:reschedule, pos_integer()}

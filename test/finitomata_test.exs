@@ -32,8 +32,10 @@ defmodule FinitomataTest do
            end) =~
              ~r/\[→⥯\].*?\[✓ ⇄\].*?\[←⥯\]/su
 
+    assert %{foo: :bar} = Finitomata.state(LogFSM, "LogFSM")
+
     assert %Finitomata.State{current: :accepted, history: [:idle, :*], payload: %{foo: :bar}} =
-             Finitomata.state(LogFSM, "LogFSM")
+             Finitomata.state(LogFSM, "LogFSM", :full)
 
     assert Finitomata.allowed?(LogFSM, "LogFSM", :*)
     refute Finitomata.responds?(LogFSM, "LogFSM", :accept)
@@ -58,8 +60,11 @@ defmodule FinitomataTest do
 
     assert_receive :on_transition
 
+    assert %{pid: ^pid} = Finitomata.state(:callback, :full).payload
+    assert %{pid: ^pid} = Finitomata.state(:callback, :cached)
+
     assert %Finitomata.State{current: :processed, history: [:idle, :*], payload: %{pid: ^pid}} =
-             Finitomata.state(:callback)
+             Finitomata.state(:callback, :full)
 
     assert Finitomata.allowed?(:callback, :*)
     refute Finitomata.responds?(:callback, :process)
@@ -88,7 +93,9 @@ defmodule FinitomataTest do
     assert_receive :on_transition, 500
 
     assert %Finitomata.State{current: :processed, history: [:idle, :*], payload: %{pid: ^pid}} =
-             Finitomata.state(:timer)
+             Finitomata.state(:timer, :full)
+
+    assert %{pid: ^pid} = Finitomata.state(:timer)
   end
 
   test "malformed timer definition" do
@@ -145,7 +152,8 @@ defmodule FinitomataTest do
            end) =~ "[⚐⥯] transition softly failed {:error, :not_allowed}"
 
     Process.sleep(200)
-    assert %Finitomata.State{current: :started} = Finitomata.state("SoftFSM")
+    assert %Finitomata.State{current: :started} = Finitomata.state("SoftFSM", :full)
+    assert %{foo: :bar} = Finitomata.state("SoftFSM", :cached)
     assert Finitomata.alive?("SoftFSM")
   end
 
