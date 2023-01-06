@@ -271,7 +271,8 @@ defmodule Finitomata do
   @doc """
   The state of the FSM.
   """
-  @spec state(id(), fsm_name(), reload? :: :cached | :payload | :full) :: State.t()
+  @spec state(id(), fsm_name(), reload? :: :cached | :payload | :full) ::
+          State.t() | State.payload()
   def state(id \\ nil, target, reload? \\ :full)
 
   def state(target, reload?, :full) when reload? in ~w|cached payload full|a,
