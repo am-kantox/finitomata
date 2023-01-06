@@ -272,7 +272,7 @@ defmodule Finitomata do
   The state of the FSM.
   """
   @spec state(id(), fsm_name(), reload? :: :cached | :payload | :full) ::
-          State.t() | State.payload()
+          nil | State.t() | State.payload()
   def state(id \\ nil, target, reload? \\ :full)
 
   def state(target, reload?, :full) when reload? in ~w|cached payload full|a,
@@ -281,7 +281,7 @@ defmodule Finitomata do
   def state(id, target, reload?), do: id |> fqn(target) |> do_state(reload?)
 
   @spec do_state(fqn :: GenServer.name(), reload? :: :cached | :payload | :full) ::
-          nil | State.t()
+          nil | State.t() | State.payload()
   defp do_state(fqn, :cached), do: :persistent_term.get({Finitomata, fqn}, nil)
   defp do_state(fqn, :payload), do: do_state(fqn, :cached) || do_state(fqn, :full).payload
 
