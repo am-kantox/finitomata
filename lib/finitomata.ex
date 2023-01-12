@@ -171,6 +171,62 @@ defmodule Finitomata do
               timer: false,
               history: [],
               last_error: nil
+
+    defimpl Inspect do
+      @moduledoc false
+      import Inspect.Algebra
+
+      def inspect(%Finitomata.State{} = state, %Inspect.Opts{} = opts) do
+        doc =
+          if true == get_in(opts.custom_options, [:full]) do
+            state |> Map.from_struct() |> Map.to_list()
+          else
+            name =
+              case state.name do
+                {:via, Registry, {Finitomata.Registry, name}} -> name
+                other -> other
+              end
+
+            persisted? =
+              case state.lifecycle do
+                :unknown -> false
+                :loaded -> true
+                :created -> true
+              end
+
+            errored? =
+              case state.last_error do
+                nil -> false
+                %{error: {:error, kind}} = error -> [{kind, Map.delete(error, :error)}]
+                %{error: error} -> error
+                error -> error
+              end
+
+            previous =
+              case state.history do
+                [{last, _} | _] -> last
+                [last | _] -> last
+                [] -> nil
+              end
+
+            [
+              name: name,
+              state: [
+                current: state.current,
+                previous: previous,
+                payload: state.payload
+              ],
+              internals: [
+                errored?: errored?,
+                persisted?: persisted?,
+                timer: state.timer
+              ]
+            ]
+          end
+
+        concat(["#Finitomata<", to_doc(doc, opts), ">"])
+      end
+    end
   end
 
   @doc """
