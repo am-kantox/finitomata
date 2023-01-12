@@ -2,9 +2,11 @@ defmodule Finitomata.PlantUML do
   @moduledoc false
 
   import NimbleParsec
-  alias Finitomata.Transition
+  alias Finitomata.Parser
 
   use Boundary, deps: [Finitomata], exports: []
+
+  @behaviour Parser
 
   @alphanumeric [?a..?z, ?A..?Z, ?0..?9, ?_]
 
@@ -40,9 +42,6 @@ defmodule Finitomata.PlantUML do
     |> string("\n")
     |> pre_traverse(:abort)
 
-  @type parse_error ::
-          {:error, String.t(), binary(), map(), {pos_integer(), pos_integer()}, pos_integer()}
-
   @doc ~S"""
       iex> {:ok, result, _, _, _, _} = Finitomata.PlantUML.transition("state1 --> state2 : succeeded")
       iex> result
@@ -75,8 +74,7 @@ defmodule Finitomata.PlantUML do
           %Finitomata.Transition{event: :ko, from: :s2, to: :*}
         ]}
   """
-  @spec validate([{:transition, [binary()]}]) ::
-          {:ok, [Transition.t()]} | {:error, Finitomata.validation_error()}
+  @impl Parser
   def validate(parsed), do: Finitomata.validate(parsed)
 
   @doc ~S"""
@@ -91,8 +89,7 @@ defmodule Finitomata.PlantUML do
           %Finitomata.Transition{event: :ko, from: :s2, to: :*}
         ]}
   """
-  @spec parse(binary()) ::
-          {:ok, [Transition.t()]} | {:error, Finitomata.validation_error()} | parse_error()
+  @impl Parser
   def parse(input) do
     case fsm(input) do
       {:ok, result, _, _, _, _} ->
@@ -110,7 +107,7 @@ defmodule Finitomata.PlantUML do
     end
   end
 
-  @spec lint(binary()) :: binary()
+  @impl Parser
   def lint(input) when is_binary(input), do: "@startuml\n\n" <> input <> "\n@enduml"
 
   @spec abort(
