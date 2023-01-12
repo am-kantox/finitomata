@@ -90,8 +90,9 @@ defmodule Finitomata.MixProject do
       groups_for_modules: [
         FSM: [Finitomata],
         Internals: [
-          Finitomata.Listener,
+          Finitomata.Parser,
           Finitomata.State,
+          Finitomata.Listener,
           Finitomata.Transition
         ],
         Persistence: [
