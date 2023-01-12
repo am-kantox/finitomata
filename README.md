@@ -153,6 +153,7 @@ end
 
 ## Changelog
 
+- `0.11.1` — `Inspect`, `:flowchart`/`:state_diagram` as default parsers, behaviour `Parser`
 - `0.11.0` — `{:ok, state_payload}` return from `on_timer/2`, `:persistent_term` to cache state
 - `0.10.0` — support for several supervision trees with `id`s, experimental support for persistence scaffold
 - `0.9.0` — [FIX] malformed callbacks had the FSM broken
