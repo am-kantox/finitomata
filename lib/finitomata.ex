@@ -42,8 +42,8 @@ defmodule Finitomata do
     ],
     syntax: [
       required: false,
-      type: {:custom, Finitomata, :behaviour, []},
-      default: Finitomata.Mermaid,
+      type: {:or, [{:in, [:flowchart, :state_diagram]}, {:custom, Finitomata, :behaviour, []}]},
+      default: :flowchart,
       doc: "The FSM dialect parser to convert the declaration to internal FSM representation."
     ],
     impl_for: [
@@ -434,8 +434,26 @@ defmodule Finitomata do
         Keyword.get(
           unquote(options),
           :syntax,
-          Application.compile_env(:finitomata, :syntax, Finitomata.Mermaid)
+          Application.compile_env(:finitomata, :syntax, :flowchart)
         )
+
+      if syntax in [Finitomata.Mermaid, Finitomata.PlantUML] do
+        Mix.shell().info([
+          [:yellow, "deprecated: ", :reset],
+          "using built-in modules as syntax names is deprecated, please use ",
+          [:blue, ":flowchart", :reset],
+          " and/or ",
+          [:blue, ":state_diagram", :reset],
+          " instead"
+        ])
+      end
+
+      syntax =
+        case syntax do
+          :flowchart -> Finitomata.Mermaid
+          :state_diagram -> Finitomata.PlantUML
+          module when is_atom(module) -> module
+        end
 
       shutdown =
         Keyword.get(

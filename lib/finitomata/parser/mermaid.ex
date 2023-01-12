@@ -2,9 +2,11 @@ defmodule Finitomata.Mermaid do
   @moduledoc false
 
   import NimbleParsec
-  alias Finitomata.Transition
+  alias Finitomata.Parser
 
   use Boundary, deps: [Finitomata], exports: []
+
+  @behaviour Parser
 
   @alphanumeric [?a..?z, ?A..?Z, ?0..?9, ?_]
 
@@ -40,9 +42,6 @@ defmodule Finitomata.Mermaid do
     |> string("\n")
     |> pre_traverse(:abort)
 
-  @type parse_error ::
-          {:error, String.t(), binary(), map(), {pos_integer(), pos_integer()}, pos_integer()}
-
   @doc ~S"""
       iex> {:ok, result, _, _, _, _} = Finitomata.Mermaid.transition("state1 --> |succeeded| state2")
       iex> result
@@ -72,8 +71,7 @@ defmodule Finitomata.Mermaid do
           %Finitomata.Transition{event: :__end__, from: :s3, to: :*}
         ]}
   """
-  @spec validate([{:transition, [binary()]}]) ::
-          {:ok, [Transition.t()]} | {:error, Finitomata.validation_error()}
+  @impl Parser
   def validate(parsed) do
     parsed =
       Enum.map(parsed, fn {:transition, [from, event, to]} -> {:transition, [from, to, event]} end)
@@ -102,8 +100,7 @@ defmodule Finitomata.Mermaid do
           %Finitomata.Transition{event: :__end__, from: :s3, to: :*}
         ]}
   """
-  @spec parse(binary()) ::
-          {:ok, [Transition.t()]} | {:error, Finitomata.validation_error()} | parse_error()
+  @impl Parser
   def parse(input) do
     case fsm(input) do
       {:ok, result, _, _, _, _} ->
@@ -121,7 +118,7 @@ defmodule Finitomata.Mermaid do
     end
   end
 
-  @spec lint(binary()) :: binary()
+  @impl Parser
   def lint(input) when is_binary(input) do
     input = input |> String.split("\n", trim: true) |> Enum.map_join("\n", &("    " <> &1))
 
