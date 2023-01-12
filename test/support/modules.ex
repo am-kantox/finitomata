@@ -9,7 +9,7 @@ defmodule Finitomata.Test.Plant do
   s3 --> [*] : ok
   """
 
-  use Finitomata, {@fsm, Finitomata.PlantUML}
+  use Finitomata, {@fsm, :state_diagram}
 
   @impl Finitomata
   def on_transition(:s1, :to_s2, event_payload, state_payload) do
@@ -61,7 +61,7 @@ defmodule Finitomata.Test.Timer do
   processing --> |finish| finished
   """
 
-  use Finitomata, fsm: @fsm, timer: 100
+  use Finitomata, fsm: @fsm, syntax: :flowchart, timer: 100
 
   @impl Finitomata
   def on_timer(:idle, state) do
