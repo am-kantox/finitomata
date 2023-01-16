@@ -290,7 +290,7 @@ defmodule Finitomata do
   @spec start_fsm(id(), module(), any(), any()) :: DynamicSupervisor.on_start_child()
   def start_fsm(id \\ nil, impl, name, payload) do
     DynamicSupervisor.start_child(
-      Finitomata.Supervisor.fqn_name(id, Manager),
+      Finitomata.Supervisor.fq_module(id, Manager, true),
       {impl, name: fqn(id, name), payload: payload}
     )
   end
@@ -366,7 +366,7 @@ defmodule Finitomata do
   """
   @spec sup_alive?(id()) :: boolean()
   def sup_alive?(id \\ nil),
-    do: is_pid(Process.whereis(Finitomata.Supervisor.fqn_name(id, Registry)))
+    do: is_pid(Process.whereis(Finitomata.Supervisor.fq_module(id, Registry, true)))
 
   @doc """
   Returns `true` if the FSM specified is alive, `false` otherwise.
@@ -1050,6 +1050,7 @@ defmodule Finitomata do
   end
 
   @spec fqn(any(), fsm_name()) :: {:via, module(), {module, any()}}
-  defp fqn(id, name),
-    do: {:via, Registry, {Finitomata.Supervisor.fqn_name(id, Registry), name}}
+  @doc "Fully qualified name of the _FSM_ backed by `Finitonata`"
+  def fqn(id, name),
+    do: {:via, Registry, {Finitomata.Supervisor.fq_module(id, Registry, true), name}}
 end
