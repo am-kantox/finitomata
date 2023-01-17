@@ -42,7 +42,12 @@ defmodule Finitomata do
     ],
     syntax: [
       required: false,
-      type: {:or, [{:in, [:flowchart, :state_diagram]}, {:custom, Finitomata, :behaviour, []}]},
+      type:
+        {:or,
+         [
+           {:in, [:flowchart, :state_diagram]},
+           {:custom, Finitomata, :behaviour, [Finitomata.Parser]}
+         ]},
       default: :flowchart,
       doc: "The FSM dialect parser to convert the declaration to internal FSM representation."
     ],
