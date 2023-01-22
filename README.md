@@ -153,6 +153,8 @@ end
 
 ## Changelog
 
+- `0.11.3` — [FIX] better error message for options (credits @ray-sh)
+- `0.11.2` — [DEBT] exported `Finitomata.fqn/2`
 - `0.11.1` — `Inspect`, `:flowchart`/`:state_diagram` as default parsers, behaviour `Parser`
 - `0.11.0` — `{:ok, state_payload}` return from `on_timer/2`, `:persistent_term` to cache state
 - `0.10.0` — support for several supervision trees with `id`s, experimental support for persistence scaffold
