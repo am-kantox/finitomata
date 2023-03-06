@@ -125,7 +125,7 @@ defmodule Finitomata.Hook do
       if :on_failure in @__config__[:impl_for] do
         @impl Finitomata
         def on_failure(event, payload, state) do
-          Logger.warn("[✗⥯] " <> inspect(state: state, event: event, event_payload: payload))
+          Logger.warning("[✗⥯] " <> inspect(state: state, event: event, event_payload: payload))
         end
       end
 

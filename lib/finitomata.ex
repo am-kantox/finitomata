@@ -755,12 +755,12 @@ defmodule Finitomata do
           end
         else
           {err, false} ->
-            Logger.warn("[⚐⥯] transition not exists or not allowed (:#{err})")
+            Logger.warning("[⚐⥯] transition not exists or not allowed (:#{err})")
             safe_on_failure(event, payload, state)
             {:noreply, state}
 
           {err, :ok} ->
-            Logger.warn("[⚐⥯] callback failed to return `:ok` (:#{err})")
+            Logger.warning("[⚐⥯] callback failed to return `:ok` (:#{err})")
             safe_on_failure(event, payload, state)
             {:noreply, state}
 
@@ -778,7 +778,7 @@ defmodule Finitomata do
                 {:noreply, state, {:continue, {:transition, event_payload({event, payload})}}}
 
               true ->
-                Logger.warn("[⚐⥯] transition failed " <> inspect(err))
+                Logger.warning("[⚐⥯] transition failed " <> inspect(err))
                 safe_on_failure(event, payload, state)
                 {:noreply, state}
             end
@@ -809,7 +809,7 @@ defmodule Finitomata do
               {:noreply, %State{state | timer: value}}
 
             weird ->
-              Logger.warn("[⚑⥯] on_timer returned a garbage " <> inspect(weird))
+              Logger.warning("[⚑⥯] on_timer returned a garbage " <> inspect(weird))
               {:noreply, state}
           end
           |> tap(fn
@@ -846,7 +846,7 @@ defmodule Finitomata do
               {:error, Exception.message(err)}
 
             _ ->
-              Logger.warn("[⚑⥯] on_transition raised " <> inspect(err))
+              Logger.warning("[⚑⥯] on_transition raised " <> inspect(err))
               {:error, :on_transition_raised}
           end
       end
@@ -863,7 +863,7 @@ defmodule Finitomata do
           :ok
         end
       rescue
-        err -> Logger.warn("[⚑⥯] on_failure raised " <> inspect(err))
+        err -> Logger.warning("[⚑⥯] on_failure raised " <> inspect(err))
       end
 
       @spec safe_on_enter(Transition.state(), State.t()) :: :ok
@@ -877,7 +877,7 @@ defmodule Finitomata do
           :ok
         end
       rescue
-        err -> Logger.warn("[⚑⥯] on_enter raised " <> inspect(err))
+        err -> Logger.warning("[⚑⥯] on_enter raised " <> inspect(err))
       end
 
       @spec safe_on_exit(Transition.state(), State.t()) :: :ok
@@ -891,7 +891,7 @@ defmodule Finitomata do
           :ok
         end
       rescue
-        err -> Logger.warn("[⚑⥯] on_exit raised " <> inspect(err))
+        err -> Logger.warning("[⚑⥯] on_exit raised " <> inspect(err))
       end
 
       @spec safe_on_terminate(State.t()) :: :ok
@@ -905,7 +905,7 @@ defmodule Finitomata do
           :ok
         end
       rescue
-        err -> Logger.warn("[⚑⥯] on_terminate raised " <> inspect(err))
+        err -> Logger.warning("[⚑⥯] on_terminate raised " <> inspect(err))
       end
 
       @spec safe_on_timer(Transition.state(), State.t()) ::
@@ -919,7 +919,7 @@ defmodule Finitomata do
           do: apply(__MODULE__, :on_timer, [state, state_payload]),
           else: :ok
       rescue
-        err -> Logger.warn("[⚑⥯] on_timer raised " <> inspect(err))
+        err -> Logger.warning("[⚑⥯] on_timer raised " <> inspect(err))
       end
 
       @spec maybe_store(
@@ -1001,7 +1001,7 @@ defmodule Finitomata do
           defp maybe_pubsub({:ok, state, payload}, name) do
             with some when some != :ok <-
                    @__config__[:listener].after_transition(name, state, payload) do
-              Logger.warn(
+              Logger.warning(
                 "[LISTENER] ‹" <>
                   inspect(Function.capture(@__config__[:listener], :after_transition, 3)) <>
                   "› returned unexpected ‹" <>
