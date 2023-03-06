@@ -636,6 +636,24 @@ defmodule Finitomata do
           end
       end
 
+      defmacrop report_error(err, from \\ "Finitomata") do
+        quote generated: true, location: :keep, bind_quoted: [err: err, from: from] do
+          case err do
+            %{__exception__: true} ->
+              {ex, st} = Exception.blame(:error, err, __STACKTRACE__)
+              Logger.debug(Exception.format(:error, ex, st))
+              {:error, Exception.message(err)}
+
+            _ ->
+              Logger.warning(
+                "[⚑⥯] #{from} raised: " <> inspect(err) <> "\n" <> inspect(__STACKTRACE__)
+              )
+
+              {:error, :on_transition_raised}
+          end
+        end
+      end
+
       @doc false
       @impl GenServer
       def init(%{name: name, payload: payload, with_persistency: persistency} = state)
@@ -838,17 +856,7 @@ defmodule Finitomata do
         |> maybe_store(name, current, event, event_payload, state_payload)
         |> tap(&maybe_pubsub(&1, name))
       rescue
-        err ->
-          case err do
-            %{__exception__: true} ->
-              {ex, st} = Exception.blame(:error, err, __STACKTRACE__)
-              Logger.debug(Exception.format(:error, ex, st))
-              {:error, Exception.message(err)}
-
-            _ ->
-              Logger.warning("[⚑⥯] on_transition raised " <> inspect(err))
-              {:error, :on_transition_raised}
-          end
+        err -> report_error(err, "on_transition/4")
       end
 
       @spec safe_on_failure(Transition.event(), Finitomata.event_payload(), State.t()) :: :ok
@@ -863,7 +871,7 @@ defmodule Finitomata do
           :ok
         end
       rescue
-        err -> Logger.warning("[⚑⥯] on_failure raised " <> inspect(err))
+        err -> report_error(err, "on_failure/3")
       end
 
       @spec safe_on_enter(Transition.state(), State.t()) :: :ok
@@ -877,7 +885,7 @@ defmodule Finitomata do
           :ok
         end
       rescue
-        err -> Logger.warning("[⚑⥯] on_enter raised " <> inspect(err))
+        err -> report_error(err, "on_enter/2")
       end
 
       @spec safe_on_exit(Transition.state(), State.t()) :: :ok
@@ -891,7 +899,7 @@ defmodule Finitomata do
           :ok
         end
       rescue
-        err -> Logger.warning("[⚑⥯] on_exit raised " <> inspect(err))
+        err -> report_error(err, "on_exit/2")
       end
 
       @spec safe_on_terminate(State.t()) :: :ok
@@ -905,7 +913,7 @@ defmodule Finitomata do
           :ok
         end
       rescue
-        err -> Logger.warning("[⚑⥯] on_terminate raised " <> inspect(err))
+        err -> report_error(err, "on_terminate/1")
       end
 
       @spec safe_on_timer(Transition.state(), State.t()) ::
@@ -919,7 +927,7 @@ defmodule Finitomata do
           do: apply(__MODULE__, :on_timer, [state, state_payload]),
           else: :ok
       rescue
-        err -> Logger.warning("[⚑⥯] on_timer raised " <> inspect(err))
+        err -> report_error(err, "on_timer/2")
       end
 
       @spec maybe_store(
