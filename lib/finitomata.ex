@@ -245,7 +245,7 @@ defmodule Finitomata do
             ) :: transition_resolution()
 
   @doc """
-  This callback will be called from the underlying `GenServer.init/1`.
+  This callback will be called from the underlying `c:GenServer.init/1`.
 
   Unlike other callbacks, this one might raise preventing the whole FSM from start.
   """
