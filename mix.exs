@@ -42,6 +42,8 @@ defmodule Finitomata.MixProject do
       {:nimble_options, "~> 0.5"},
       {:boundary, "~> 0.4", runtime: false},
       # dev / test
+      # {:mox, "~> 1.0", only: [:dev, :test, :ci]},
+      {:mox, git: "https://github.com/dashbitco/mox", only: [:dev, :test, :ci]},
       {:credo, "~> 1.0", only: [:dev, :ci]},
       {:dialyxir, "~> 1.0", only: [:dev, :test, :ci], runtime: false},
       {:ex_doc, "~> 0.11", only: :dev}

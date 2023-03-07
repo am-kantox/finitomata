@@ -6,6 +6,7 @@ defmodule FinitomataTest do
   doctest Finitomata.Transition
 
   import ExUnit.CaptureLog
+  import Mox
 
   def setup_all do
   end
@@ -187,5 +188,24 @@ defmodule FinitomataTest do
     assert_receive :on_start!
     assert_receive :on_do!
     assert_receive :on_end
+  end
+
+  test "listener" do
+    start_supervised(Finitomata.Supervisor)
+    fsm_name = {:via, Registry, {Finitomata.Registry, "ListenerFSM"}}
+
+    parent = self()
+
+    Finitomata.Test.Listener.Mox
+    |> allow(parent, fn -> GenServer.whereis(fsm_name) end)
+    |> expect(:after_transition, 3, fn id, state, payload ->
+      parent |> send({:on_transition, id, state, payload}) |> then(fn _ -> :ok end)
+    end)
+
+    Finitomata.start_fsm(Finitomata.Test.Listener, "ListenerFSM", %{pid: parent})
+
+    assert_receive {:on_transition, ^fsm_name, :idle, %{pid: ^parent}}, 1_000
+    assert_receive {:on_transition, ^fsm_name, :started, %{pid: ^parent}}, 1_000
+    assert_receive {:on_transition, ^fsm_name, :done, %{pid: ^parent}}, 1_000
   end
 end
