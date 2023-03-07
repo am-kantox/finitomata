@@ -198,14 +198,18 @@ defmodule FinitomataTest do
 
     Finitomata.Test.Listener.Mox
     |> allow(parent, fn -> GenServer.whereis(fsm_name) end)
-    |> expect(:after_transition, 3, fn id, state, payload ->
+    |> expect(:after_transition, 4, fn id, state, payload ->
       parent |> send({:on_transition, id, state, payload}) |> then(fn _ -> :ok end)
     end)
 
-    Finitomata.start_fsm(Finitomata.Test.Listener, "ListenerFSM", %{pid: parent})
+    Finitomata.start_fsm(Finitomata.Test.Listener, "ListenerFSM", %Finitomata.Test.Listener{pid: parent})
 
-    assert_receive {:on_transition, ^fsm_name, :idle, %{pid: ^parent}}, 1_000
-    assert_receive {:on_transition, ^fsm_name, :started, %{pid: ^parent}}, 1_000
-    assert_receive {:on_transition, ^fsm_name, :done, %{pid: ^parent}}, 1_000
+    assert_receive :on_start!
+    assert_receive {:on_transition, ^fsm_name, :idle, %{pid: ^parent}}
+    assert_receive :on_do!
+    assert_receive {:on_transition, ^fsm_name, :started, %{pid: ^parent}}
+    assert_receive :on_end
+    assert_receive {:on_transition, ^fsm_name, :done, %{pid: ^parent}}
+    assert_receive {:on_transition, ^fsm_name, :*, %{pid: ^parent}}
   end
 end
