@@ -4,8 +4,8 @@ defmodule Finitomata.Test.Listener do
   @moduledoc false
 
   @fsm """
-  idle --> |start!| started
-  started --> |do!| done
+  idle --> |start| started
+  started --> |do| done
   """
 
   use Finitomata, fsm: @fsm, auto_terminate: true, listener: Finitomata.Test.Listener.Mox
@@ -16,14 +16,14 @@ defmodule Finitomata.Test.Listener do
   def on_init(%__MODULE__{pid: _pid}), do: :ignore
 
   @impl Finitomata
-  def on_transition(:idle, :start!, _, %__MODULE__{pid: pid} = state) do
-    send(pid, :on_start!)
+  def on_transition(:idle, :start, event_payload, %__MODULE__{pid: pid} = state) do
+    send(pid, {:on_start, event_payload})
     {:ok, :started, state}
   end
 
   @impl Finitomata
-  def on_transition(:started, :do!, _, %__MODULE__{pid: pid} = state) do
-    send(pid, :on_do!)
+  def on_transition(:started, :do, _, %__MODULE__{pid: pid} = state) do
+    send(pid, :on_do)
     {:ok, :done, state}
   end
 

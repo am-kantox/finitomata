@@ -208,12 +208,17 @@ defmodule FinitomataTest do
       %Finitomata.Test.Listener{pid: parent}
     )
 
-    assert_receive :on_start!
     assert_receive {:on_transition, ^fsm_name, :idle, %{pid: ^parent}}
-    assert_receive :on_do!
+
+    Finitomata.transition("ListenerFSM", {:start, 42})
+    assert_receive {:on_start, 42}
     assert_receive {:on_transition, ^fsm_name, :started, %{pid: ^parent}}
-    assert_receive :on_end
+
+    Finitomata.transition("ListenerFSM", {:do, nil})
+    assert_receive :on_do
     assert_receive {:on_transition, ^fsm_name, :done, %{pid: ^parent}}
+
+    assert_receive :on_end
     assert_receive {:on_transition, ^fsm_name, :*, %{pid: ^parent}}
   end
 end

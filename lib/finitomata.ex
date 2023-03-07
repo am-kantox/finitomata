@@ -317,6 +317,7 @@ defmodule Finitomata do
 
   The arguments are
 
+  - the id of the FSM (optional)
   - the name of the FSM
   - `{event, event_payload}` tuple; the payload will be passed to the respective
     `on_transition/4` call
