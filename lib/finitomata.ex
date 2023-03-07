@@ -245,6 +245,13 @@ defmodule Finitomata do
             ) :: transition_resolution()
 
   @doc """
+  This callback will be called from the underlying `GenServer.init/1`.
+
+  Unlike other callbacks, this one might raise preventing the whole FSM from start.
+  """
+  @callback on_init(State.payload()) :: {:ok, State.payload()} | :ignore
+
+  @doc """
   This callback will be called if the transition failed to complete to allow
   the consumer to take an action upon failure.
   """
@@ -277,7 +284,12 @@ defmodule Finitomata do
               | {:transition, Transition.event(), State.payload()}
               | {:reschedule, non_neg_integer()}
 
-  @optional_callbacks on_failure: 3, on_enter: 2, on_exit: 2, on_terminate: 1, on_timer: 2
+  @optional_callbacks on_init: 1,
+                      on_failure: 3,
+                      on_enter: 2,
+                      on_exit: 2,
+                      on_terminate: 1,
+                      on_timer: 2
 
   @doc """
   Starts the FSM instance.
@@ -674,18 +686,28 @@ defmodule Finitomata do
       end
 
       def init(%{name: name, payload: payload} = init_arg) do
-        if is_integer(@__config__[:timer]) and @__config__[:timer] > 0,
-          do: Process.send_after(self(), :on_timer, @__config__[:timer])
+        lifecycle = Map.get(init_arg, :lifecycle, :unknown)
+
+        {lifecycle, payload} =
+          case function_exported?(__MODULE__, :on_init, 1) and
+                 apply(__MODULE__, :on_init, [payload]) do
+            false -> {lifecycle, payload}
+            {:ok, payload} -> {:loaded, payload}
+            :ignore -> {lifecycle, payload}
+          end
 
         state = %State{
           name: name,
-          lifecycle: Map.get(init_arg, :lifecycle, :unknown),
+          lifecycle: lifecycle,
           persistency: Map.get(init_arg, :persistency, nil),
           timer: @__config__[:timer],
           payload: payload
         }
 
-        if state.lifecycle == :loaded,
+        if is_integer(@__config__[:timer]) and @__config__[:timer] > 0,
+          do: Process.send_after(self(), :on_timer, @__config__[:timer])
+
+        if lifecycle == :loaded,
           do: {:ok, state},
           else: {:ok, state, {:continue, {:transition, event_payload({:__start__, nil})}}}
       end

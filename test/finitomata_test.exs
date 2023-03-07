@@ -202,7 +202,11 @@ defmodule FinitomataTest do
       parent |> send({:on_transition, id, state, payload}) |> then(fn _ -> :ok end)
     end)
 
-    Finitomata.start_fsm(Finitomata.Test.Listener, "ListenerFSM", %Finitomata.Test.Listener{pid: parent})
+    Finitomata.start_fsm(
+      Finitomata.Test.Listener,
+      "ListenerFSM",
+      %Finitomata.Test.Listener{pid: parent}
+    )
 
     assert_receive :on_start!
     assert_receive {:on_transition, ^fsm_name, :idle, %{pid: ^parent}}

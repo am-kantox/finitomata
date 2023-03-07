@@ -13,6 +13,9 @@ defmodule Finitomata.Test.Listener do
   defstruct pid: nil
 
   @impl Finitomata
+  def on_init(%__MODULE__{pid: _pid}), do: :ignore
+
+  @impl Finitomata
   def on_transition(:idle, :start!, _, %__MODULE__{pid: pid} = state) do
     send(pid, :on_start!)
     {:ok, :started, state}
