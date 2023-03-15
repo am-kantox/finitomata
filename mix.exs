@@ -43,7 +43,7 @@ defmodule Finitomata.MixProject do
       {:boundary, "~> 0.4", runtime: false},
       # dev / test
       # {:mox, "~> 1.0", only: [:dev, :test, :ci]},
-      {:mox, git: "https://github.com/dashbitco/mox", only: [:dev, :test]},
+      {:mox, git: "https://github.com/dashbitco/mox", only: [:dev, :test, :ci]},
       {:stream_data, "~> 0.5", only: [:dev, :test, :ci]},
       {:credo, "~> 1.0", only: [:dev, :ci]},
       {:dialyxir, "~> 1.0", only: [:dev, :ci], runtime: false},
