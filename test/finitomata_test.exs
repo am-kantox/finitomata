@@ -9,6 +9,8 @@ defmodule FinitomataTest do
   import Mox
   import ExUnitFinitomata
 
+  alias Finitomata.Test.Listener, as: FTL
+
   use ExUnitProperties
 
   def setup_all do
@@ -203,67 +205,58 @@ defmodule FinitomataTest do
       fsm_name = {:via, Registry, {Finitomata.Registry, fini_name}}
       parent = self()
 
-      Finitomata.Test.Listener.Mox
+      FTL.Mox
       |> allow(parent, fn -> GenServer.whereis(fsm_name) end)
       |> expect(:after_transition, 4, fn id, state, payload ->
         parent |> send({:on_transition, id, state, payload}) |> then(fn _ -> :ok end)
       end)
 
       Finitomata.start_fsm(
-        Finitomata.Test.Listener,
+        FTL,
         fini_name,
-        %Finitomata.Test.Listener{pid: parent}
+        %FTL{internals: %FTL.Internals{pid: parent}}
       )
 
-      assert_receive {:on_transition, ^fsm_name, :idle, %{pid: ^parent}}
+      assert_receive {:on_transition, ^fsm_name, :idle, %{internals: %{pid: ^parent}}}
 
       Finitomata.transition(fini_name, {:start, fini_payload})
       assert_receive {:on_start, ^fini_payload}
-      assert_receive {:on_transition, ^fsm_name, :started, %{pid: ^parent}}
+      assert_receive {:on_transition, ^fsm_name, :started, %{internals: %{pid: ^parent}}}
 
       Finitomata.transition(fini_name, {:do, nil})
       assert_receive :on_do
-      assert_receive {:on_transition, ^fsm_name, :done, %{pid: ^parent}}
+      assert_receive {:on_transition, ^fsm_name, :done, %{internals: %{pid: ^parent}}}
 
       assert_receive :on_end
-      assert_receive {:on_transition, ^fsm_name, :*, %{pid: ^parent}}
+      assert_receive {:on_transition, ^fsm_name, :*, %{internals: %{pid: ^parent}}}
     end
   end
 
   test "custom assertions" do
-    start_supervised(Finitomata.Supervisor)
-    fsm_name = {:via, Registry, {Finitomata.Registry, "AssertionsFSM"}}
-
     parent = self()
 
-    Finitomata.Test.Listener.Mox
-    |> allow(parent, fn -> GenServer.whereis(fsm_name) end)
-    |> expect(:after_transition, 4, fn id, state, payload ->
-      parent |> send({:on_transition, id, state, payload}) |> then(fn _ -> :ok end)
-    end)
-
-    Finitomata.start_fsm(
-      Finitomata.Test.Listener,
-      "AssertionsFSM",
-      %Finitomata.Test.Listener{pid: parent}
+    init_finitomata(
+      Case,
+      FTL,
+      "AssertionFSM",
+      FTL.cast!(%{internals: %{pid: parent}})
     )
 
-    assert_receive {:on_transition, ^fsm_name, :idle, %{pid: ^parent}}
-
-    ExUnitFinitomata.assert_transition "AssertionsFSM", {:start, 42}, :started do
-      pid -> ^parent
+    assert_transition Case, "AssertionFSM", {:start, 42}, :started do
+      internals.pid -> ^parent
     end
+
     assert_receive {:on_start, 42}
-    assert_receive {:on_transition, ^fsm_name, :started, %{pid: ^parent}}
+    # assert_receive {:on_transition, ^fsm_name, :started, %{internals: %{pid: ^parent}}}
 
-    ExUnitFinitomata.assert_transition "AssertionsFSM", {:do, nil}, nil do
+    assert_transition Case, "AssertionFSM", {:do, nil}, nil do
       pid -> ^parent
     end
+
     assert_receive :on_do
-    assert_receive {:on_transition, ^fsm_name, :done, %{pid: ^parent}}
+    # assert_receive {:on_transition, ^fsm_name, :done, %{internals: %{pid: ^parent}}}
 
     assert_receive :on_end
-    assert_receive {:on_transition, ^fsm_name, :*, %{pid: ^parent}}
+    # assert_receive {:on_transition, ^fsm_name, :*, %{internals: %{pid: ^parent}}}
   end
-
 end

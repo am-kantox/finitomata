@@ -117,11 +117,6 @@ defmodule Finitomata do
 
   require Logger
 
-  use Boundary,
-    top_level?: true,
-    deps: [],
-    exports: [Hook, Mix.Events, State, Supervisor, Transition]
-
   alias Finitomata.Transition
 
   @typedoc """
@@ -363,9 +358,11 @@ defmodule Finitomata do
     fqn
     |> GenServer.whereis()
     |> case do
-      nil -> nil
+      nil ->
+        nil
+
       pid when is_pid(pid) ->
-        {:ok, state} = :gen.call(pid, :"$gen_call", :state, 100)
+        {:ok, state} = :gen.call(pid, :"$gen_call", :state, 1_000)
         :persistent_term.put({Finitomata, fqn}, state.payload)
         state
     end
@@ -452,6 +449,7 @@ defmodule Finitomata do
       require Logger
 
       alias Finitomata.Transition, as: Transition
+      import Finitomata.Defstate, only: [defstate: 1]
 
       @on_definition Finitomata.Hook
       @before_compile Finitomata.Hook
@@ -613,6 +611,9 @@ defmodule Finitomata do
       def fsm, do: Map.get(@__config__, :fsm)
 
       @doc false
+      def entry, do: Transition.entry(fsm())
+
+      @doc false
       def states, do: Map.get(@__config__, :states)
 
       @doc false
@@ -712,6 +713,7 @@ defmodule Finitomata do
           timer: @__config__[:timer],
           payload: payload
         }
+
         :persistent_term.put({Finitomata, state.name}, state.payload)
 
         if is_integer(@__config__[:timer]) and @__config__[:timer] > 0,
