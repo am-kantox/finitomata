@@ -2,8 +2,6 @@ defmodule Mix.Tasks.Compile.Finitomata do
   # credo:disable-for-this-file Credo.Check.Readability.Specs
   @moduledoc false
 
-  use Boundary, deps: [Finitomata]
-
   use Mix.Task.Compiler
 
   alias Mix.Task.Compiler
