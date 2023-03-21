@@ -608,6 +608,12 @@ defmodule Finitomata do
       @__config_hard_states__ Keyword.keys(hard)
 
       @doc false
+      defmacro config(:states) do
+        states = Map.get(@__config__, :states)
+        quote do: unquote(states)
+      end
+
+      @doc false
       def fsm, do: Map.get(@__config__, :fsm)
 
       @doc false

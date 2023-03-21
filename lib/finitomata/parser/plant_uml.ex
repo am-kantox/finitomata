@@ -4,8 +4,6 @@ defmodule Finitomata.PlantUML do
   import NimbleParsec
   alias Finitomata.Parser
 
-  use Boundary, deps: [Finitomata], exports: []
-
   @behaviour Parser
 
   @alphanumeric [?a..?z, ?A..?Z, ?0..?9, ?_]
@@ -51,14 +49,14 @@ defmodule Finitomata.PlantUML do
       iex> String.slice(message, 0..14)
       "expected string"
   """
-  defparsec :transition, plant_line
+  defparsec(:transition, plant_line)
 
   @doc ~S"""
       iex> {:ok, result, _, _, _, _} = Finitomata.PlantUML.fsm("s1 --> s2 : ok\ns2 --> [*] : ko")
       iex> result
       [transition: ["s1", "s2", "ok"], transition: ["s2", "[*]", "ko"]]
   """
-  defparsec :fsm, times(choice([plant_line, malformed]), min: 1)
+  defparsec(:fsm, times(choice([plant_line, malformed]), min: 1))
 
   @doc ~S"""
       iex> {:ok, result, _, _, _, _} = Finitomata.PlantUML.fsm("s1 --> s2 : ok\ns2 --> [*] : ko")
