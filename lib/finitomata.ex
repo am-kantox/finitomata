@@ -249,7 +249,7 @@ defmodule Finitomata do
 
   Unlike other callbacks, this one might raise preventing the whole FSM from start.
   """
-  @callback on_init(State.payload()) :: {:ok, State.payload()} | :ignore
+  @callback on_start(State.payload()) :: {:ok, State.payload()} | :ignore
 
   @doc """
   This callback will be called if the transition failed to complete to allow
@@ -284,7 +284,7 @@ defmodule Finitomata do
               | {:transition, Transition.event(), State.payload()}
               | {:reschedule, non_neg_integer()}
 
-  @optional_callbacks on_init: 1,
+  @optional_callbacks on_start: 1,
                       on_failure: 3,
                       on_enter: 2,
                       on_exit: 2,
@@ -690,8 +690,8 @@ defmodule Finitomata do
         lifecycle = Map.get(init_arg, :lifecycle, :unknown)
 
         {lifecycle, payload} =
-          case function_exported?(__MODULE__, :on_init, 1) and
-                 apply(__MODULE__, :on_init, [payload]) do
+          case function_exported?(__MODULE__, :on_start, 1) and
+                 apply(__MODULE__, :on_start, [payload]) do
             false -> {lifecycle, payload}
             {:ok, payload} -> {:loaded, payload}
             :ignore -> {lifecycle, payload}

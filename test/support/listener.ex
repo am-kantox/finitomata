@@ -13,7 +13,7 @@ defmodule Finitomata.Test.Listener do
   defstruct pid: nil
 
   @impl Finitomata
-  def on_init(%__MODULE__{pid: _pid}), do: :ignore
+  def on_start(%__MODULE__{pid: _pid}), do: :ignore
 
   @impl Finitomata
   def on_transition(:idle, :start, event_payload, %__MODULE__{pid: pid} = state) do
