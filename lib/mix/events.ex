@@ -1,8 +1,6 @@
 defmodule Finitomata.Mix.Events do
   @moduledoc false
 
-  use Boundary, deps: [], exports: []
-
   use Agent
 
   @type diagnostics :: MapSet.t(Mix.Task.Compiler.Diagnostic.t())
