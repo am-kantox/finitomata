@@ -361,8 +361,16 @@ defmodule Finitomata do
 
   defp do_state(fqn, :full) do
     fqn
-    |> GenServer.call(:state)
-    |> tap(&:persistent_term.put({Finitomata, fqn}, &1.payload))
+    |> GenServer.whereis()
+    |> case do
+      nil -> nil
+      pid when is_pid(pid) ->
+        {:ok, state} = :gen.call(pid, :"$gen_call", :state, 100)
+        :persistent_term.put({Finitomata, fqn}, state.payload)
+        state
+    end
+  catch
+    :exit, :normal -> nil
   end
 
   @doc """
@@ -704,6 +712,7 @@ defmodule Finitomata do
           timer: @__config__[:timer],
           payload: payload
         }
+        :persistent_term.put({Finitomata, state.name}, state.payload)
 
         if is_integer(@__config__[:timer]) and @__config__[:timer] > 0,
           do: Process.send_after(self(), :on_timer, @__config__[:timer])

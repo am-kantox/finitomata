@@ -1,4 +1,7 @@
-locals_without_parens = []
+locals_without_parens = [
+  assert_transition: 5,
+  assert_transition: 6
+]
 
 [
   import_deps: [:stream_data, :nimble_parsec],
