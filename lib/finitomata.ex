@@ -153,7 +153,7 @@ defmodule Finitomata do
     @type t :: %{
             __struct__: State,
             name: Finitomata.fsm_name(),
-            lyfecycle: :loaded | :created | :unknown,
+            lifecycle: :loaded | :created | :unknown,
             persistency: nil | module(),
             listener: nil | module(),
             current: Transition.state(),
