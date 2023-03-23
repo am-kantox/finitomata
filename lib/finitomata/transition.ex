@@ -170,9 +170,37 @@ defmodule Finitomata.Transition do
       [%Finitomata.Transition.Path{from: :s1, to: :s1, path: [ok: :s2, ok: :s1]},
        %Finitomata.Transition.Path{from: :s2, to: :s2, path: [ok: :s1, ok: :s2]}]
   """
-  @spec loops([t()]) :: [Path.t()]
-  def loops(transitions) do
-    []
+  @spec loops(:states | :transitions, [t()]) :: [Path.t()]
+  def loops(states \\ :states, transitions)
+
+  def loops(:transitions, transitions) do
+    transitions
+    |> states(true)
+    |> Enum.flat_map(&do_loop(&1, transitions, [], []))
+  end
+
+  def loops(:states, transitions) do
+    :transitions
+    |> loops(transitions)
+    |> Enum.map(fn [%Transition{from: from} | _] = transitions ->
+      transitions
+      |> Enum.reduce(%Path{from: from, to: from, path: []}, fn %Transition{to: to, event: event},
+                                                               %Path{} = path ->
+        %Path{path | path: [{event, to} | path.path]}
+      end)
+      |> then(&%Path{&1 | path: Enum.reverse(&1.path)})
+    end)
+  end
+
+  defp do_loop(state, _transitions, [%Transition{from: state} | _] = path, paths) do
+    [path | paths]
+  end
+
+  defp do_loop(state, transitions, path, paths) do
+    transitions
+    |> Enum.reject(&(&1 in path))
+    |> Enum.filter(&match?(%Transition{from: ^state, to: to} when to != :*, &1))
+    |> Enum.flat_map(&do_loop(&1.to, transitions, path ++ [&1], paths))
   end
 
   @doc ~S"""

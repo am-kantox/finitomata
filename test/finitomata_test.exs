@@ -1,9 +1,9 @@
-defmodule FinitomataTest do
+defmodule Finitomata.Test do
   use ExUnit.Case
+
   doctest Finitomata
   doctest Finitomata.PlantUML
   doctest Finitomata.Mermaid
-  doctest Finitomata.Transition
 
   import ExUnit.CaptureLog
   import Mox
@@ -12,9 +12,6 @@ defmodule FinitomataTest do
   alias Finitomata.Test.Listener, as: FTL
 
   use ExUnitProperties
-
-  def setup_all do
-  end
 
   alias Finitomata.Test.{Auto, Callback, EnsureEntry, ErrorAttach, Log, Soft, Timer}
 
