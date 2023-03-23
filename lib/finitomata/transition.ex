@@ -11,6 +11,8 @@ defmodule Finitomata.Transition do
   @type state :: atom()
   @typedoc "The event in FSM"
   @type event :: atom()
+  @typedoc "The kind of event"
+  @type event_kind :: :soft | :hard | :normal
 
   @typedoc """
   The transition is represented by `from` and `to` states _and_ the `event`.
@@ -21,7 +23,24 @@ defmodule Finitomata.Transition do
           to: state() | [state()],
           event: event()
         }
+  @enforce_keys [:from, :to, :event]
   defstruct [:from, :to, :event]
+
+  defmodule Path do
+    @moduledoc "The path from one state to another one"
+
+    alias Finitomata.Transition
+
+    @type t :: %{
+            __struct__: Path,
+            from: Transition.state(),
+            to: Transition.state(),
+            path: [{Transition.event(), Transition.state()}]
+          }
+
+    @enforce_keys [:from, :to, :path]
+    defstruct [:from, :to, :path]
+  end
 
   @doc false
   @spec from_parsed([binary()]) :: t()
@@ -37,6 +56,36 @@ defmodule Finitomata.Transition do
   end
 
   @doc ~S"""
+  Returns the kind of event.
+
+  If event ends up with an exclamation sign, it’s `:hard`, meaning the respective
+    transition would be initiated automatically when the `from` state of such a transition
+    is reached.
+
+  If event ends up with a question mark, it’s `:soft`, meaning no error would have
+    been reported in a case transition fails.
+
+  Otherwise the event is `:normal`.
+
+      iex> {:ok, [_, hard, _]} =
+      ...>   Finitomata.PlantUML.parse("[*] --> entry : foo\nentry --> exit : go!\nexit --> [*] : terminate")
+      ...> Finitomata.Transition.event_kind(hard)
+      :hard
+  """
+  @spec event_kind(event() | t()) :: event_kind()
+  def event_kind(%Transition{event: event}), do: event_kind(event)
+
+  def event_kind(event) do
+    event = to_string(event)
+
+    cond do
+      String.ends_with?(event, "!") -> :hard
+      String.ends_with?(event, "?") -> :soft
+      true -> :normal
+    end
+  end
+
+  @doc ~S"""
   Returns the state _after_ starting one, so-called `entry` state.
 
       iex> {:ok, transitions} =
@@ -44,10 +93,13 @@ defmodule Finitomata.Transition do
       ...> Finitomata.Transition.entry(transitions)
       :entry
   """
-  @spec entry([t()]) :: state()
-  def entry(transitions) do
-    Enum.find(transitions, &match?(%Transition{from: :*}, &1)).to
-  end
+  @spec entry(:state | :transition, [t()]) :: state()
+  def entry(what \\ :state, transitions)
+
+  def entry(:transition, transitions),
+    do: Enum.find(transitions, &match?(%Transition{from: :*}, &1))
+
+  def entry(:state, transitions), do: entry(:transition, transitions).to
 
   @doc ~S"""
   Returns the states _before_ ending one, so-called `exit` states.
@@ -59,11 +111,115 @@ defmodule Finitomata.Transition do
       ...> Finitomata.Transition.exit(transitions)
       [:error, :success]
   """
-  @spec exit([t()]) :: [state()]
-  def exit(transitions) do
+  @spec exit(:states | :transitions, [t()]) :: [state()]
+  def exit(what \\ :states, transitions)
+
+  def exit(:transitions, transitions) do
     Enum.reduce(transitions, [], fn
-      %Transition{from: exit, to: :*}, acc -> [exit | acc]
+      %Transition{to: :*} = t, acc -> [t | acc]
       _, acc -> acc
+    end)
+  end
+
+  def exit(:states, transitions),
+    do: :transitions |> Transition.exit(transitions) |> Enum.map(& &1.from)
+
+  @doc ~S"""
+  Returns all the states which inevitably lead to the ending one.
+
+  All the transitions from these states to the ending one are hard (ending with `!`,)
+    which makes the _FSM_ to go through all these states in `:continue` callbacks.
+
+      iex> {:ok, transitions} =
+      ...>   Finitomata.PlantUML.parse("[*] --> entry : start\nentry --> exit : go!\nexit --> [*] : terminate")
+      ...> Finitomata.Transition.exiting(transitions)
+      [entry: [:go!], terminate: []]
+  """
+  @spec exiting([t()]) :: [state()]
+  def exiting(transitions) do
+    exits = Transition.exit(:transitions, transitions)
+
+    collect_exiting(transitions, Enum.map(exits, & &1.from), exits)
+  end
+
+  defp collect_exiting(transitions, states, collected) do
+    states
+    |> Enum.reduce([], fn state, acc ->
+      transitions
+      |> Enum.filter(fn
+        %Transition{to: ^state, event: event} -> event_kind(event) == :hard
+        _ -> false
+      end)
+      |> case do
+        [%Transition{} = t] -> [t | acc]
+        _ -> acc
+      end
+    end)
+    |> case do
+      [] -> collected
+      more -> collect_exiting(transitions, Enum.map(more, & &1.from), more ++ collected)
+    end
+  end
+
+  @doc ~S"""
+  Returns all the loops aka internal paths where starting and ending states are the same one.
+
+      iex> {:ok, transitions} =
+      ...>   Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> s1 : ok\ns2 --> [*] : ko")
+      ...> Finitomata.Transition.loops(transitions)
+      [%Finitomata.Transition.Path{from: :s1, to: :s1, path: [ok: :s2, ok: :s1]},
+       %Finitomata.Transition.Path{from: :s2, to: :s2, path: [ok: :s1, ok: :s2]}]
+  """
+  @spec loops([t()]) :: [Path.t()]
+  def loops(transitions) do
+    []
+  end
+
+  @doc ~S"""
+  Returns all the paths from starting to ending state.
+
+      iex> {:ok, transitions} =
+      ...>   Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns1 --> s3 : ok\ns2 --> [*] : ko\ns3 --> [*] : ko")
+      ...> Finitomata.Transition.paths(transitions)
+      [%Finitomata.Transition.Path{from: :*, to: :*, path: [foo: :s1, ok: :s2, ko: :*]},
+       %Finitomata.Transition.Path{from: :*, to: :*, path: [foo: :s1, ok: :s3, ko: :*]}]
+  """
+  @spec paths([t()], state(), state()) :: [Path.t()]
+  def paths(transitions, from \\ :*, to \\ :*)
+
+  def paths(transitions, :*, to) do
+    entry = entry(:transition, transitions)
+
+    transitions
+    |> do_step(entry.to, to, [[entry]])
+    |> Enum.map(&Enum.reverse/1)
+  end
+
+  def paths(transitions, from, to) do
+    transitions
+    |> do_step(from, to, [])
+    |> Enum.map(&Enum.reverse/1)
+  end
+
+  defp do_step(_transitions, from_to, from_to, paths), do: paths
+
+  defp do_step(transitions, from, to, paths) do
+    IO.inspect({from, to}, label: "1")
+
+    transitions
+    # |> Enum.filter(&(&1 in List.flatten(paths)))
+    |> Enum.filter(&match?(%Transition{from: ^from}, &1))
+    |> IO.inspect(label: "2")
+    |> Enum.reject(&(to != :* and match?(%Transition{to: :*}, &1)))
+    |> IO.inspect(label: "3")
+    |> Enum.flat_map(fn %Transition{} = transition ->
+      paths = Enum.map(paths, &[transition | &1]) |> IO.inspect(label: "4")
+
+      IO.inspect({transition.to, to, paths}, label: "★★★")
+
+      transitions
+      |> do_step(transition.to, to, paths)
+      |> IO.inspect(label: "5")
     end)
   end
 
