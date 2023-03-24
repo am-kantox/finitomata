@@ -153,6 +153,7 @@ end
 
 ## Changelog
 
+- `0.13.0` — compile-time helpers for _FSM_, `Finitomata.ExUnit`
 - `0.12.1` — `c:Finitomata.on_start/1` callback
 - `0.11.3` — [FIX] better error message for options (credits @ray-sh)
 - `0.11.2` — [DEBT] exported `Finitomata.fqn/2`

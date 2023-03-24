@@ -600,10 +600,13 @@ defmodule Finitomata do
         ensure_entry: ensure_entry,
         states: Transition.states(fsm),
         events: Transition.events(fsm),
+        paths: Transition.paths(fsm),
+        loops: Transition.loops(fsm),
         hard: hard,
         soft: soft,
         timer: timer
       }
+      @__config_keys__ Map.keys(@__config__)
       @__config_soft_events__ Enum.map(soft, & &1.event)
       @__config_hard_states__ Keyword.keys(hard)
 
@@ -611,21 +614,32 @@ defmodule Finitomata do
       The convenient macro to allow using states in guards, returns a compile-time
         list of states for `#{inspect(__MODULE__)}`.
       """
-      defmacro config(:states) do
-        states = Map.get(@__config__, :states)
+      defmacro config(key) when key in @__config_keys__ do
+        states = Map.get(@__config__, key)
         quote do: unquote(states)
       end
 
+      @doc """
+      Getter for the internal compiled in _FSM_ information.
+      """
+      @spec __config__(atom()) :: any()
+      def __config__(key) when key in @__config_keys__,
+        do: Map.get(@__config__, key)
+
       @doc false
+      @doc deprecated: "Use `__config__(:fsm)` instead"
       def fsm, do: Map.get(@__config__, :fsm)
 
       @doc false
+      @doc deprecated: "Use `__config__(:entry)` instead"
       def entry, do: Transition.entry(fsm())
 
       @doc false
+      @doc deprecated: "Use `__config__(:states)` instead"
       def states, do: Map.get(@__config__, :states)
 
       @doc false
+      @doc deprecated: "Use `__config__(:events)` instead"
       def events, do: Map.get(@__config__, :events)
 
       @doc false
