@@ -64,6 +64,7 @@ defmodule Finitomata.Transition.Test do
                  restart: :started,
                  reject: :rejected,
                  end: :done,
+                 end!: :ended,
                  __end__: :*
                ]
              },
@@ -77,6 +78,7 @@ defmodule Finitomata.Transition.Test do
                  accept: :accepted,
                  reject: :rejected,
                  end: :done,
+                 end!: :ended,
                  __end__: :*
                ]
              },
@@ -89,6 +91,7 @@ defmodule Finitomata.Transition.Test do
                  accept: :accepted,
                  accept: :accepted,
                  end: :done,
+                 end!: :ended,
                  __end__: :*
                ]
              },
@@ -103,6 +106,7 @@ defmodule Finitomata.Transition.Test do
                  restart: :started,
                  reject: :rejected,
                  end: :done,
+                 end!: :ended,
                  __end__: :*
                ]
              },
@@ -115,6 +119,7 @@ defmodule Finitomata.Transition.Test do
                  accept: :accepted,
                  reject: :rejected,
                  end: :done,
+                 end!: :ended,
                  __end__: :*
                ]
              },
@@ -126,21 +131,7 @@ defmodule Finitomata.Transition.Test do
                  start: :started,
                  accept: :accepted,
                  end: :done,
-                 __end__: :*
-               ]
-             },
-             %Finitomata.Transition.Path{
-               from: :*,
-               to: :*,
-               path: [
-                 __start__: :idle,
-                 start: :started,
-                 reject: :rejected,
-                 restart: :started,
-                 accept: :accepted,
-                 accept: :accepted,
-                 reject: :rejected,
-                 end: :done,
+                 end!: :ended,
                  __end__: :*
                ]
              },
@@ -154,7 +145,24 @@ defmodule Finitomata.Transition.Test do
                  restart: :started,
                  accept: :accepted,
                  accept: :accepted,
+                 reject: :rejected,
                  end: :done,
+                 end!: :ended,
+                 __end__: :*
+               ]
+             },
+             %Finitomata.Transition.Path{
+               from: :*,
+               to: :*,
+               path: [
+                 __start__: :idle,
+                 start: :started,
+                 reject: :rejected,
+                 restart: :started,
+                 accept: :accepted,
+                 accept: :accepted,
+                 end: :done,
+                 end!: :ended,
                  __end__: :*
                ]
              },
@@ -169,6 +177,7 @@ defmodule Finitomata.Transition.Test do
                  accept: :accepted,
                  reject: :rejected,
                  end: :done,
+                 end!: :ended,
                  __end__: :*
                ]
              },
@@ -182,6 +191,7 @@ defmodule Finitomata.Transition.Test do
                  restart: :started,
                  accept: :accepted,
                  end: :done,
+                 end!: :ended,
                  __end__: :*
                ]
              },
@@ -193,6 +203,7 @@ defmodule Finitomata.Transition.Test do
                  start: :started,
                  reject: :rejected,
                  end: :done,
+                 end!: :ended,
                  __end__: :*
                ]
              }
@@ -200,7 +211,7 @@ defmodule Finitomata.Transition.Test do
   end
 
   test "exiting" do
-    assert [%Finitomata.Transition.Path{from: :done, to: :*, path: [__end__: :*]}] =
+    assert [%Finitomata.Transition.Path{from: :done, to: :*, path: [end!: :ended, __end__: :*]}] =
              Finitomata.Transition.exiting(Transition.fsm())
   end
 end
