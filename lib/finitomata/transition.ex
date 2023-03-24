@@ -40,6 +40,47 @@ defmodule Finitomata.Transition do
 
     @enforce_keys [:from, :to, :path]
     defstruct [:from, :to, :path]
+
+    defimpl Inspect do
+      @moduledoc false
+
+      import Inspect.Algebra
+
+      def inspect(%Finitomata.Transition.Path{from: from, to: to, path: path}, opts) do
+        fancy =
+          case Keyword.get(opts.custom_options, :fancy, true) do
+            false -> false
+            {from, to} -> %{from: from, to: to}
+            %{} = map -> Map.merge(%{from: " ⇥ ", to: " ↦ "}, map)
+            _ -> %{from: " ⇥ ", to: " ↦ "}
+          end
+
+        fancy_path =
+          if is_map(fancy) do
+            path
+            |> Enum.reduce([], fn {event, to}, acc ->
+              [to_doc(to, opts), fancy.to, to_doc(event, opts), fancy.from | acc]
+            end)
+            |> Enum.reverse()
+          end
+
+        case {from == to and from != :*, is_map(fancy)} do
+          {true, false} ->
+            inner = [around: from, path: path]
+            concat(["#Finitomata.Loop<", to_doc(inner, opts), ">"])
+
+          {false, false} ->
+            inner = [from: from, to: to, path: path]
+            concat(["#Finitomata.Path<", to_doc(inner, opts), ">"])
+
+          {true, _} ->
+            concat(["↺‹", to_doc(from, opts) | fancy_path] ++ ["›"])
+
+          {false, _} ->
+            concat(["↝‹", to_doc(from, opts) | fancy_path] ++ ["›"])
+        end
+      end
+    end
   end
 
   @doc false
@@ -133,32 +174,31 @@ defmodule Finitomata.Transition do
       iex> {:ok, transitions} =
       ...>   Finitomata.PlantUML.parse("[*] --> entry : start\nentry --> exit : go!\nexit --> [*] : terminate")
       ...> Finitomata.Transition.exiting(transitions)
-      [entry: [:go!], terminate: []]
+      [%Finitomata.Transition.Path{from: :entry, to: :*, path: [go!: :exit, terminate: :*]}]
   """
-  @spec exiting([t()]) :: [state()]
-  def exiting(transitions) do
-    exits = Transition.exit(:transitions, transitions)
+  @spec exiting(:states | :transitions, [t()]) :: [state()]
+  def exiting(what \\ :states, transitions)
 
-    collect_exiting(transitions, Enum.map(exits, & &1.from), exits)
+  def exiting(:states, transitions) do
+    :transitions
+    |> exiting(transitions)
+    |> to_path()
   end
 
-  defp collect_exiting(transitions, states, collected) do
-    states
-    |> Enum.reduce([], fn state, acc ->
-      transitions
-      |> Enum.filter(fn
-        %Transition{to: ^state, event: event} -> event_kind(event) == :hard
-        _ -> false
-      end)
-      |> case do
-        [%Transition{} = t] -> [t | acc]
-        _ -> acc
-      end
+  def exiting(:transitions, transitions) do
+    :transitions
+    |> paths(transitions)
+    |> Enum.filter(fn path ->
+      path
+      |> Enum.reverse()
+      |> then(&match?([%Transition{to: :*} | _], &1))
     end)
-    |> case do
-      [] -> collected
-      more -> collect_exiting(transitions, Enum.map(more, & &1.from), more ++ collected)
-    end
+    |> Enum.map(fn path ->
+      [last | rest] = Enum.reverse(path)
+      rest = Enum.take_while(rest, &(event_kind(&1) == :hard))
+      Enum.reverse([last | rest])
+    end)
+    |> Enum.uniq()
   end
 
   @doc ~S"""
@@ -171,7 +211,7 @@ defmodule Finitomata.Transition do
        %Finitomata.Transition.Path{from: :s2, to: :s2, path: [ok: :s1, ok: :s2]}]
   """
   @spec loops(:states | :transitions, [t()]) :: [Path.t()]
-  def loops(states \\ :states, transitions)
+  def loops(what \\ :states, transitions)
 
   def loops(:transitions, transitions) do
     transitions
@@ -182,14 +222,7 @@ defmodule Finitomata.Transition do
   def loops(:states, transitions) do
     :transitions
     |> loops(transitions)
-    |> Enum.map(fn [%Transition{from: from} | _] = transitions ->
-      transitions
-      |> Enum.reduce(%Path{from: from, to: from, path: []}, fn %Transition{to: to, event: event},
-                                                               %Path{} = path ->
-        %Path{path | path: [{event, to} | path.path]}
-      end)
-      |> then(&%Path{&1 | path: Enum.reverse(&1.path)})
-    end)
+    |> to_path()
   end
 
   defp do_loop(state, _transitions, [%Transition{from: state} | _] = path, paths) do
@@ -212,43 +245,33 @@ defmodule Finitomata.Transition do
       [%Finitomata.Transition.Path{from: :*, to: :*, path: [foo: :s1, ok: :s2, ko: :*]},
        %Finitomata.Transition.Path{from: :*, to: :*, path: [foo: :s1, ok: :s3, ko: :*]}]
   """
-  @spec paths([t()], state(), state()) :: [Path.t()]
-  def paths(transitions, from \\ :*, to \\ :*)
+  @spec paths(:states | :transitions, [t()], state(), state()) :: [Path.t()]
+  def paths(what \\ :states, transitions, from \\ :*, to \\ :*)
 
-  def paths(transitions, :*, to) do
+  def paths(:states, transitions, from, to) do
+    :transitions
+    |> paths(transitions, from, to)
+    |> to_path()
+  end
+
+  def paths(:transitions, transitions, :*, to) do
     entry = entry(:transition, transitions)
-
-    transitions
-    |> do_step(entry.to, to, [[entry]])
-    |> Enum.map(&Enum.reverse/1)
+    do_path(entry.to, to, transitions, [entry], [])
   end
 
-  def paths(transitions, from, to) do
-    transitions
-    |> do_step(from, to, [])
-    |> Enum.map(&Enum.reverse/1)
+  def paths(:transitions, transitions, from, to) do
+    do_path(from, to, transitions, [], [])
   end
 
-  defp do_step(_transitions, from_to, from_to, paths), do: paths
+  defp do_path(to, to, _transitions, [_ | _] = path, paths), do: [Enum.reverse(path) | paths]
+  defp do_path(to, to, _transitions, [], paths), do: paths
+  defp do_path(:*, _, _transitions, _, paths), do: paths
 
-  defp do_step(transitions, from, to, paths) do
-    IO.inspect({from, to}, label: "1")
-
+  defp do_path(from, to, transitions, path, paths) do
     transitions
-    # |> Enum.filter(&(&1 in List.flatten(paths)))
+    |> Enum.reject(&(&1 in path))
     |> Enum.filter(&match?(%Transition{from: ^from}, &1))
-    |> IO.inspect(label: "2")
-    |> Enum.reject(&(to != :* and match?(%Transition{to: :*}, &1)))
-    |> IO.inspect(label: "3")
-    |> Enum.flat_map(fn %Transition{} = transition ->
-      paths = Enum.map(paths, &[transition | &1]) |> IO.inspect(label: "4")
-
-      IO.inspect({transition.to, to, paths}, label: "★★★")
-
-      transitions
-      |> do_step(transition.to, to, paths)
-      |> IO.inspect(label: "5")
-    end)
+    |> Enum.flat_map(&do_path(&1.to, to, transitions, [&1 | path], paths))
   end
 
   @doc ~S"""
@@ -523,20 +546,25 @@ defmodule Finitomata.Transition do
   def events(transitions, true),
     do: transitions |> events(false) |> Enum.reject(&(&1 in ~w|__start__ __end__|a))
 
+  defp to_path(transitions) do
+    Enum.map(transitions, fn [%Transition{from: from} | _] = transitions ->
+      transitions
+      |> Enum.reduce([], fn
+        %Transition{event: event, to: to}, [] ->
+          [{event, to}]
+
+        %Transition{event: event, to: to, from: from}, [{_, from} | _] = acc ->
+          [{event, to} | acc]
+      end)
+      |> then(fn [{_, to} | _] = path -> %Path{from: from, to: to, path: Enum.reverse(path)} end)
+    end)
+  end
+
   defimpl Inspect do
     @moduledoc false
 
     import Inspect.Algebra
 
-    @spec inspect(Finitomata.Transition.t(), Inspect.Opts.t()) ::
-            :doc_line
-            | :doc_nil
-            | binary
-            | {:doc_collapse, pos_integer}
-            | {:doc_force, any}
-            | {:doc_break | :doc_color | :doc_cons | :doc_fits | :doc_group | :doc_string, any,
-               any}
-            | {:doc_nest, any, :cursor | :reset | non_neg_integer, :always | :break}
     def inspect(%Finitomata.Transition{from: from, to: to, event: event}, opts) do
       case Keyword.get(opts.custom_options, :fancy, true) do
         false ->
@@ -546,11 +574,11 @@ defmodule Finitomata.Transition do
         _ ->
           # ‹#{from} -- <#{event}> --> #{inspect(tos)}›
           concat([
-            "⥯‹",
+            "↹‹",
             to_doc(from, opts),
-            " ⥓ ",
+            " ⇥ ",
             to_doc(event, opts),
-            " ⥛ ",
+            " ↦ ",
             to_doc(to, opts),
             "›"
           ])

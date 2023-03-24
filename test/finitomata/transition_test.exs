@@ -49,4 +49,158 @@ defmodule Finitomata.Transition.Test do
              }
            ] = Finitomata.Transition.loops(Transition.fsm())
   end
+
+  test "paths" do
+    assert [
+             %Finitomata.Transition.Path{
+               from: :*,
+               to: :*,
+               path: [
+                 __start__: :idle,
+                 start: :started,
+                 accept: :accepted,
+                 accept: :accepted,
+                 reject: :rejected,
+                 restart: :started,
+                 reject: :rejected,
+                 end: :done,
+                 __end__: :*
+               ]
+             },
+             %Finitomata.Transition.Path{
+               from: :*,
+               to: :*,
+               path: [
+                 __start__: :idle,
+                 start: :started,
+                 accept: :accepted,
+                 accept: :accepted,
+                 reject: :rejected,
+                 end: :done,
+                 __end__: :*
+               ]
+             },
+             %Finitomata.Transition.Path{
+               from: :*,
+               to: :*,
+               path: [
+                 __start__: :idle,
+                 start: :started,
+                 accept: :accepted,
+                 accept: :accepted,
+                 end: :done,
+                 __end__: :*
+               ]
+             },
+             %Finitomata.Transition.Path{
+               from: :*,
+               to: :*,
+               path: [
+                 __start__: :idle,
+                 start: :started,
+                 accept: :accepted,
+                 reject: :rejected,
+                 restart: :started,
+                 reject: :rejected,
+                 end: :done,
+                 __end__: :*
+               ]
+             },
+             %Finitomata.Transition.Path{
+               from: :*,
+               to: :*,
+               path: [
+                 __start__: :idle,
+                 start: :started,
+                 accept: :accepted,
+                 reject: :rejected,
+                 end: :done,
+                 __end__: :*
+               ]
+             },
+             %Finitomata.Transition.Path{
+               from: :*,
+               to: :*,
+               path: [
+                 __start__: :idle,
+                 start: :started,
+                 accept: :accepted,
+                 end: :done,
+                 __end__: :*
+               ]
+             },
+             %Finitomata.Transition.Path{
+               from: :*,
+               to: :*,
+               path: [
+                 __start__: :idle,
+                 start: :started,
+                 reject: :rejected,
+                 restart: :started,
+                 accept: :accepted,
+                 accept: :accepted,
+                 reject: :rejected,
+                 end: :done,
+                 __end__: :*
+               ]
+             },
+             %Finitomata.Transition.Path{
+               from: :*,
+               to: :*,
+               path: [
+                 __start__: :idle,
+                 start: :started,
+                 reject: :rejected,
+                 restart: :started,
+                 accept: :accepted,
+                 accept: :accepted,
+                 end: :done,
+                 __end__: :*
+               ]
+             },
+             %Finitomata.Transition.Path{
+               from: :*,
+               to: :*,
+               path: [
+                 __start__: :idle,
+                 start: :started,
+                 reject: :rejected,
+                 restart: :started,
+                 accept: :accepted,
+                 reject: :rejected,
+                 end: :done,
+                 __end__: :*
+               ]
+             },
+             %Finitomata.Transition.Path{
+               from: :*,
+               to: :*,
+               path: [
+                 __start__: :idle,
+                 start: :started,
+                 reject: :rejected,
+                 restart: :started,
+                 accept: :accepted,
+                 end: :done,
+                 __end__: :*
+               ]
+             },
+             %Finitomata.Transition.Path{
+               from: :*,
+               to: :*,
+               path: [
+                 __start__: :idle,
+                 start: :started,
+                 reject: :rejected,
+                 end: :done,
+                 __end__: :*
+               ]
+             }
+           ] = Finitomata.Transition.paths(Transition.fsm())
+  end
+
+  test "exiting" do
+    assert [%Finitomata.Transition.Path{from: :done, to: :*, path: [__end__: :*]}] =
+             Finitomata.Transition.exiting(Transition.fsm())
+  end
 end
