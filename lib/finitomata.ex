@@ -117,11 +117,6 @@ defmodule Finitomata do
 
   require Logger
 
-  use Boundary,
-    top_level?: true,
-    deps: [],
-    exports: [Hook, Mix.Events, State, Supervisor, Transition]
-
   alias Finitomata.Transition
 
   @typedoc """
@@ -158,7 +153,7 @@ defmodule Finitomata do
     @type t :: %{
             __struct__: State,
             name: Finitomata.fsm_name(),
-            lyfecycle: :loaded | :created | :unknown,
+            lifecycle: :loaded | :created | :unknown,
             persistency: nil | module(),
             listener: nil | module(),
             current: Transition.state(),
@@ -361,8 +356,18 @@ defmodule Finitomata do
 
   defp do_state(fqn, :full) do
     fqn
-    |> GenServer.call(:state)
-    |> tap(&:persistent_term.put({Finitomata, fqn}, &1.payload))
+    |> GenServer.whereis()
+    |> case do
+      nil ->
+        nil
+
+      pid when is_pid(pid) ->
+        {:ok, state} = :gen.call(pid, :"$gen_call", :state, 1_000)
+        :persistent_term.put({Finitomata, fqn}, state.payload)
+        state
+    end
+  catch
+    :exit, :normal -> nil
   end
 
   @doc """
@@ -444,6 +449,7 @@ defmodule Finitomata do
       require Logger
 
       alias Finitomata.Transition, as: Transition
+      import Finitomata.Defstate, only: [defstate: 1]
 
       @on_definition Finitomata.Hook
       @before_compile Finitomata.Hook
@@ -602,7 +608,16 @@ defmodule Finitomata do
       @__config_hard_states__ Keyword.keys(hard)
 
       @doc false
+      defmacro config(:states) do
+        states = Map.get(@__config__, :states)
+        quote do: unquote(states)
+      end
+
+      @doc false
       def fsm, do: Map.get(@__config__, :fsm)
+
+      @doc false
+      def entry, do: Transition.entry(fsm())
 
       @doc false
       def states, do: Map.get(@__config__, :states)
@@ -704,6 +719,8 @@ defmodule Finitomata do
           timer: @__config__[:timer],
           payload: payload
         }
+
+        :persistent_term.put({Finitomata, state.name}, state.payload)
 
         if is_integer(@__config__[:timer]) and @__config__[:timer] > 0,
           do: Process.send_after(self(), :on_timer, @__config__[:timer])

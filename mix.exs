@@ -40,7 +40,7 @@ defmodule Finitomata.MixProject do
     [
       {:nimble_parsec, "~> 1.0"},
       {:nimble_options, "~> 0.3 or ~> 1.0"},
-      {:boundary, "~> 0.4", runtime: false},
+      {:estructura, "~> 0.5"},
       # dev / test
       # {:mox, "~> 1.0", only: [:dev, :test, :ci]},
       {:mox, git: "https://github.com/dashbitco/mox", only: [:dev, :test, :ci]},
@@ -108,7 +108,6 @@ defmodule Finitomata.MixProject do
     ]
   end
 
-  defp compilers(:dev), do: [:boundary | Mix.compilers()]
   defp compilers(_), do: Mix.compilers()
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]

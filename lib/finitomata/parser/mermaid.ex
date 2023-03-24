@@ -4,8 +4,6 @@ defmodule Finitomata.Mermaid do
   import NimbleParsec
   alias Finitomata.Parser
 
-  use Boundary, deps: [Finitomata], exports: []
-
   @behaviour Parser
 
   @alphanumeric [?a..?z, ?A..?Z, ?0..?9, ?_]

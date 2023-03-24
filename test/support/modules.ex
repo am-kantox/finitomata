@@ -25,6 +25,24 @@ defmodule Finitomata.Test.Plant do
   end
 end
 
+defmodule Finitomata.Test.Transition do
+  @moduledoc false
+
+  @fsm """
+  idle --> |start| started
+  started --> |accept| accepted
+  started --> |reject| rejected
+  accepted --> |accept| accepted
+  accepted --> |reject| rejected
+  accepted --> |end| done
+  rejected --> |restart| started
+  rejected --> |end| done
+  done --> |end!| ended
+  """
+
+  use Finitomata, fsm: @fsm
+end
+
 defmodule Finitomata.Test.Log do
   @moduledoc false
 
