@@ -607,7 +607,10 @@ defmodule Finitomata do
       @__config_soft_events__ Enum.map(soft, & &1.event)
       @__config_hard_states__ Keyword.keys(hard)
 
-      @doc false
+      @doc """
+      The convenient macro to allow using states in guards, returns a compile-time
+        list of states for `#{inspect(__MODULE__)}`.
+      """
       defmacro config(:states) do
         states = Map.get(@__config__, :states)
         quote do: unquote(states)
@@ -635,7 +638,7 @@ defmodule Finitomata do
       Usually one does not want to call this directly, the most common way would be
       to start a `Finitomata` supervision tree with `Finitomata.Supervisor.start_link/1`
       or even better embed it into the existing supervision tree _and_
-      start _FSM_ with `Finitomata.start_fsm/3` passing `#{__MODULE__}` as the first
+      start _FSM_ with `Finitomata.start_fsm/3` passing `#{inspect(__MODULE__)}` as the first
       parameter.
 
       FSM representation
@@ -674,7 +677,7 @@ defmodule Finitomata do
 
             _ ->
               Logger.warning(
-                "[⚑⥯] #{from} raised: " <> inspect(err) <> "\n" <> inspect(__STACKTRACE__)
+                "[⚑ ↹] #{from} raised: " <> inspect(err) <> "\n" <> inspect(__STACKTRACE__)
               )
 
               {:error, :on_transition_raised}
@@ -813,12 +816,12 @@ defmodule Finitomata do
           end
         else
           {err, false} ->
-            Logger.warning("[⚐⥯] transition not exists or not allowed (:#{err})")
+            Logger.warning("[⚐ ↹] transition not exists or not allowed (:#{err})")
             safe_on_failure(event, payload, state)
             {:noreply, state}
 
           {err, :ok} ->
-            Logger.warning("[⚐⥯] callback failed to return `:ok` (:#{err})")
+            Logger.warning("[⚐ ↹] callback failed to return `:ok` (:#{err})")
             safe_on_failure(event, payload, state)
             {:noreply, state}
 
@@ -827,7 +830,7 @@ defmodule Finitomata do
 
             cond do
               event in @__config_soft_events__ ->
-                Logger.debug("[⚐⥯] transition softly failed " <> inspect(err))
+                Logger.debug("[⚐ ↹] transition softly failed " <> inspect(err))
                 {:noreply, state}
 
               @__config__[:fsm]
@@ -836,7 +839,7 @@ defmodule Finitomata do
                 {:noreply, state, {:continue, {:transition, event_payload({event, payload})}}}
 
               true ->
-                Logger.warning("[⚐⥯] transition failed " <> inspect(err))
+                Logger.warning("[⚐ ↹] transition failed " <> inspect(err))
                 safe_on_failure(event, payload, state)
                 {:noreply, state}
             end
@@ -867,7 +870,7 @@ defmodule Finitomata do
               {:noreply, %State{state | timer: value}}
 
             weird ->
-              Logger.warning("[⚑⥯] on_timer returned a garbage " <> inspect(weird))
+              Logger.warning("[⚑ ↹] on_timer returned a garbage " <> inspect(weird))
               {:noreply, state}
           end
           |> tap(fn

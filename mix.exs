@@ -91,12 +91,13 @@ defmodule Finitomata.MixProject do
       assets: "stuff/images",
       extras: ~w[README.md stuff/fsm.md stuff/compiler.md],
       groups_for_modules: [
-        FSM: [Finitomata],
+        FSM: [Finitomata, Finitomata.ExUnit],
         Internals: [
+          Finitomata.Listener,
           Finitomata.Parser,
           Finitomata.State,
-          Finitomata.Listener,
-          Finitomata.Transition
+          Finitomata.Transition,
+          Finitomata.Transition.Path
         ],
         Persistence: [
           Finitomata.Persistency,

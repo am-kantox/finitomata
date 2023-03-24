@@ -47,7 +47,7 @@ defmodule Finitomata.Hook do
               guards -> " when " <> (guards |> Macro.to_string() |> String.slice(1..-2))
             end
 
-          concat(["⥯‹#{inspect(module)}.#{fun}(", args, ")", guards, "›"])
+          concat([" ↹‹#{inspect(module)}.#{fun}(", args, ")", guards, "›"])
       end
     end
   end
@@ -125,35 +125,35 @@ defmodule Finitomata.Hook do
       if :on_failure in @__config__[:impl_for] do
         @impl Finitomata
         def on_failure(event, payload, state) do
-          Logger.warning("[✗⥯] " <> inspect(state: state, event: event, event_payload: payload))
+          Logger.warning("[✗ ↹] " <> inspect(state: state, event: event, event_payload: payload))
         end
       end
 
       if :on_enter in @__config__[:impl_for] do
         @impl Finitomata
         def on_enter(entering, state) do
-          Logger.debug("[←⥯] " <> inspect(state: state, entering: entering))
+          Logger.debug("[← ↹] " <> inspect(state: state, entering: entering))
         end
       end
 
       if :on_exit in @__config__[:impl_for] do
         @impl Finitomata
         def on_exit(exiting, state) do
-          Logger.debug("[→⥯] " <> inspect(state: state, exiting: exiting))
+          Logger.debug("[→ ↹] " <> inspect(state: state, exiting: exiting))
         end
       end
 
       if :on_terminate in @__config__[:impl_for] do
         @impl Finitomata
         def on_terminate(state) do
-          Logger.info("[◉⥯] " <> inspect(state: state))
+          Logger.info("[◉ ↹] " <> inspect(state: state))
         end
       end
 
       if :on_timer in @__config__[:impl_for] do
         @impl Finitomata
         def on_timer(current_state, state) do
-          Logger.debug("[✓⥯] " <> inspect(current_state: current_state, state: state))
+          Logger.debug("[✓ ↹] " <> inspect(current_state: current_state, state: state))
         end
       end
 

@@ -7,7 +7,7 @@ defmodule Finitomata.Test do
 
   import ExUnit.CaptureLog
   import Mox
-  import ExUnitFinitomata
+  import Finitomata.ExUnit
 
   alias Finitomata.Test.Listener, as: FTL
 
@@ -33,7 +33,7 @@ defmodule Finitomata.Test do
              Finitomata.transition(LogFSM, "LogFSM", {:accept, nil})
              Process.sleep(200)
            end) =~
-             ~r/\[→⥯\].*?\[✓ ⇄\].*?\[←⥯\]/su
+             ~r/\[→ ↹\].*?\[✓ ⇄\].*?\[← ↹\]/su
 
     assert %{foo: :bar} = Finitomata.state(LogFSM, "LogFSM", :payload)
 
@@ -47,7 +47,7 @@ defmodule Finitomata.Test do
              Finitomata.transition(LogFSM, "LogFSM", {:__end__, nil})
              Process.sleep(200)
            end) =~
-             "[◉⥯]"
+             "[◉ ↹]"
 
     Finitomata.transition(LogFSM, "LogFSM", {:__end__, nil})
     Process.sleep(200)
@@ -151,7 +151,7 @@ defmodule Finitomata.Test do
     assert capture_log(fn ->
              Finitomata.transition("SoftFSM", {:do?, nil})
              Process.sleep(200)
-           end) =~ "[⚐⥯] transition softly failed {:error, :not_allowed}"
+           end) =~ "[⚐ ↹] transition softly failed {:error, :not_allowed}"
 
     Process.sleep(200)
     assert %Finitomata.State{current: :started} = Finitomata.state("SoftFSM", :full)

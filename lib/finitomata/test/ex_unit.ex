@@ -1,4 +1,4 @@
-defmodule ExUnitFinitomata do
+defmodule Finitomata.ExUnit do
   @moduledoc """
   Helpers and assertions to make `Finitomata` implementation easily testable.
   """
@@ -11,6 +11,24 @@ defmodule ExUnitFinitomata do
   def estructura_path({leaf, _, args}) when args in [nil, []], do: estructura_path(leaf)
   def estructura_path(leaf), do: [leaf]
 
+  @doc """
+  This macro initiates the _FSM_ implementation specified by arguments passed
+   
+  - `id` — a `Finitomata` instance, carrying multiple _FSM_s
+  - `impl` — the module implementing _FSM_ (having `use Finitomata` clause)
+  - `name` — the name of the _FSM_
+  - `payload` — the initial payload for this _FSM_
+  - `options` — the options to control the test, such as
+    - `transition_count` — the number of expectations to declare (defaults to number of states)
+
+  Once called, this macro will start `Finitomata.Suprevisor` with the `id` given,
+    define a mox for `impl` unless already efined,
+    `Mox.allow/3` the _FSM_ to call testing process,
+    and expectations as a listener to `after_transition/3` callback,
+    sending a message of a shape `{:on_transition, id, state, payload}` to test process.
+
+  Then it’ll start _FSM_ and ensure it has entered `Finitomata.Transition.entry/2` state.
+  """
   defmacro init_finitomata(id \\ nil, impl, name, payload, options \\ []) do
     require_ast = quote generated: true, location: :keep, do: require(unquote(impl))
 
@@ -44,6 +62,22 @@ defmodule ExUnitFinitomata do
     [require_ast, init_ast]
   end
 
+  @doc """
+  Convenience macro as assert a transition initiated by `event_payload`
+    argument on the _FSM_ defined by first three arguments.
+
+  `to_state` argument would be matched to the resulting state of the transition,
+    and `block` accepts validation of the `payload` after transition in a form of
+
+  ```elixir
+  parent = self()
+
+  assert_transition id, impl, name, {:increase, 1}, :counted do
+    user_data.counter -> 2
+    internals.pid -> ^parent
+  end
+  ```
+  """
   defmacro assert_transition(id \\ nil, impl, name, event_payload, to_state, do: block) do
     block =
       block
