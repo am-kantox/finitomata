@@ -176,8 +176,8 @@ defmodule Finitomata.Transition do
       ...> Finitomata.Transition.exiting(transitions)
       [%Finitomata.Transition.Path{from: :entry, to: :*, path: [go!: :exit, terminate: :*]}]
   """
-  @spec exiting(:states | :transitions, [t()]) :: [state()]
-  def exiting(what \\ :states, transitions)
+  @spec exiting(:states | :transitions, [t()]) :: Enumerable.t(t()) | [Path.t()]
+  def exiting(states \\ :states, transitions)
 
   def exiting(:states, transitions) do
     :transitions
@@ -188,17 +188,17 @@ defmodule Finitomata.Transition do
   def exiting(:transitions, transitions) do
     :transitions
     |> paths(transitions)
-    |> Enum.filter(fn path ->
+    |> Stream.filter(fn path ->
       path
       |> Enum.reverse()
       |> then(&match?([%Transition{to: :*} | _], &1))
     end)
-    |> Enum.map(fn path ->
+    |> Stream.map(fn path ->
       [last | rest] = Enum.reverse(path)
       rest = Enum.take_while(rest, &(event_kind(&1) == :hard))
       Enum.reverse([last | rest])
     end)
-    |> Enum.uniq()
+    |> Stream.uniq()
   end
 
   @doc ~S"""
@@ -210,13 +210,13 @@ defmodule Finitomata.Transition do
       [%Finitomata.Transition.Path{from: :s1, to: :s1, path: [ok: :s2, ok: :s1]},
        %Finitomata.Transition.Path{from: :s2, to: :s2, path: [ok: :s1, ok: :s2]}]
   """
-  @spec loops(:states | :transitions, [t()]) :: [Path.t()]
+  @spec loops(:states | :transitions, [t()]) :: Enumerable.t(t()) | [Path.t()]
   def loops(what \\ :states, transitions)
 
   def loops(:transitions, transitions) do
     transitions
     |> states(true)
-    |> Enum.flat_map(&do_loop(&1, transitions, [], []))
+    |> Stream.flat_map(&do_loop(&1, transitions, [], []))
   end
 
   def loops(:states, transitions) do
@@ -225,15 +225,14 @@ defmodule Finitomata.Transition do
     |> to_path()
   end
 
-  defp do_loop(state, _transitions, [%Transition{from: state} | _] = path, paths) do
-    [path | paths]
-  end
+  defp do_loop(state, _transitions, [%Transition{from: state} | _] = path, paths),
+    do: [path | paths]
 
   defp do_loop(state, transitions, path, paths) do
     transitions
-    |> Enum.reject(&(&1 in path))
-    |> Enum.filter(&match?(%Transition{from: ^state, to: to} when to != :*, &1))
-    |> Enum.flat_map(&do_loop(&1.to, transitions, path ++ [&1], paths))
+    |> Stream.reject(&(&1 in path))
+    |> Stream.filter(&match?(%Transition{from: ^state, to: to} when to != :*, &1))
+    |> Stream.flat_map(&do_loop(&1.to, transitions, path ++ [&1], paths))
   end
 
   @doc ~S"""
@@ -245,7 +244,7 @@ defmodule Finitomata.Transition do
       [%Finitomata.Transition.Path{from: :*, to: :*, path: [foo: :s1, ok: :s2, ko: :*]},
        %Finitomata.Transition.Path{from: :*, to: :*, path: [foo: :s1, ok: :s3, ko: :*]}]
   """
-  @spec paths(:states | :transitions, [t()], state(), state()) :: [Path.t()]
+  @spec paths(:states | :transitions, [t()], state(), state()) :: Enumerable.t(t()) | [Path.t()]
   def paths(what \\ :states, transitions, from \\ :*, to \\ :*)
 
   def paths(:states, transitions, from, to) do
@@ -269,9 +268,9 @@ defmodule Finitomata.Transition do
 
   defp do_path(from, to, transitions, path, paths) do
     transitions
-    |> Enum.reject(&(&1 in path))
-    |> Enum.filter(&match?(%Transition{from: ^from}, &1))
-    |> Enum.flat_map(&do_path(&1.to, to, transitions, [&1 | path], paths))
+    |> Stream.reject(&(&1 in path))
+    |> Stream.filter(&match?(%Transition{from: ^from}, &1))
+    |> Stream.flat_map(&do_path(&1.to, to, transitions, [&1 | path], paths))
   end
 
   @doc ~S"""
