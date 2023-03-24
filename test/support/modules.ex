@@ -37,6 +37,7 @@ defmodule Finitomata.Test.Transition do
   accepted --> |end| done
   rejected --> |restart| started
   rejected --> |end| done
+  done --> |end!| ended
   """
 
   use Finitomata, fsm: @fsm
