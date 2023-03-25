@@ -462,7 +462,9 @@ defmodule Finitomata do
         )
 
       if syntax in [Finitomata.Mermaid, Finitomata.PlantUML] do
-        Mix.shell().info([
+        reporter = if Code.ensure_loaded?(Mix), do: Mix.shell(), else: Logger
+
+        reporter.info([
           [:yellow, "deprecated: ", :reset],
           "using built-in modules as syntax names is deprecated, please use ",
           [:blue, ":flowchart", :reset],

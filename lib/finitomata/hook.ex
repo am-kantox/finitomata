@@ -73,26 +73,28 @@ defmodule Finitomata.Hook do
   def __on_definition__(_env, _kind, _fun, _args, _guards, _body), do: :ok
 
   defmacro __before_compile__(env) do
-    deps? =
-      [depth: 1]
-      |> Mix.Project.deps_scms()
-      |> Map.take([:finitomata, :siblings])
-      |> map_size()
-      |> Kernel.>(0)
+    if Code.ensure_loaded?(Mix) do
+      deps? =
+        [depth: 1]
+        |> Mix.Project.deps_scms()
+        |> Map.take([:finitomata, :siblings])
+        |> map_size()
+        |> Kernel.>(0)
 
-    if not compiler?() and deps? do
-      Mix.shell().info([
-        [:bright, :yellow, "warning: ", :reset],
-        "unhandled finitomata declaration found in ",
-        [:bright, :blue, inspect(env.module), :reset],
-        ",\n         but we were unable to analyse the correctness of the FSM.\n         Add ",
-        [:bright, :cyan, ":finitomata", :reset],
-        " compiler to ",
-        [:bright, :cyan, "compilers:", :reset],
-        " in your ",
-        [:bright, :cyan, "mix.exs", :reset],
-        "!\n  #{Path.relative_to_cwd(env.file)}:#{env.line}"
-      ])
+      if not compiler?() and deps? do
+        Mix.shell().info([
+          [:bright, :yellow, "warning: ", :reset],
+          "unhandled finitomata declaration found in ",
+          [:bright, :blue, inspect(env.module), :reset],
+          ",\n         but we were unable to analyse the correctness of the FSM.\n         Add ",
+          [:bright, :cyan, ":finitomata", :reset],
+          " compiler to ",
+          [:bright, :cyan, "compilers:", :reset],
+          " in your ",
+          [:bright, :cyan, "mix.exs", :reset],
+          "!\n  #{Path.relative_to_cwd(env.file)}:#{env.line}"
+        ])
+      end
     end
 
     quote generated: true,
