@@ -8,24 +8,26 @@ defmodule Finitomata.Supervisor do
   def start_link(id: id), do: start_link(id)
 
   def start_link(id),
-    do: Supervisor.start_link(__MODULE__, id, name: fq_module(id, Supervisor, true))
+    do: Supervisor.start_link(__MODULE__, id, name: supervisor_name(id))
 
   @impl Supervisor
   def init(id) do
     children = [
-      {Registry,
-       keys: :unique, name: fq_module(id, Registry, true), partitions: System.schedulers_online()},
-      {Finitomata.Manager, name: fq_module(id, Manager, true)}
+      {Registry, keys: :unique, name: registry_name(id), partitions: System.schedulers_online()},
+      {Finitomata.Manager, name: manager_name(id)}
     ]
 
     Supervisor.init(children, strategy: :rest_for_one)
   end
 
-  @spec fq_module(id :: any(), who :: any(), atomize? :: boolean()) :: module() | [any()]
-  def fq_module(id, who, atomize? \\ false)
-  def fq_module(id, who, false), do: [Finitomata, id, who]
+  def supervisor_name(id \\ nil), do: fq_module(id, Supervisor, true)
+  def registry_name(id \\ nil), do: fq_module(id, Registry, true)
+  def manager_name(id \\ nil), do: fq_module(id, Manager, true)
 
-  def fq_module(id, who, true) do
+  @spec fq_module(id :: any(), who :: any(), atomize? :: boolean()) :: module() | [any()]
+  defp fq_module(id, who, false), do: [Finitomata, id, who]
+
+  defp fq_module(id, who, true) do
     id
     |> fq_module(who, false)
     |> Enum.reject(&is_nil/1)

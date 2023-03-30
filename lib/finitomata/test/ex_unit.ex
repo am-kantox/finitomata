@@ -13,7 +13,7 @@ defmodule Finitomata.ExUnit do
 
   @doc """
   This macro initiates the _FSM_ implementation specified by arguments passed
-   
+
   - `id` — a `Finitomata` instance, carrying multiple _FSM_s
   - `impl` — the module implementing _FSM_ (having `use Finitomata` clause)
   - `name` — the name of the _FSM_
@@ -37,7 +37,7 @@ defmodule Finitomata.ExUnit do
             location: :keep,
             bind_quoted: [id: id, impl: impl, name: name, payload: payload, options: options] do
         mock = Module.concat(impl, "Mox")
-        fsm_name = {:via, Registry, {Finitomata.Supervisor.fq_module(id, Registry, true), name}}
+        fsm_name = {:via, Registry, {Finitomata.Supervisor.registry_name(id), name}}
         transition_count = Keyword.get(options, :transition_count, Enum.count(impl.states()))
 
         parent = self()
@@ -100,8 +100,7 @@ defmodule Finitomata.ExUnit do
 
         state when state in unquote(impl).config(:states) ->
           fsm_name =
-            {:via, Registry,
-             {Finitomata.Supervisor.fq_module(unquote(id), Registry, true), unquote(name)}}
+            {:via, Registry, {Finitomata.Supervisor.registry_name(unquote(id)), unquote(name)}}
 
           entry_state = unquote(to_state)
           assert_receive {:on_transition, ^fsm_name, ^entry_state, payload}, 1_000

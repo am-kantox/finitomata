@@ -181,9 +181,11 @@ defmodule Finitomata do
           if true == get_in(opts.custom_options, [:full]) do
             state |> Map.from_struct() |> Map.to_list()
           else
+            default_registry = Finitomata.Supervisor.registry_name(nil)
             name =
               case state.name do
-                {:via, Registry, {Finitomata.Registry, name}} -> name
+                {:via, Registry, {^default_registry, name}} -> name
+                {:via, Registry, {registry, name}} -> {registry, name}
                 other -> other
               end
 
@@ -302,7 +304,7 @@ defmodule Finitomata do
   @spec start_fsm(id(), module(), any(), any()) :: DynamicSupervisor.on_start_child()
   def start_fsm(id \\ nil, impl, name, payload) do
     DynamicSupervisor.start_child(
-      Finitomata.Supervisor.fq_module(id, Manager, true),
+      Finitomata.Supervisor.manager_name(id),
       {impl, name: fqn(id, name), payload: payload}
     )
   end
@@ -389,7 +391,7 @@ defmodule Finitomata do
   """
   @spec sup_alive?(id()) :: boolean()
   def sup_alive?(id \\ nil),
-    do: is_pid(Process.whereis(Finitomata.Supervisor.fq_module(id, Registry, true)))
+    do: is_pid(Process.whereis(Finitomata.Supervisor.registry_name(id)))
 
   @doc """
   Returns `true` if the FSM specified is alive, `false` otherwise.
@@ -617,8 +619,8 @@ defmodule Finitomata do
         list of states for `#{inspect(__MODULE__)}`.
       """
       defmacro config(key) when key in @__config_keys__ do
-        states = Map.get(@__config__, key)
-        quote do: unquote(states)
+        value = @__config__ |> Map.get(key) |> Macro.escape()
+        quote do: unquote(value)
       end
 
       @doc """
@@ -1124,5 +1126,5 @@ defmodule Finitomata do
   @spec fqn(any(), fsm_name()) :: {:via, module(), {module, any()}}
   @doc "Fully qualified name of the _FSM_ backed by `Finitonata`"
   def fqn(id, name),
-    do: {:via, Registry, {Finitomata.Supervisor.fq_module(id, Registry, true), name}}
+    do: {:via, Registry, {Finitomata.Supervisor.registry_name(id), name}}
 end
