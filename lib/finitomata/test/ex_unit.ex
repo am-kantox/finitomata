@@ -2,6 +2,7 @@ defmodule Finitomata.ExUnit do
   @moduledoc """
   Helpers and assertions to make `Finitomata` implementation easily testable.
   """
+  alias Finitomata.TestTransitionError
 
   @doc false
   def estructura_path({{:., _, [{hd, _, _}, tl]}, _, []}) do
@@ -72,43 +73,163 @@ defmodule Finitomata.ExUnit do
   ```elixir
   parent = self()
 
-  assert_transition id, impl, name, {:increase, 1}, :counted do
-    user_data.counter -> 2
-    internals.pid -> ^parent
+  assert_transition id, impl, name, {:increase, 1} do
+    :counted ->
+      user_data.counter ~> 2
+      internals.pid ~> ^parent
   end
   ```
   """
-  defmacro assert_transition(id \\ nil, impl, name, event_payload, to_state, do: block) do
-    block =
-      block
-      |> Enum.map(fn {:->, _meta, [[{_, _, _} = var], match_ast]} ->
-        path = var |> estructura_path() |> Enum.reverse()
+  defmacro assert_transition(id \\ nil, impl, name, event_payload, do: block),
+    do: do_assert_transition(id, impl, name, event_payload, do: unblock(block))
 
-        quote do
-          assert unquote(match_ast) = get_in(to_state.payload, unquote(path))
-        end
+  defp do_assert_transition(id, impl, name, event_payload, do: block) do
+    states_with_assertions =
+      block
+      |> List.wrap()
+      |> Enum.map(fn {:->, _meta, [[state], conditions]} ->
+        assertions =
+          conditions
+          |> unblock()
+          |> List.wrap()
+          |> Enum.map(fn
+            :ok ->
+              []
+
+            {:~>, _meta, [{_, _, _} = var, match_ast]} ->
+              path = var |> estructura_path() |> Enum.reverse()
+
+              quote do
+                assert unquote(match_ast) = get_in(payload, unquote(path))
+              end
+          end)
+
+        {state, assertions}
       end)
 
-    quote generated: true, location: :keep do
-      Finitomata.transition(unquote(id), unquote(name), unquote(event_payload))
+    if Enum.empty?(states_with_assertions) do
+      raise TestTransitionError,
+        transition: "‹???› for event #{inspect(event_payload)}",
+        missing_states: "‹???›",
+        unknown_states: "‹???›"
+    end
 
-      to_state = Finitomata.state(unquote(id), unquote(name), :full)
+    states = Keyword.keys(states_with_assertions)
 
-      case unquote(to_state) do
-        nil ->
-          assert is_nil(to_state)
+    guard_ast =
+      quote generated: true,
+            location: :keep,
+            bind_quoted: [impl: impl, event: event_payload, states: states] do
+        [state | continuation] = states
 
-        state when state in unquote(impl).config(:states) ->
+        event_name =
+          case event do
+            {event_name, _} -> event_name
+            event_name -> event_name
+          end
+
+        transitions =
+          :fsm
+          |> impl.__config__()
+          |> Enum.filter(&match?(%Finitomata.Transition{to: ^state, event: ^event_name}, &1))
+
+        case states -- impl.__config__(:states) do
+          [] -> :ok
+          some -> raise TestTransitionError, transition: transitions, unknown_states: some
+        end
+
+        expected_continuation =
+          :transitions
+          |> Finitomata.Transition.continuation(
+            state,
+            Keyword.values(impl.__config__(:hard))
+          )
+          |> Enum.map(& &1.to)
+
+        [continuation, expected_continuation]
+        |> Enum.map(&MapSet.new/1)
+        |> Enum.reduce(&MapSet.equal?/2)
+        |> unless do
+          raise TestTransitionError,
+            transition: transitions,
+            missing_states: expected_continuation -- continuation
+        end
+      end
+
+    assertion_ast =
+      states_with_assertions
+      |> Enum.with_index()
+      |> Enum.map(fn {{to_state, ast}, idx} ->
+        quote generated: true, location: :keep do
           fsm_name =
             {:via, Registry, {Finitomata.Supervisor.registry_name(unquote(id)), unquote(name)}}
 
-          entry_state = unquote(to_state)
-          assert_receive {:on_transition, ^fsm_name, ^entry_state, payload}, 1_000
+          if unquote(idx) == 0,
+            do: Finitomata.transition(unquote(id), unquote(name), unquote(event_payload))
 
-          assert %Finitomata.State{current: unquote(to_state)} = to_state
+          to_state = unquote(to_state)
 
-          unquote(block)
-      end
+          assert_receive {:on_transition, ^fsm_name, ^to_state, payload}, 1_000
+
+          unquote(ast)
+        end
+      end)
+
+    [guard_ast | assertion_ast]
+  end
+
+  defmacro test_path(id \\ nil, impl, name, do: block),
+    do: do_test_path(id, impl, name, do: unblock(block))
+
+  defp do_test_path(id, impl, name, do: block) do
+    IO.inspect({id, impl, name, block}, label: "test_path")
+
+    [
+      {:->, [line: 262],
+       [
+         [start: 42],
+         {:started, [line: 263],
+          [
+            {:~>, [line: 263],
+             [
+               {{:., [line: 263], [{:internals, [line: 263], nil}, :pid]},
+                [no_parens: true, line: 263], []},
+               {:^, [line: 263], [{:parent, [line: 263], nil}]}
+             ]}
+          ]}
+       ]},
+      {:->, [line: 265],
+       [
+         [:do],
+         {:done, [line: 266],
+          [
+            [
+              do:
+                {:~>, [line: 266],
+                 [
+                   {:pid, [line: 266], nil},
+                   {:^, [line: 266], [{:parent, [line: 266], nil}]}
+                 ]}
+            ]
+          ]}
+       ]}
+    ]
+
+    # block =
+    #   block
+    #   |> Enum.map(fn {:->, _meta, [[{_, _, _} = var], match_ast]} ->
+    #     path = var |> estructura_path() |> Enum.reverse()
+
+    #     quote do
+    #       assert unquote(match_ast) = get_in(to_state.payload, unquote(path))
+    #     end
+    #   end)
+    #   |> IO.inspect(label: "block")
+
+    quote generated: true, location: :keep do
     end
   end
+
+  defp unblock({:__block__, _, block}), do: block
+  defp unblock(block), do: block
 end

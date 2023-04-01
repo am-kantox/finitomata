@@ -182,6 +182,7 @@ defmodule Finitomata do
             state |> Map.from_struct() |> Map.to_list()
           else
             default_registry = Finitomata.Supervisor.registry_name(nil)
+
             name =
               case state.name do
                 {:via, Registry, {^default_registry, name}} -> name
@@ -316,16 +317,24 @@ defmodule Finitomata do
 
   - the id of the FSM (optional)
   - the name of the FSM
-  - `{event, event_payload}` tuple; the payload will be passed to the respective
-    `on_transition/4` call
+  - `event` atom or `{event, event_payload}` tuple; the payload will be passed to the respective
+    `on_transition/4` call, payload is `nil` by default 
   - `delay` (optional) the interval in milliseconds to apply transition after
   """
-  @spec transition(id(), fsm_name(), {Transition.event(), State.payload()}, non_neg_integer()) ::
+  @spec transition(
+          id(),
+          fsm_name(),
+          Transition.event() | {Transition.event(), State.payload()},
+          non_neg_integer()
+        ) ::
           :ok
   def transition(id \\ nil, target, event_payload, delay \\ 0)
 
   def transition(target, {event, payload}, delay, 0) when is_integer(delay),
     do: transition(nil, target, {event, payload}, delay)
+
+  def transition(id, target, event, delay) when is_atom(event) and is_integer(delay),
+    do: transition(id, target, {event, nil}, delay)
 
   def transition(id, target, {event, payload}, 0),
     do: id |> fqn(target) |> GenServer.cast({event, payload})
@@ -387,11 +396,27 @@ defmodule Finitomata do
     do: id |> fqn(target) |> GenServer.call({:responds?, event})
 
   @doc """
+  Returns supervision tree of `Finitomata`. The healthy tree has all three `pid`s.`
+  """
+  @spec sup_tree(id()) :: [
+          {:supervisor, nil | pid()},
+          {:manager, nil | pid()},
+          {:registry, nil | pid()}
+        ]
+  def sup_tree(id \\ nil) do
+    [
+      supervisor: Process.whereis(Finitomata.Supervisor.supervisor_name(id)),
+      manager: Process.whereis(Finitomata.Supervisor.manager_name(id)),
+      registry: Process.whereis(Finitomata.Supervisor.registry_name(id))
+    ]
+  end
+
+  @doc """
   Returns `true` if the supervision tree is alive, `false` otherwise.
   """
   @spec sup_alive?(id()) :: boolean()
   def sup_alive?(id \\ nil),
-    do: is_pid(Process.whereis(Finitomata.Supervisor.registry_name(id)))
+    do: id |> sup_tree() |> Keyword.values() |> Enum.all?(&(not is_nil(&1)))
 
   @doc """
   Returns `true` if the FSM specified is alive, `false` otherwise.
@@ -444,9 +469,7 @@ defmodule Finitomata do
   @doc false
   defp ast(options, schema) do
     quote location: :keep, generated: true do
-      with {:error, ex} <-
-             NimbleOptions.validate(unquote(options), unquote(Macro.escape(schema))),
-           do: raise(ex)
+      NimbleOptions.validate!(unquote(options), unquote(Macro.escape(schema)))
 
       require Logger
 
@@ -564,6 +587,19 @@ defmodule Finitomata do
             |> to_string()
             |> String.ends_with?("!")
         end)
+
+      hnd = Transition.hard(fsm) -- hard
+
+      hard =
+        Enum.map(hard, fn {from, event} ->
+          {from, Enum.find(fsm, &match?(%Transition{from: ^from, event: ^event}, &1))}
+        end)
+
+      unless Enum.empty?(hnd) do
+        raise CompileError,
+          description:
+            "transitions marked as `:hard` must be determined, non-determined found: #{inspect(hnd)}"
+      end
 
       soft =
         Enum.filter(fsm, fn
@@ -827,7 +863,7 @@ defmodule Finitomata do
 
             hard when hard in @__config_hard_states__ ->
               {:noreply, state,
-               {:continue, {:transition, event_payload(@__config__[:hard][hard])}}}
+               {:continue, {:transition, event_payload(@__config__[:hard][hard].event)}}}
 
             _ ->
               {:noreply, state}
