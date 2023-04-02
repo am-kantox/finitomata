@@ -26,6 +26,6 @@ defmodule Finitomata.TestTransitionError do
 
   defp hint do
     "\nIf you do not want to validate anything after entering some states, use " <>
-      "`:state -> :ok` clause."
+      "`:state -> :ok` clause.\n"
   end
 end

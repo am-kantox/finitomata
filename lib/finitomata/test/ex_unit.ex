@@ -75,33 +75,48 @@ defmodule Finitomata.ExUnit do
 
   assert_transition id, impl, name, {:increase, 1} do
     :counted ->
-      user_data.counter ~> 2
-      internals.pid ~> ^parent
+      assert_state do
+        user_data.counter ~> 2
+        internals.pid ~> ^parent
+      end
+      # or: assert_state %{user_data: %{counter: 2}, internals: %{pid: ^parent}}
+      assert_receive {:increased, 2}
   end
   ```
   """
   defmacro assert_transition(id \\ nil, impl, name, event_payload, do: block),
-    do: do_assert_transition(id, impl, name, event_payload, do: unblock(block))
+    do: do_assert_transition(id, impl, name, event_payload, do: block)
 
   defp do_assert_transition(id, impl, name, event_payload, do: block) do
     states_with_assertions =
       block
-      |> List.wrap()
-      |> Enum.map(fn {:->, _meta, [[state], conditions]} ->
+      |> unblock()
+      |> Enum.map(fn {:->, meta, [[state], conditions]} ->
+        line = Keyword.get(meta, :line, 1)
+
         assertions =
           conditions
           |> unblock()
-          |> List.wrap()
-          |> Enum.map(fn
+          |> Enum.flat_map(fn
             :ok ->
               []
 
-            {:~>, _meta, [{_, _, _} = var, match_ast]} ->
-              path = var |> estructura_path() |> Enum.reverse()
+            {:assert_state, _meta, [[do: matches]]} ->
+              do_handle_matches(matches)
 
-              quote do
-                assert unquote(match_ast) = get_in(payload, unquote(path))
-              end
+            {:assert_state, _meta, [assertion]} ->
+              [quote(do: assert(unquote(assertion) = payload))]
+
+            {:assert_receive, _, _} = ast ->
+              [ast]
+
+            other ->
+              content = other |> Macro.to_string() |> String.split("\n") |> hd() |> String.trim()
+
+              raise TestTransitionError,
+                message:
+                  "clauses in a call to `assert_transition/5` must be either `:ok`, or `payload.inner.struct ~> match`, given:\n" <>
+                    Exception.format_snippet(%{content: content <> " …", offset: 0}, line)
           end)
 
         {state, assertions}
@@ -109,9 +124,8 @@ defmodule Finitomata.ExUnit do
 
     if Enum.empty?(states_with_assertions) do
       raise TestTransitionError,
-        transition: "‹???› for event #{inspect(event_payload)}",
-        missing_states: "‹???›",
-        unknown_states: "‹???›"
+        message:
+          "handler in `assert_transition/5` for event #{inspect(event_payload)} must have at least one clause"
     end
 
     states = Keyword.keys(states_with_assertions)
@@ -230,6 +244,21 @@ defmodule Finitomata.ExUnit do
     end
   end
 
-  defp unblock({:__block__, _, block}), do: block
-  defp unblock(block), do: block
+  defp unblock({:__block__, _, block}), do: unblock(block)
+  defp unblock(block), do: List.wrap(block)
+
+  defp do_handle_matches([]), do: []
+
+  defp do_handle_matches([{:~>, _meta, [{_, _, _} = var, match_ast]} | more]) do
+    path = var |> estructura_path() |> Enum.reverse()
+
+    match =
+      quote do
+        assert unquote(match_ast) = get_in(payload, unquote(path))
+      end
+
+    [match | do_handle_matches(more)]
+  end
+
+  defp do_handle_matches(any), do: any |> unblock() |> do_handle_matches()
 end

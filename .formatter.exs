@@ -1,4 +1,5 @@
 locals_without_parens = [
+  assert_state: 1,
   assert_transition: 5,
   assert_transition: 6
 ]
