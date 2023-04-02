@@ -1,17 +1,22 @@
 defmodule Finitomata.TestTransitionError do
-  defexception path: nil, transition: nil, missing_states: [], unknown_states: [], message: nil
+  defexception path: nil, transition: [], missing_states: [], unknown_states: [], message: nil
 
   @impl true
   def message(%{message: nil} = exception) do
-    Enum.join(
-      [
-        "The transition validation must include all possible continuations.",
-        "  Transition: " <> inspect(exception.transition) <> ".",
-        "  Missing states: " <> inspect(exception.missing_states) <> ".",
-        "  Unknown states: " <> inspect(exception.unknown_states) <> "."
-      ],
-      "\n"
-    )
+    [
+      "The transition validation must include all possible continuations.",
+      if(not Enum.empty?(exception.transition),
+        do: "  Transition: " <> inspect(exception.transition) <> "."
+      ),
+      if(not Enum.empty?(exception.missing_states),
+        do: "  Missing states: " <> inspect(exception.missing_states) <> "."
+      ),
+      if(not Enum.empty?(exception.unknown_states),
+        do: "  Unknown states: " <> inspect(exception.unknown_states) <> "."
+      )
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n")
   end
 
   def message(%{message: message}) do

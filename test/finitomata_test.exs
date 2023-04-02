@@ -241,7 +241,7 @@ defmodule Finitomata.Test do
 
     assert_transition Case, FTL, "AssertionFSM", {:start, 42} do
       :started ->
-        assert_state do: internals.pid ~> ^parent
+        assert_payload do: internals.pid ~> ^parent
         assert_receive {:on_start, 42}
     end
 
@@ -249,7 +249,7 @@ defmodule Finitomata.Test do
 
     assert_transition Case, FTL, "AssertionFSM", {:do, nil} do
       :done ->
-        assert_state do
+        assert_payload do
           internals.pid ~> ^parent
           pid ~> ^parent
         end
@@ -257,17 +257,33 @@ defmodule Finitomata.Test do
         assert_receive :on_do
 
       :* ->
-        assert_state %{pid: ^parent}
         assert_receive :on_end
+        assert_payload %{pid: ^parent}
     end
   end
 
-  test_path Case, FTL, "AssertionFSM" do
+  test_path "Test Path Test",
+            Case,
+            FTL,
+            "AssertionFSM",
+            FTL.cast!(%{internals: %{pid: self()}, pid: self()}),
+            parent: self() do
     {:start, 42} ->
-      started(internals.pid ~> ^parent)
-      started2(internals.pid ~> ^parent)
+      assert_state :started do
+        assert_payload do
+          internals.pid ~> ^parent
+        end
+
+        assert_receive {:on_start, 42}
+      end
 
     :do ->
-      done(internals.pid ~> ^parent, pid ~> ^parent)
+      assert_state :done do
+        assert_receive :on_do
+      end
+
+      assert_state :* do
+        assert_receive :on_end
+      end
   end
 end
