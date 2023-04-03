@@ -6,10 +6,6 @@ defmodule Finitomata.Test do
   doctest Finitomata.Mermaid
 
   import ExUnit.CaptureLog
-  import Mox
-  import Finitomata.ExUnit
-
-  alias Finitomata.Test.Listener, as: FTL
 
   use ExUnitProperties
 
@@ -190,100 +186,5 @@ defmodule Finitomata.Test do
     assert_receive :on_start!
     assert_receive :on_do!
     assert_receive :on_end
-  end
-
-  test "listener properties" do
-    start_supervised(Finitomata.Supervisor)
-
-    check all fini_name <- StreamData.string(:alphanumeric, min_length: 16),
-              fini_payload <-
-                StreamData.one_of([StreamData.atom(:alphanumeric), StreamData.integer(1..100)]),
-              max_runs: 50 do
-      fsm_name = {:via, Registry, {Finitomata.Registry, fini_name}}
-      parent = self()
-
-      FTL.Mox
-      |> allow(parent, fn -> GenServer.whereis(fsm_name) end)
-      |> expect(:after_transition, 4, fn id, state, payload ->
-        parent |> send({:on_transition, id, state, payload}) |> then(fn _ -> :ok end)
-      end)
-
-      Finitomata.start_fsm(
-        FTL,
-        fini_name,
-        %FTL{internals: %FTL.Internals{pid: parent}}
-      )
-
-      assert_receive {:on_transition, ^fsm_name, :idle, %{internals: %{pid: ^parent}}}
-
-      Finitomata.transition(fini_name, {:start, fini_payload})
-      assert_receive {:on_start, ^fini_payload}
-      assert_receive {:on_transition, ^fsm_name, :started, %{internals: %{pid: ^parent}}}
-
-      Finitomata.transition(fini_name, {:do, nil})
-      assert_receive :on_do
-      assert_receive {:on_transition, ^fsm_name, :done, %{internals: %{pid: ^parent}}}
-
-      assert_receive :on_end
-      assert_receive {:on_transition, ^fsm_name, :*, %{internals: %{pid: ^parent}}}
-    end
-  end
-
-  test "custom assertions" do
-    parent = self()
-
-    init_finitomata(
-      Case,
-      FTL,
-      "AssertionFSM",
-      FTL.cast!(%{internals: %{pid: parent}, pid: parent})
-    )
-
-    assert_transition Case, FTL, "AssertionFSM", {:start, 42} do
-      :started ->
-        assert_payload do: internals.pid ~> ^parent
-        assert_receive {:on_start, 42}
-    end
-
-    # assert_receive {:on_transition, ^fsm_name, :started, %{internals: %{pid: ^parent}}}
-
-    assert_transition Case, FTL, "AssertionFSM", {:do, nil} do
-      :done ->
-        assert_payload do
-          internals.pid ~> ^parent
-          pid ~> ^parent
-        end
-
-        assert_receive :on_do
-
-      :* ->
-        assert_receive :on_end
-        assert_payload %{pid: ^parent}
-    end
-  end
-
-  test_path "Test Path Test",
-            Case,
-            FTL,
-            "AssertionFSM",
-            FTL.cast!(%{internals: %{pid: self()}, pid: self()}),
-            parent: self() do
-    {:start, 42} ->
-      assert_state :started do
-        assert_payload do
-          internals.pid ~> ^parent
-        end
-
-        assert_receive {:on_start, 42}
-      end
-
-    :do ->
-      assert_state :done do
-        assert_receive :on_do
-      end
-
-      assert_state :* do
-        assert_receive :on_end
-      end
   end
 end

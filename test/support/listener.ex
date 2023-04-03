@@ -12,26 +12,27 @@ defmodule Finitomata.Test.Listener do
 
   defstate(%{
     pid: {StreamData, :constant, [self()]},
-    internals: %{pid: {StreamData, :constant, [self()]}}
+    internals: %{counter: {StreamData, :integer, []}}
   })
 
   @impl Finitomata
-  def on_start(%{internals: %{pid: _pid}}), do: :ignore
+  def on_start(state), do: {:continue, put_in(state, [:internals, :counter], 0)}
 
   @impl Finitomata
-  def on_transition(:idle, :start, event_payload, %{internals: %{pid: pid}} = state) do
-    send(pid, {:on_start, event_payload})
+  def on_transition(:idle, :start, pid, %{internals: %{counter: counter}} = state) do
+    send(pid, {:on_start, pid})
+    state = %{state | pid: pid, internals: %{counter: counter + 1}}
     {:ok, :started, state}
   end
 
   @impl Finitomata
-  def on_transition(:started, :do, _, %{internals: %{pid: pid}} = state) do
+  def on_transition(:started, :do, _, %{pid: pid} = state) do
     send(pid, :on_do)
-    {:ok, :done, state}
+    {:ok, :done, update_in(state, [:internals, :counter], &(&1 + 1))}
   end
 
   @impl Finitomata
-  def on_transition(:done, :__end__, _, %{internals: %{pid: pid}} = state) do
+  def on_transition(:done, :__end__, _, %{pid: pid} = state) do
     send(pid, :on_end)
     {:ok, :*, state}
   end

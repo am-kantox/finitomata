@@ -83,7 +83,7 @@ defmodule Finitomata do
     ],
     persistency: [
       required: false,
-      type: {:or, [{:in, [nil]}, {:custom, Finitomata, :behaviour, []}]},
+      type: {:or, [{:in, [nil]}, {:custom, Finitomata, :behaviour, [Finitomata.Persistency]}]},
       default: nil,
       doc:
         "The implementation of `Finitomata.Persistency` behaviour to backup FSM with a persistent storage."
@@ -246,8 +246,15 @@ defmodule Finitomata do
   This callback will be called from the underlying `c:GenServer.init/1`.
 
   Unlike other callbacks, this one might raise preventing the whole FSM from start.
+
+  When `:ignore`, or `{:continues, new_payload}` tuple is returned from the callback,
+     the normal initalization continues through continuing to the next state.
+
+  `{:ok, new_payload}` prevents the _FSM_ from automatically getting into start state,
+    and the respective transition must be called manually.
   """
-  @callback on_start(State.payload()) :: {:ok, State.payload()} | :ignore
+  @callback on_start(State.payload()) ::
+              {:continue, State.payload()} | {:ok, State.payload()} | :ignore
 
   @doc """
   This callback will be called if the transition failed to complete to allow
@@ -766,6 +773,7 @@ defmodule Finitomata do
                  apply(__MODULE__, :on_start, [payload]) do
             false -> {lifecycle, payload}
             {:ok, payload} -> {:loaded, payload}
+            {:continue, payload} -> {lifecycle, payload}
             :ignore -> {lifecycle, payload}
           end
 

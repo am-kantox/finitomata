@@ -12,6 +12,83 @@ defmodule Finitomata.ExUnit do
   def estructura_path({leaf, _, args}) when args in [nil, []], do: estructura_path(leaf)
   def estructura_path(leaf), do: [leaf]
 
+  setup_schema = [
+    fsm: [
+      required: true,
+      type: :non_empty_keyword_list,
+      doc: "The _FSM_ declaration to be used in tests.",
+      keys: [
+        id: [
+          required: false,
+          type: :any,
+          default: nil,
+          doc: "The ID of the `Finitomata` tree."
+        ],
+        implementation: [
+          required: true,
+          type: {:custom, Finitomata, :behaviour, [Finitomata]},
+          doc: "The implementatoin of `Finitomata` (the module with `use Finitomata`.)"
+        ],
+        name: [
+          required: false,
+          type: :string,
+          doc: "The name of the `Finitomata` instance."
+        ],
+        payload: [
+          required: true,
+          type: :any,
+          doc: "The initial payload for the _FSM_ to start with."
+        ],
+        options: [
+          required: false,
+          type: :keyword_list,
+          default: [],
+          doc: "Additional options to use in _FSM_ initialization.",
+          keys: [
+            transition_count: [
+              required: false,
+              type: :non_neg_integer,
+              doc: "The expected by `Mox` number of transitions to handle."
+            ]
+          ]
+        ]
+      ]
+    ],
+    context: [
+      required: false,
+      type: :keyword_list,
+      doc: "The additional context to be passed to actual `ExUnit.Callbacks.setup/2` call."
+    ]
+  ]
+
+  @setup_schema NimbleOptions.new!(setup_schema)
+  defmacro setup_finitomata(do: block) do
+    quote generated: true, location: :keep do
+      fsm_setup = NimbleOptions.validate!(unquote(block), unquote(Macro.escape(@setup_schema)))
+
+      fsm = Keyword.get(fsm_setup, :fsm)
+      @fini_id fsm[:id]
+      @fini_impl fsm[:implementation]
+      @fini_name fsm[:name]
+      @fini_payload fsm[:payload]
+      @fini_options fsm[:options]
+
+      @fini_context Keyword.get(fsm_setup, :context)
+
+      setup ctx do
+        init_finitomata(
+          @fini_id,
+          @fini_impl,
+          @fini_name || ctx.test,
+          @fini_payload,
+          @fini_options
+        )
+
+        Keyword.put(@fini_context, :__pid__, self())
+      end
+    end
+  end
+
   @doc """
   This macro initiates the _FSM_ implementation specified by arguments passed
 
@@ -241,6 +318,10 @@ defmodule Finitomata.ExUnit do
       end
     end
   end
+
+  # defp escape(contents) do
+  #   Macro.escape(contents, unquote: true)
+  # end
 
   defp event_name({event, _payload}) when is_atom(event), do: event
   defp event_name(event) when is_atom(event), do: event
