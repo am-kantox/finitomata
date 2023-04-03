@@ -62,6 +62,38 @@ defmodule Finitomata.ExUnit do
   ]
 
   @setup_schema NimbleOptions.new!(setup_schema)
+
+  @doc """
+  Setups `Finitomata` for testing in the case and/or in `ExUnit.Case.describe/2` block.
+    
+  It would effectively init the _FSM_ with an underlying call to `init_finitomata/5`,
+    and put `finitomata` key into `context`, assigning `:test_pid` subkey to the `pid`
+    of the running test process, and mixing `:context` content into test context.
+
+  Although one might pass the name, it’s more convenient to avoid doing it, in this case
+    the name would be assigned from the test name, which guarantees uniqueness of
+    _FSM_s running in concurrent environment.
+
+  It should return the keyword which would be validated with `NimbleOptions` schema
+
+  #{NimbleOptions.docs(@setup_schema)}
+
+  _Example:_
+
+  ```elixir
+  describe "MyFSM tests" do
+    setup_finitomata do
+      parent = self()
+
+      [
+        fsm: [implementation: MyFSM, payload: %{}],
+        context: [parent: parent]
+      ]
+    end
+
+    …
+  ```
+  """
   defmacro setup_finitomata(do: block) do
     quote generated: true, location: :keep do
       fsm_setup = NimbleOptions.validate!(unquote(block), unquote(Macro.escape(@setup_schema)))
@@ -171,7 +203,16 @@ defmodule Finitomata.ExUnit do
   """
   defmacro assert_transition(ctx, event_payload, do: block) do
     quote do
-      %{finitomata: %{fsm: fsm}} = unquote(ctx)
+      fsm =
+        case unquote(ctx) do
+          %{finitomata: %{fsm: fsm}} ->
+            fsm
+
+          other ->
+            raise TestTransitionError,
+              message:
+                "in order to use `assert_transition/3` one should declare _FSM_ in `setup_finitomata/1` callback"
+        end
 
       assert_transition(fsm.id, fsm.implementation, fsm.name, unquote(event_payload),
         do: unquote(block)
@@ -185,7 +226,7 @@ defmodule Finitomata.ExUnit do
 
   **NB** it’s not recommended to use low-level helpers, normally one should
     define an _FSM_ in `setup_finitomata/1` block and use `assert_transition/3`
-    or even `test_path/5`.
+    or even better `test_path/3`.
 
   Last regular argument in a call to `assert_transition/3` would be an
     `event_payload` in a form of `{event, payload}`, or just `event`
@@ -230,6 +271,9 @@ defmodule Finitomata.ExUnit do
 
             {:assert_payload, _meta, [assertion]} ->
               [quote(do: assert(unquote(assertion) = payload))]
+
+            {:refute_receive, _, _} = ast ->
+              [ast]
 
             {:assert_receive, _, _} = ast ->
               [ast]
@@ -324,6 +368,61 @@ defmodule Finitomata.ExUnit do
     end
   end
 
+  defmacro test_path(test_name, do: block) do
+    guard_ast =
+      quote generated: true, location: :keep do
+        fsm =
+          case ctx do
+            %{finitomata: %{fsm: fsm}} ->
+              IO.inspect(fsm.implementation.__config__(:paths), label: "PATHS")
+              fsm
+
+            other ->
+              raise TestTransitionError,
+                message:
+                  "in order to use `test_path/3` one should declare _FSM_ in `setup_finitomata/1` callback"
+          end
+      end
+
+    transitions =
+      block
+      |> unblock()
+      |> Enum.map(fn {:->, _meta, [[event_payload], state_assertions]} ->
+        state_assertion_ast =
+          state_assertions
+          |> unblock()
+          |> Enum.map(fn {:assert_state, meta, [state, [do: block]]} ->
+            {:->, meta, [[state], {:__block__, meta, unblock(block)}]}
+          end)
+
+        {event_payload, state_assertion_ast}
+        # do_assert_transition(
+        #   id,
+        #   implementation,
+        #   name,
+        #   event_payload,
+        #   do: state_assertion_ast
+        # )
+      end)
+      |> Macro.escape()
+      |> IO.inspect(label: "AST")
+
+    quote do
+      test unquote(test_name), ctx do
+        unquote(guard_ast)
+        IO.inspect(ctx)
+      end
+    end
+
+    #  Finitomata.ExUnit.__path_transitions__(
+    #    block,
+    #    ctx.id,
+    #    ctx.implementation,
+    #    ctx.name
+    #  )
+  end
+
+  @doc false
   defmacro test_path(test_name, id \\ nil, impl, name, initial_payload, context \\ [], do: block),
     do: do_test_path(test_name, id, impl, name, initial_payload, context, do: unblock(block))
 
@@ -359,7 +458,7 @@ defmodule Finitomata.ExUnit do
       end)
 
     quote generated: true, location: :keep do
-      test unquote(test_name), _fix_me do
+      test unquote(test_name), ctx do
         unquote(expanded_context)
         unquote(transitions)
       end
