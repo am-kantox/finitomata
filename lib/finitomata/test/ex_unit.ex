@@ -66,31 +66,33 @@ defmodule Finitomata.ExUnit do
     quote generated: true, location: :keep do
       fsm_setup = NimbleOptions.validate!(unquote(block), unquote(Macro.escape(@setup_schema)))
 
-      fsm = Keyword.get(fsm_setup, :fsm)
-      @fini_id fsm[:id]
-      @fini_impl fsm[:implementation]
-      @fini_name fsm[:name]
-      @fini_payload fsm[:payload]
-      @fini_options fsm[:options]
-
-      @fini_context Keyword.get(fsm_setup, :context)
+      @fini Keyword.fetch!(fsm_setup, :fsm)
+      @fini_context Keyword.get(fsm_setup, :context, [])
+      @fini_implementation @fini[:implementation]
 
       setup ctx do
-        init_finitomata(
-          @fini_id,
-          @fini_impl,
-          @fini_name || ctx.test,
-          @fini_payload,
-          @fini_options
-        )
+        fini =
+          @fini
+          |> update_in([:name], fn
+            nil -> ctx.test
+            other -> other
+          end)
+          |> Map.new()
 
-        Keyword.put(@fini_context, :__pid__, self())
+        init_finitomata(fini.id, @fini_implementation, fini.name, fini.payload, fini.options)
+        Keyword.put(@fini_context, :finitomata, %{test_pid: self(), fsm: Map.new(fini)})
       end
     end
   end
 
   @doc """
-  This macro initiates the _FSM_ implementation specified by arguments passed
+  This macro initiates the _FSM_ implementation specified by arguments passed.
+
+  **NB** it’s not recommended to use low-level helpers, normally one should
+    define an _FSM_ in `setup_finitomata/1` block, which would initiate
+    the _FSM_ amongs other things.
+
+  _Arguments:_
 
   - `id` — a `Finitomata` instance, carrying multiple _FSM_s
   - `impl` — the module implementing _FSM_ (having `use Finitomata` clause)
@@ -141,8 +143,53 @@ defmodule Finitomata.ExUnit do
   end
 
   @doc """
-  Convenience macro as assert a transition initiated by `event_payload`
+  Convenience macro to assert a transition initiated by `event_payload`
+    argument on the _FSM_ defined by the test context previously setup
+    with a call to `setup_finitomata/1`.
+
+  Last regular argument in a call to `assert_transition/3` would be an
+    `event_payload` in a form of `{event, payload}`, or just `event`
+    for no payload.
+
+  `to_state` argument would be matched to the resulting state of the transition,
+    and `block` accepts validation of the `payload` after transition in a form of
+
+  ```elixir
+  test "some", ctx do
+    assert_transition ctx, {:increase, 1} do
+      :counted ->
+        assert_payload do
+          user_data.counter ~> 2
+          internals.pid ~> ^parent
+        end
+        # or: assert_payload %{user_data: %{counter: 2}, internals: %{pid: ^parent}}
+
+        assert_receive {:increased, 2}
+    end
+  end
+  ```
+  """
+  defmacro assert_transition(ctx, event_payload, do: block) do
+    quote do
+      %{finitomata: %{fsm: fsm}} = unquote(ctx)
+
+      assert_transition(fsm.id, fsm.implementation, fsm.name, unquote(event_payload),
+        do: unquote(block)
+      )
+    end
+  end
+
+  @doc """
+  Convenience macro to assert a transition initiated by `event_payload`
     argument on the _FSM_ defined by first three arguments.
+
+  **NB** it’s not recommended to use low-level helpers, normally one should
+    define an _FSM_ in `setup_finitomata/1` block and use `assert_transition/3`
+    or even `test_path/5`.
+
+  Last regular argument in a call to `assert_transition/3` would be an
+    `event_payload` in a form of `{event, payload}`, or just `event`
+    for no payload.
 
   `to_state` argument would be matched to the resulting state of the transition,
     and `block` accepts validation of the `payload` after transition in a form of

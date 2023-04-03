@@ -1,7 +1,10 @@
 locals_without_parens = [
   assert_payload: 1,
   assert_state: 1,
+  assert_transition: 3,
+  assert_transition: 4,
   assert_transition: 5,
+  setup_finitomata: 1,
   test_path: 5,
   test_path: 6,
   test_path: 7

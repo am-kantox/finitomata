@@ -48,7 +48,6 @@ defmodule Finitomata.ExUnit.Test do
         fsm: [
           id: Case,
           implementation: FTL,
-          name: "AssertionFSM",
           payload: FTL.cast!(%{internals: %{counter: 0}})
         ],
         context: [
@@ -57,16 +56,36 @@ defmodule Finitomata.ExUnit.Test do
       ]
     end
 
-    test "low level with assert_transition", _ctx do
-      parent = self()
-
-      assert_transition Case, FTL, "AssertionFSM", {:start, parent} do
+    test "low level with assert_transition", %{finitomata: %{test_pid: parent, fsm: fsm}} do
+      assert_transition fsm.id, fsm.implementation, fsm.name, {:start, parent} do
         :started ->
           assert_payload do: internals.counter ~> 1
           assert_receive {:on_start, ^parent}
       end
 
-      assert_transition Case, FTL, "AssertionFSM", {:do, nil} do
+      assert_transition fsm.id, fsm.implementation, fsm.name, :do do
+        :done ->
+          assert_payload do
+            internals.counter ~> 2
+            pid ~> ^parent
+          end
+
+          assert_receive :on_do
+
+        :* ->
+          assert_receive :on_end
+          assert_payload %{internals: %{counter: 2}, pid: ^parent}
+      end
+    end
+
+    test "higher level with assert_transition", %{finitomata: %{test_pid: parent}} = ctx do
+      assert_transition ctx, {:start, parent} do
+        :started ->
+          assert_payload do: internals.counter ~> 1
+          assert_receive {:on_start, ^parent}
+      end
+
+      assert_transition ctx, :do do
         :done ->
           assert_payload do
             internals.counter ~> 2
