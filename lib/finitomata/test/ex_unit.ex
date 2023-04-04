@@ -369,22 +369,28 @@ defmodule Finitomata.ExUnit do
   end
 
   defmacro test_path(test_name, _ctx \\ quote(do: _), do: block) do
-    # guard_ast =
-    #   quote generated: true, location: :keep do
-    #     fsm =
-    #       case ctx do
-    #         %{finitomata: %{fsm: fsm}} ->
-    #           IO.inspect(fsm.implementation.__config__(:paths), label: "PATHS")
-    #           fsm
+    quote generated: true, location: :keep do
+      test unquote(test_name), ctx do
+        fsm =
+          case ctx do
+            %{finitomata: %{fsm: fsm}} ->
+              IO.inspect(fsm.implementation.__config__(:paths), label: "PATHS")
+              fsm
 
-    #         other ->
-    #           raise TestTransitionError,
-    #             message:
-    #               "in order to use `test_path/3` one should declare _FSM_ in `setup_finitomata/1` callback"
-    #       end
-    #   end
+            other ->
+              raise TestTransitionError,
+                message:
+                  "in order to use `test_path/3` one should declare _FSM_ in `setup_finitomata/1` callback"
+          end
 
-    # test_path(unquote(test_name), ctx.id, ctx.implementation, ctx.name, do: unquote(block))
+        test_path_transitions(
+          fsm.id,
+          fsm.implementation,
+          fsm.name,
+          do: unquote(block)
+        )
+      end
+    end
   end
 
   @doc false
@@ -406,17 +412,15 @@ defmodule Finitomata.ExUnit do
         end)
     ]
 
-    transitions = do_test_path_transitions(id, impl, name, do: block)
-
     quote generated: true, location: :keep do
       test unquote(test_name), ctx do
         unquote(expanded_context)
-        unquote(transitions)
+        test_path_transitions(unquote(id), unquote(impl), unquote(name), do: unquote(block))
       end
     end
   end
 
-  defp do_test_path_transitions(id, impl, name, do: block) do
+  defmacro test_path_transitions(id, impl, name, do: block) do
     block
     |> unblock()
     |> Enum.map(fn {:->, _meta, [[event_payload], state_assertions]} ->
