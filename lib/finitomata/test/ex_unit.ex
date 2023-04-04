@@ -368,13 +368,18 @@ defmodule Finitomata.ExUnit do
     end
   end
 
+  @doc """
+  Convenience macro to test the whole _Finitomata_ path,
+    from starting to ending state.
+
+  Must be used with a `setup_finitomata/1` callback.
+  """
   defmacro test_path(test_name, ctx \\ quote(do: _), do: block) do
     quote generated: true, location: :keep do
       test unquote(test_name), unquote(ctx) = ctx do
         fsm =
           case ctx do
             %{finitomata: %{fsm: fsm}} ->
-              IO.inspect(fsm.implementation.__config__(:paths), label: "PATHS")
               fsm
 
             other ->
@@ -420,6 +425,7 @@ defmodule Finitomata.ExUnit do
     end
   end
 
+  @doc false
   defmacro test_path_transitions(id, impl, name, do: block) do
     block
     |> unblock()
@@ -431,13 +437,10 @@ defmodule Finitomata.ExUnit do
           {:->, meta, [[state], {:__block__, meta, unblock(block)}]}
         end)
 
-      do_assert_transition(id, impl, name, event_payload, do: state_assertions_ast)
+      {event_payload,
+       do_assert_transition(id, impl, name, event_payload, do: state_assertions_ast)}
     end)
   end
-
-  # defp escape(contents) do
-  #   Macro.escape(contents, unquote: true)
-  # end
 
   defp event_name({event, _payload}) when is_atom(event), do: event
   defp event_name(event) when is_atom(event), do: event

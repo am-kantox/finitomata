@@ -101,24 +101,22 @@ defmodule Finitomata.ExUnit.Test do
     end
 
     _ = """
-    """
-
     test_path "Test Path Test",
               Case,
               FTL,
               "TestPathAssertionFSM",
               FTL.cast!(%{internals: %{counter: 0}, pid: self()}),
               parent: self() do
-      # test_path "The only path", %{finitomata: %{test_pid: parent}} do
+    """
+
+    test_path "The only path", %{finitomata: %{test_pid: parent}} do
       {:start, self()} ->
         assert_state :started do
           assert_payload do
             internals.counter ~> 1
             pid ~> ^parent
-            # pid ~> context(:__pid__)
           end
 
-          # assert_receive {:on_start, context(:__pid__)}
           assert_receive {:on_start, ^parent}
         end
 
