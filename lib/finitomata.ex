@@ -403,7 +403,7 @@ defmodule Finitomata do
     do: id |> fqn(target) |> GenServer.call({:responds?, event})
 
   @doc """
-  Returns supervision tree of `Finitomata`. The healthy tree has all three `pid`s.`
+  Returns supervision tree of `Finitomata`. The healthy tree has all three `pid`s.
   """
   @spec sup_tree(id()) :: [
           {:supervisor, nil | pid()},

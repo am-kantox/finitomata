@@ -373,6 +373,31 @@ defmodule Finitomata.ExUnit do
     from starting to ending state.
 
   Must be used with a `setup_finitomata/1` callback.
+
+  _Example:_
+
+  ```elixir
+    test_path "The only path", %{finitomata: %{test_pid: parent}} do
+      {:start, self()} ->
+        assert_state :started do
+          assert_payload do
+            internals.counter ~> 1
+            pid ~> ^parent
+          end
+
+          assert_receive {:on_start, ^parent}
+        end
+
+      :do ->
+        assert_state :done do
+          assert_receive :on_do
+        end
+
+        assert_state :* do
+          assert_receive :on_end
+        end
+    end
+  ```
   """
   defmacro test_path(test_name, ctx \\ quote(do: _), do: block) do
     quote generated: true, location: :keep do
