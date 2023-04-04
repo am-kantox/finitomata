@@ -153,6 +153,7 @@ end
 
 ## Changelog
 
+- `0.14.1` — [FIX] Incorrect detection of superfluous determined transitions
 - `0.14.0` — `Finitomata.ExUnit` improvements
 - `0.13.0` — compile-time helpers for _FSM_, `Finitomata.ExUnit`
 - `0.12.1` — `c:Finitomata.on_start/1` callback

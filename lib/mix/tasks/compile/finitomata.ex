@@ -13,9 +13,15 @@ defmodule Mix.Tasks.Compile.Finitomata do
   @impl Compiler
   def run(argv) do
     case Events.start_link() do
-      {:ok, _pid} -> :ok
-      {:error, {:already_started, _pid}} -> IO.warn("`Events` process has been attempted to start twice")
-      {:error, error} -> raise CompileError, description: "Cannot start the `Events` process"
+      {:ok, _pid} ->
+        :ok
+
+      {:error, {:already_started, _pid}} ->
+        IO.warn("`Events` process has been attempted to start twice")
+
+      {:error, error} ->
+        raise CompileError,
+          description: "Cannot start the `Events` process, error: " <> inspect(error)
     end
 
     Compiler.after_compiler(:app, &after_compiler(&1, argv))

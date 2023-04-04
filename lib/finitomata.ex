@@ -595,18 +595,19 @@ defmodule Finitomata do
             |> String.ends_with?("!")
         end)
 
-      hnd = Transition.hard(fsm) -- hard
+      [Transition.hard(fsm), hard]
+      |> Enum.map(fn h -> h |> Enum.map(&elem(&1, 1)) |> Enum.uniq() end)
+      |> Enum.reduce(&Kernel.--/2)
+      |> unless do
+        raise CompileError,
+          description:
+            "transitions marked as `:hard` must be determined, non-determined found: #{inspect(Transition.hard(fsm) -- hard)}"
+      end
 
       hard =
         Enum.map(hard, fn {from, event} ->
           {from, Enum.find(fsm, &match?(%Transition{from: ^from, event: ^event}, &1))}
         end)
-
-      unless Enum.empty?(hnd) do
-        raise CompileError,
-          description:
-            "transitions marked as `:hard` must be determined, non-determined found: #{inspect(hnd)}"
-      end
 
       soft =
         Enum.filter(fsm, fn
