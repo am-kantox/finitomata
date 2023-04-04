@@ -65,7 +65,7 @@ defmodule Finitomata.ExUnit do
 
   @doc """
   Setups `Finitomata` for testing in the case and/or in `ExUnit.Case.describe/2` block.
-    
+
   It would effectively init the _FSM_ with an underlying call to `init_finitomata/5`,
     and put `finitomata` key into `context`, assigning `:test_pid` subkey to the `pid`
     of the running test process, and mixing `:context` content into test context.
@@ -368,58 +368,23 @@ defmodule Finitomata.ExUnit do
     end
   end
 
-  defmacro test_path(test_name, do: block) do
-    guard_ast =
-      quote generated: true, location: :keep do
-        fsm =
-          case ctx do
-            %{finitomata: %{fsm: fsm}} ->
-              IO.inspect(fsm.implementation.__config__(:paths), label: "PATHS")
-              fsm
+  defmacro test_path(test_name, _ctx \\ quote(do: _), do: block) do
+    # guard_ast =
+    #   quote generated: true, location: :keep do
+    #     fsm =
+    #       case ctx do
+    #         %{finitomata: %{fsm: fsm}} ->
+    #           IO.inspect(fsm.implementation.__config__(:paths), label: "PATHS")
+    #           fsm
 
-            other ->
-              raise TestTransitionError,
-                message:
-                  "in order to use `test_path/3` one should declare _FSM_ in `setup_finitomata/1` callback"
-          end
-      end
+    #         other ->
+    #           raise TestTransitionError,
+    #             message:
+    #               "in order to use `test_path/3` one should declare _FSM_ in `setup_finitomata/1` callback"
+    #       end
+    #   end
 
-    transitions =
-      block
-      |> unblock()
-      |> Enum.map(fn {:->, _meta, [[event_payload], state_assertions]} ->
-        state_assertion_ast =
-          state_assertions
-          |> unblock()
-          |> Enum.map(fn {:assert_state, meta, [state, [do: block]]} ->
-            {:->, meta, [[state], {:__block__, meta, unblock(block)}]}
-          end)
-
-        {event_payload, state_assertion_ast}
-        # do_assert_transition(
-        #   id,
-        #   implementation,
-        #   name,
-        #   event_payload,
-        #   do: state_assertion_ast
-        # )
-      end)
-      |> Macro.escape()
-      |> IO.inspect(label: "AST")
-
-    quote do
-      test unquote(test_name), ctx do
-        unquote(guard_ast)
-        IO.inspect(ctx)
-      end
-    end
-
-    #  Finitomata.ExUnit.__path_transitions__(
-    #    block,
-    #    ctx.id,
-    #    ctx.implementation,
-    #    ctx.name
-    #  )
+    # test_path(unquote(test_name), ctx.id, ctx.implementation, ctx.name, do: unquote(block))
   end
 
   @doc false
@@ -427,8 +392,6 @@ defmodule Finitomata.ExUnit do
     do: do_test_path(test_name, id, impl, name, initial_payload, context, do: unblock(block))
 
   defp do_test_path(test_name, id, impl, name, initial_payload, context, do: block) do
-    # IO.inspect({test_name, id, impl, name, initial_payload, context, block}, label: "test_path")
-
     expanded_context = [
       quote do
         init_finitomata(
@@ -443,19 +406,7 @@ defmodule Finitomata.ExUnit do
         end)
     ]
 
-    transitions =
-      block
-      |> unblock()
-      |> Enum.map(fn {:->, _meta, [[event_payload], state_assertions]} ->
-        state_assertions_ast =
-          state_assertions
-          |> unblock()
-          |> Enum.map(fn {:assert_state, meta, [state, [do: block]]} ->
-            {:->, meta, [[state], {:__block__, meta, unblock(block)}]}
-          end)
-
-        do_assert_transition(id, impl, name, event_payload, do: state_assertions_ast)
-      end)
+    transitions = do_test_path_transitions(id, impl, name, do: block)
 
     quote generated: true, location: :keep do
       test unquote(test_name), ctx do
@@ -463,6 +414,21 @@ defmodule Finitomata.ExUnit do
         unquote(transitions)
       end
     end
+  end
+
+  defp do_test_path_transitions(id, impl, name, do: block) do
+    block
+    |> unblock()
+    |> Enum.map(fn {:->, _meta, [[event_payload], state_assertions]} ->
+      state_assertions_ast =
+        state_assertions
+        |> unblock()
+        |> Enum.map(fn {:assert_state, meta, [state, [do: block]]} ->
+          {:->, meta, [[state], {:__block__, meta, unblock(block)}]}
+        end)
+
+      do_assert_transition(id, impl, name, event_payload, do: state_assertions_ast)
+    end)
   end
 
   # defp escape(contents) do
