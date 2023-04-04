@@ -43,6 +43,20 @@ defmodule Finitomata.Test.Transition do
   use Finitomata, fsm: @fsm
 end
 
+defmodule Finitomata.Test.Sequenced do
+  @moduledoc false
+
+  @fsm """
+  idle --> |start| started
+  started --> |accept!| accepted
+  accepted --> |reject!| rejected
+  rejected --> |end| done
+  done --> |end!| ended
+  """
+
+  use Finitomata, fsm: @fsm
+end
+
 defmodule Finitomata.Test.Log do
   @moduledoc false
 

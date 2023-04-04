@@ -45,6 +45,7 @@ defmodule Finitomata.MixProject do
       # {:mox, "~> 1.0", only: [:dev, :test, :ci]},
       {:mox, git: "https://github.com/dashbitco/mox", only: [:dev, :test, :ci]},
       {:stream_data, "~> 0.5", only: [:dev, :test, :ci]},
+      {:observer_cli, "~> 1.5", only: [:dev]},
       {:credo, "~> 1.0", only: [:dev, :ci]},
       {:dialyxir, "~> 1.0", only: [:dev, :ci], runtime: false},
       {:ex_doc, "~> 0.11", only: [:dev]}

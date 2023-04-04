@@ -166,6 +166,70 @@ defmodule Finitomata.Transition do
     do: :transitions |> Transition.exit(transitions) |> Enum.map(& &1.from)
 
   @doc ~S"""
+  Returns all the hard transitions which inevitably lead to the next state
+    (events ending with an exclamation sign,)
+    which makes the _FSM_ to go to the next state with `:continue` callback.
+
+      iex> {:ok, transitions} =
+      ...>   Finitomata.PlantUML.parse("[*] --> entry : start\nentry --> exit : go!\nexit --> [*] : terminate")
+      ...> Finitomata.Transition.hard(transitions)
+      [entry: :go!]
+      ...> Finitomata.Transition.hard(:transitions, transitions)
+      [%Finitomata.Transition{from: :entry, to: :exit, event: :go!}]
+  """
+  @spec hard(:states | :transitions, [t()]) :: Enumerable.t(t()) | [Path.t()]
+  def hard(states \\ :states, transitions)
+
+  def hard(:states, transitions) do
+    :transitions
+    |> hard(transitions)
+    |> Enum.map(&{&1.from, &1.event})
+  end
+
+  def hard(:transitions, transitions) do
+    Enum.filter(transitions, &(event_kind(&1) == :hard))
+  end
+
+  @doc ~S"""
+  Returns the continuation from the state given which inevitably lead to other state(s).
+
+  All the transitions from this state are hard (ending with `!`,)
+    which makes the _FSM_ to go through all these states in `:continue` callbacks.
+
+      iex> {:ok, transitions} =
+      ...>   Finitomata.PlantUML.parse("[*] --> entry : start\nentry --> exit : go!\nexit --> done : finish\ndone --> [*] : terminate")
+      ...> Finitomata.Transition.continuation(:entry, Finitomata.Transition.hard(:transitions, transitions))
+      %Finitomata.Transition.Path{from: :entry, to: :exit, path: [go!: :exit]}
+  """
+  @spec continuation(:states | :transitions, state(), [t()]) :: nil | Path.t() | [t()]
+  def continuation(states \\ :states, from, transitions)
+
+  def continuation(:states, from, transitions) do
+    :transitions
+    |> continuation(from, transitions)
+    |> case do
+      [] -> nil
+      path -> [path] |> to_path() |> hd()
+    end
+  end
+
+  def continuation(:transitions, from, transitions) do
+    do_continuation(from, transitions, [])
+  end
+
+  defp do_continuation(from, transitions, path) do
+    transitions
+    |> Enum.filter(&match?(%Transition{from: ^from}, &1))
+    |> case do
+      [%Transition{from: from, to: to} = t] when from != to ->
+        do_continuation(to, transitions, [t | path])
+
+      _ ->
+        Enum.reverse(path)
+    end
+  end
+
+  @doc ~S"""
   Returns all the states which inevitably lead to the ending one.
 
   All the transitions from these states to the ending one are hard (ending with `!`,)
@@ -176,8 +240,8 @@ defmodule Finitomata.Transition do
       ...> Finitomata.Transition.exiting(transitions)
       [%Finitomata.Transition.Path{from: :entry, to: :*, path: [go!: :exit, terminate: :*]}]
   """
-  @spec exiting(:states | :transitions, [t()]) :: Enumerable.t(t()) | [Path.t()]
-  def exiting(states \\ :states, transitions)
+  @spec exiting(:states | :transitions, [t()]) :: Enumerable.t([t()]) | [Path.t()]
+  def exiting(what \\ :states, transitions)
 
   def exiting(:states, transitions) do
     :transitions
@@ -325,52 +389,56 @@ defmodule Finitomata.Transition do
       iex> Finitomata.Transition.allowed(transitions, from: :s2, with: :to_s2)
       []
   """
-  @spec allowed([t()], [{:from, state()} | {:to, state()} | {:with, event()}]) :: [
+  @spec allowed([t()], [
+          {:from, state()} | {:to, state()} | {:with, event()} | {:as, :states | :transitions}
+        ]) :: [
           {state(), state(), event()}
         ]
   def allowed(transitions, options \\ []) do
+    {as, options} = Keyword.pop(options, :as, :states)
+
     from = List.wrap(options[:from])
     to = List.wrap(options[:to])
     event = List.wrap(options[:with])
 
-    case {from, to, event} do
+    do_allowed(as, {from, to, event}, transitions)
+  end
+
+  defp do_allowed(:states, fte, transitions) do
+    :transitions
+    |> do_allowed(fte, transitions)
+    |> Enum.map(&{&1.from, &1.to, &1.event})
+  end
+
+  defp do_allowed(:transitions, fte, transitions) do
+    case fte do
       {[], [], []} ->
-        for %Transition{from: from, to: to, event: event} <- transitions, do: {from, to, event}
+        transitions
 
       {fa, [], []} ->
-        for %Transition{from: from, to: to, event: event} <- transitions,
-            from in fa,
-            do: {from, to, event}
+        for %Transition{from: from} = t <- transitions, from in fa, do: t
 
       {[], ta, []} ->
-        for %Transition{from: from, to: to, event: event} <- transitions,
-            to in ta,
-            do: {from, to, event}
+        for %Transition{to: to} = t <- transitions, to in ta, do: t
 
       {[], [], ea} ->
-        for %Transition{from: from, to: to, event: event} <- transitions,
-            event in ea,
-            do: {from, to, event}
+        for %Transition{event: event} = t <- transitions, event in ea, do: t
 
       {fa, ta, []} ->
-        for %Transition{from: from, to: to, event: event} <- transitions,
-            from in fa and to in ta,
-            do: {from, to, event}
+        for %Transition{from: from, to: to} = t <- transitions, from in fa and to in ta, do: t
 
       {fa, [], ea} ->
-        for %Transition{from: from, to: to, event: event} <- transitions,
+        for %Transition{from: from, event: event} = t <- transitions,
             from in fa and event in ea,
-            do: {from, to, event}
+            do: t
 
       {[], ta, ea} ->
-        for %Transition{from: from, to: to, event: event} <- transitions,
-            to in ta and event in ea,
-            do: {from, to, event}
+        for %Transition{to: to, event: event} = t <- transitions, to in ta and event in ea, do: t
 
       {fa, ta, ea} ->
-        for %Transition{from: from, to: to, event: event} <- transitions,
+        for %Transition{from: from, to: to, event: event} = t <- transitions,
             from in fa and to in ta and event in ea,
-            do: {from, to, event}
+            do: t
     end
   end
 
@@ -545,6 +613,7 @@ defmodule Finitomata.Transition do
   def events(transitions, true),
     do: transitions |> events(false) |> Enum.reject(&(&1 in ~w|__start__ __end__|a))
 
+  @spec to_path(Enumerable.t([t()])) :: [Path.t()]
   defp to_path(transitions) do
     Enum.map(transitions, fn [%Transition{from: from} | _] = transitions ->
       transitions
