@@ -54,7 +54,7 @@ defmodule Finitomata.MixProject do
 
   defp aliases do
     [
-      quality: ["format", "credo --strict", "dialyzer"],
+      quality: ["format", "credo --strict", "dialyzer --unmatched_returns"],
       "quality.ci": [
         "format --check-formatted",
         "credo --strict",
