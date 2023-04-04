@@ -368,9 +368,9 @@ defmodule Finitomata.ExUnit do
     end
   end
 
-  defmacro test_path(test_name, _ctx \\ quote(do: _), do: block) do
+  defmacro test_path(test_name, ctx \\ quote(do: _), do: block) do
     quote generated: true, location: :keep do
-      test unquote(test_name), ctx do
+      test unquote(test_name), unquote(ctx) = ctx do
         fsm =
           case ctx do
             %{finitomata: %{fsm: fsm}} ->
