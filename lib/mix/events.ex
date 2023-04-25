@@ -14,6 +14,9 @@ defmodule Finitomata.Mix.Events do
         name: __MODULE__
       )
 
+  @spec stop :: :ok
+  def stop, do: Agent.stop(__MODULE__)
+
   @spec all :: state()
   def all, do: Agent.get(__MODULE__, & &1)
 

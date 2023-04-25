@@ -2,7 +2,7 @@ defmodule Finitomata.MixProject do
   use Mix.Project
 
   @app :finitomata
-  @version "0.14.1"
+  @version "0.14.2"
 
   def project do
     [
