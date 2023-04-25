@@ -4,6 +4,7 @@ locals_without_parens = [
   assert_transition: 3,
   assert_transition: 4,
   assert_transition: 5,
+  defstate: 1,
   init_finitomata: 3,
   init_finitomata: 4,
   init_finitomata: 5,
