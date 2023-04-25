@@ -17,7 +17,8 @@ defmodule Mix.Tasks.Compile.Finitomata do
         :ok
 
       {:error, {:already_started, _pid}} ->
-        IO.warn("`Events` process has been attempted to start twice")
+        # IO.warn("`Events` process has been attempted to start twice")
+        :ok
 
       {:error, error} ->
         raise CompileError,
@@ -78,6 +79,7 @@ defmodule Mix.Tasks.Compile.Finitomata do
     Code.put_compiler_option(:tracers, tracers)
 
     %{diagnostics: finitomata_diagnostics} = Events.all()
+    :ok = Events.stop()
 
     {finitomata_status, _full, _added, _removed} = manifest(finitomata_diagnostics)
 
