@@ -325,7 +325,7 @@ defmodule Finitomata do
   - the id of the FSM (optional)
   - the name of the FSM
   - `event` atom or `{event, event_payload}` tuple; the payload will be passed to the respective
-    `on_transition/4` call, payload is `nil` by default 
+    `on_transition/4` call, payload is `nil` by default
   - `delay` (optional) the interval in milliseconds to apply transition after
   """
   @spec transition(
@@ -559,8 +559,10 @@ defmodule Finitomata do
             "allowed `impl_for:` values are: `:all`, `:none`, or any combination of `#{inspect(impls)}`"
       end
 
+      dsl = unquote(options[:fsm])
+
       fsm =
-        case syntax.parse(unquote(options[:fsm])) do
+        case syntax.parse(dsl) do
           {:ok, result} ->
             result
 
@@ -641,6 +643,7 @@ defmodule Finitomata do
       @__config__ %{
         syntax: syntax,
         fsm: fsm,
+        dsl: dsl,
         impl_for: impl_for,
         persistency: persistency,
         listener: listener,
@@ -657,6 +660,16 @@ defmodule Finitomata do
       @__config_keys__ Map.keys(@__config__)
       @__config_soft_events__ Enum.map(soft, & &1.event)
       @__config_hard_states__ Keyword.keys(hard)
+
+      @moduledoc """
+      The instance of _FSM_ backed up by `Finitomata`.
+
+      ## FSM representation
+
+      ```#{@__config__[:syntax] |> Module.split() |> List.last() |> Macro.underscore()}
+      #{@__config__[:syntax].lint(@__config__[:dsl])}
+      ```
+      """
 
       @doc """
       The convenient macro to allow using states in guards, returns a compile-time
@@ -690,32 +703,23 @@ defmodule Finitomata do
       @doc deprecated: "Use `__config__(:events)` instead"
       def events, do: Map.get(@__config__, :events)
 
-      @doc false
-      def start_link(payload: payload, name: name),
-        do: start_link(name: name, payload: payload)
-
       @doc ~s"""
       Starts an _FSM_ alone with `name` and `payload` given.
 
       Usually one does not want to call this directly, the most common way would be
-      to start a `Finitomata` supervision tree with `Finitomata.Supervisor.start_link/1`
-      or even better embed it into the existing supervision tree _and_
-      start _FSM_ with `Finitomata.start_fsm/3` passing `#{inspect(__MODULE__)}` as the first
-      parameter.
-
-      FSM representation
-
-      ```#{@__config__[:syntax] |> Module.split() |> List.last() |> Macro.underscore()}
-      #{@__config__[:syntax].lint(unquote(options[:fsm]))}
-      ```
+      to start a `Finitomata` supervision tree or even better embed it into
+      the existing supervision tree _and_ start _FSM_ with `Finitomata.start_fsm/3`
+      passing `#{inspect(__MODULE__)}` as the first parameter.
       """
+      def start_link(payload: payload, name: name),
+        do: start_link(name: name, payload: payload)
+
       case @__config__[:persistency] do
         nil ->
           def start_link(name: name, payload: payload) do
             GenServer.start_link(__MODULE__, %{name: name, payload: payload}, name: name)
           end
 
-          @doc false
           def start_link(payload),
             do: GenServer.start_link(__MODULE__, %{name: nil, payload: payload})
 

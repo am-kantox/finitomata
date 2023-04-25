@@ -101,6 +101,15 @@ defmodule Finitomata.Hook do
           location: :keep,
           bind_quoted: [module: env.module, file: env.file, line: env.line] do
       states = @__config__[:states]
+      @typedoc """
+      Kind of event which might be send to initiate the transition.
+
+      ## FSM representation
+
+      ```#{@__config__[:syntax] |> Module.split() |> List.last() |> Macro.underscore()}
+      #{@__config__[:syntax].lint(@__config__[:dsl])}
+      ```
+      """
       @type state :: unquote(Enum.reduce(states, &{:|, [], [&1, &2]}))
 
       if :on_transition in @__config__[:impl_for] do

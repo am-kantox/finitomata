@@ -153,6 +153,7 @@ end
 
 ## Changelog
 
+- `0.14.3` — [FIX] Draw diagram in docs
 - `0.14.2` — [FIX] Stop `Events` process
 - `0.14.1` — [FIX] Incorrect detection of superfluous determined transitions
 - `0.14.0` — `Finitomata.ExUnit` improvements
