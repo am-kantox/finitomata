@@ -101,6 +101,7 @@ defmodule Finitomata.Hook do
           location: :keep,
           bind_quoted: [module: env.module, file: env.file, line: env.line] do
       states = @__config__[:states]
+
       @typedoc """
       Kind of event which might be send to initiate the transition.
 
