@@ -1,6 +1,6 @@
-defmodule EctoIntergation do
+defmodule EctoIntegration do
   @moduledoc """
-  Documentation for `EctoIntergation`.
+  Documentation for `EctoIntegration`.
   """
 
   @doc """
@@ -8,7 +8,7 @@ defmodule EctoIntergation do
 
   ## Examples
 
-      iex> EctoIntergation.hello()
+      iex> EctoIntegration.hello()
       :world
 
   """

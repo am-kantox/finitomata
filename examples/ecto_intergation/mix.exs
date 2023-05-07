@@ -1,9 +1,9 @@
-defmodule EctoIntergation.MixProject do
+defmodule EctoIntegration.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :ecto_intergation,
+      app: :ecto_integration,
       version: "0.1.0",
       elixir: "~> 1.12",
       compilers: compilers(Mix.env()),
