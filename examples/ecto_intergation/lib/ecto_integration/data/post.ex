@@ -1,5 +1,5 @@
 defmodule EctoIntegration.Data.Post do
-  @moduledoc "Ecto Schema for the FSM-baked entity"
+  @moduledoc "Ecto Schema for the FSM-backed entity"
   use Ecto.Schema
 
   alias Ecto.Changeset

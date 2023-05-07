@@ -2,7 +2,7 @@ defmodule Finitomata.Persistency do
   @moduledoc """
   The behaviour to be implemented by a persistent storage to be used
     with `Finitomata` (pass the implementation as `persistency: Impl.Module.Name`
-    to `use Finitomate`.)
+    to `use Finitomata`.)
 
   Once declared, the initial state would attempt to load the current state from
     the storage using `load/1` funtcion which should return the `{state, payload}`
