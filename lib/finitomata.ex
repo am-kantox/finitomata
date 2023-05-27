@@ -13,7 +13,7 @@ defmodule Finitomata do
       behaviour(value, funs)
     else
       _ ->
-        {:error, "The behavoiur specified is invalid ‹" <> inspect(value) <> "›"}
+        {:error, "The behaviour specified is invalid ‹" <> inspect(value) <> "›"}
     end
   end
 

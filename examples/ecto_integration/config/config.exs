@@ -1,10 +1,10 @@
 import Config
 
-config :ecto_intergation,
+config :ecto_integration,
   ecto_repos: [EctoIntegration.Repo]
 
-config :ecto_intergation, EctoIntegration.Repo,
-  database: "ecto_intergation_repo",
+config :ecto_integration, EctoIntegration.Repo,
+  database: "ecto_integration_repo",
   username: "postgres",
   password: "postgres",
   hostname: "localhost"
