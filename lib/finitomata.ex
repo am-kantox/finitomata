@@ -105,6 +105,26 @@ defmodule Finitomata do
 
   @using_schema NimbleOptions.new!(using_schema)
 
+  use_finitomata = """
+
+  > ### `use Finitomata` {: .info}
+  >
+  > When you `use Finitomata`, the Finitomata module will
+  > do the following things for your module:
+  >
+  > - set `@behaviour Finitomata`
+  > - compile and validate _FSM_ declaration, passed as `fsm:` keyword argument
+  > - turn the module into `GenServer`
+  > - inject default implementations of optional callbacks specified with
+  >   `impl_for:` keyword argument (default: `:all`)
+  > - expose a bunch of functions to query _FSM_ which would be visible in docs
+  > - leaves `on_transition/4` mandatory callback to be implemeneted by
+  >   the calling module and injects `before_compile` callback to validate
+  >   the implementation (this option required `:finitomata` to be included
+  >   in the list of compilers in `mix.exs`)
+
+  """
+
   doc_options = """
   ## Options to `use Finitomata`
 
@@ -113,7 +133,7 @@ defmodule Finitomata do
 
   doc_readme = "README.md" |> File.read!() |> String.split("\n---") |> Enum.at(1)
 
-  @moduledoc doc_readme <> "\n" <> doc_options
+  @moduledoc Enum.join([doc_readme, use_finitomata, doc_options], "\n\n")
 
   require Logger
 
@@ -426,7 +446,7 @@ defmodule Finitomata do
     do: id |> sup_tree() |> Keyword.values() |> Enum.all?(&(not is_nil(&1)))
 
   @doc """
-  Returns `true` if the FSM specified is alive, `false` otherwise.
+  Returns `true` if the _FSM_ specified is alive, `false` otherwise.
   """
   @spec alive?(any(), fsm_name()) :: boolean()
   def alive?(id \\ nil, target), do: id |> fqn(target) |> GenServer.whereis() |> is_pid()
