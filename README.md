@@ -12,8 +12,8 @@ It reads a description of the FSM from a string in [PlantUML](https://plantuml.c
 
 > ### Syntax Definition {: .tip}
 >
-> `Mermaid` **state diagram** format is literally the same as `PlantUML`, so if you want to use it, specify `syntax: Finitomata.PlantUML` and
-> if you want to use **mermaid graph**, specify `syntax: Finitomata.Mermaid`. The latter is the default.
+> `Mermaid` **state diagram** format is literally the same as `PlantUML`, so if you want to use it, specify `syntax: :state_diagram` and
+> if you want to use **mermaid graph**, specify `syntax: :flowchart`. The latter is the default.
 
 Basically, it looks more or less like this
 
@@ -30,7 +30,7 @@ Basically, it looks more or less like this
     s1 --> |to_s2| s2
     s1 --> |to_s3| s3
 
-> ### Using Mermaid Graph Syntax {: .tip}
+> ### Using `syntax: :flowchart` {: .tip}
 >
 > `Mermaid` does not allow to explicitly specify transitions (and hence event names)
 > from the starting state and to the end state(s), these states names are implicitly set to `:*`
@@ -92,24 +92,24 @@ Let’s define the FSM instance
 
 ```elixir
 defmodule MyFSM do
-  @plantuml """
-  [*] --> s1 : to_s1
-  s1 --> s2 : to_s2
-  s1 --> s3 : to_s3
-  s2 --> [*] : ok
-  s3 --> [*] : ok
+  @fsm """
+  s1 --> |to_s2| s2
+  s1 --> |to_s3| s3
   """
+  use Finitomata, fsm: @fsm, syntax: :flowchart
 
-  use Finitomata, fsm: @plantuml, syntax: Finitomata.PlantUML
-  ## or uncomment lines below for Mermaid syntax
-  # @mermaid """
-  # s1 --> |to_s2| s2
-  # s1 --> |to_s3| s3
+  ## or uncomment lines below for `:state_diagram` syntax
+  # @fsm """
+  # [*] --> s1 : to_s1
+  # s1 --> s2 : to_s2
+  # s1 --> s3 : to_s3
+  # s2 --> [*] : __end__
+  # s3 --> [*] : __end__
   # """
-  # use Finitomata, fsm: @mermaid, syntax: Finitomata.Mermaid
+  # use Finitomata, fsm: @fsm, syntax: :state_diagram
 
   @impl Finitomata
-  def on_transition(:s1, :to_s2, event_payload, state_payload),
+  def on_transition(:s1, :to_s2, _event_payload, state_payload),
     do: {:ok, :s2, state_payload}
 end
 ```
@@ -117,8 +117,8 @@ end
 Now we can play with it a bit.
 
 ```elixir
-children = [Finitomata.child_spec()]
-Supervisor.start_link(children, strategy: :one_for_one)
+# or embed into supervision tree using `Finitomata.child_spec()`
+{:ok, _pid} = Finitomata.start_link()
 
 Finitomata.start_fsm MyFSM, "My first FSM", %{foo: :bar}
 Finitomata.transition "My first FSM", {:to_s2, nil}
@@ -130,7 +130,7 @@ Finitomata.allowed? "My first FSM", :* # state
 Finitomata.responds? "My first FSM", :to_s2 # event
 #⇒ false
 
-Finitomata.transition "My first FSM", {:ok, nil} # to final state
+Finitomata.transition "My first FSM", {:__end__, nil} # to final state
 #⇒ [info]  [◉ ⇄] [state: %Finitomata.State{current: :s2, history: [:s1], payload: %{foo: :bar}}]
 
 Finitomata.alive? "My first FSM"

@@ -673,6 +673,7 @@ defmodule Finitomata do
         events: Transition.events(fsm),
         paths: Transition.paths(fsm),
         loops: Transition.loops(fsm),
+        entry: Transition.entry(:transition, fsm).event,
         hard: hard,
         soft: soft,
         timer: timer
@@ -817,7 +818,8 @@ defmodule Finitomata do
 
         if lifecycle == :loaded,
           do: {:ok, state},
-          else: {:ok, state, {:continue, {:transition, event_payload({:__start__, nil})}}}
+          else:
+            {:ok, state, {:continue, {:transition, event_payload({@__config__[:entry], nil})}}}
       end
 
       @doc false
@@ -903,7 +905,10 @@ defmodule Finitomata do
           end
         else
           {err, false} ->
-            Logger.warning("[⚐ ↹] transition not exists or not allowed (:#{err})")
+            Logger.warning(
+              "[⚐ ↹] transition from #{state.current} with #{event} does not exists or not allowed (:#{err})"
+            )
+
             safe_on_failure(event, payload, state)
             {:noreply, state}
 
