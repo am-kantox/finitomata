@@ -19,8 +19,10 @@ erl_crash.dump
 # Also ignore archive artifacts (built via "mix archive.build").
 *.ez
 
-# Ignore package tarball (built via "mix hex.build").
+# Ignore legacy package tarball (built via "mix hex.build").
 ecto_intergation-*.tar
+# Ignore package tarball (built via "mix hex.build").
+ecto_integration-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/

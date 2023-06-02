@@ -1,6 +1,6 @@
-defmodule EctoIntergation.Test do
+defmodule EctoIntegration.Test do
   use ExUnit.Case
-  doctest EctoIntergation
+  doctest EctoIntegration
 
   alias EctoIntegration.Data.{Post, Post.EventLog}
   alias EctoIntegration.Repo
