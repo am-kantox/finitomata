@@ -113,6 +113,8 @@ defmodule Finitomata.Hook do
       """
       @type state :: unquote(Enum.reduce(states, &{:|, [], [&1, &2]}))
 
+      require Logger
+
       if :on_transition in @__config__[:impl_for] do
         @impl Finitomata
         def on_transition(current, event, event_payload, state_payload) do
