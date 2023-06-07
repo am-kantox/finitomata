@@ -811,9 +811,7 @@ defmodule Finitomata do
             timer: @__config__[:timer],
             payload: payload
           }
-          |> then(fn state ->
-            if lifecycle == :loaded, do: Map.put(state, :current, payload.state), else: state
-          end)
+          |> put_current_state_if_loaded(lifecycle, payload)
 
         :persistent_term.put({Finitomata, state.name}, state.payload)
 
@@ -824,6 +822,10 @@ defmodule Finitomata do
           do: {:ok, state},
           else:
             {:ok, state, {:continue, {:transition, event_payload({@__config__[:entry], nil})}}}
+      end
+
+      defp put_current_state_if_loaded(state, lifecycle, payload) do
+        if lifecycle == :loaded, do: Map.put(state, :current, payload.state), else: state
       end
 
       @doc false
