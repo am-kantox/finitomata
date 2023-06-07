@@ -803,14 +803,17 @@ defmodule Finitomata do
             :ignore -> {lifecycle, payload}
           end
 
-        state = %State{
-          name: name,
-          lifecycle: lifecycle,
-          persistency: Map.get(init_arg, :persistency, nil),
-          timer: @__config__[:timer],
-          payload: payload,
-          current: payload.state
-        }
+        state =
+          %State{
+            name: name,
+            lifecycle: lifecycle,
+            persistency: Map.get(init_arg, :persistency, nil),
+            timer: @__config__[:timer],
+            payload: payload
+          }
+          |> then(fn state ->
+            if lifecycle == :loaded, do: Map.put(state, :current, payload.state), else: state
+          end)
 
         :persistent_term.put({Finitomata, state.name}, state.payload)
 
