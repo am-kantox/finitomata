@@ -93,7 +93,7 @@ defmodule EctoIntegration.Test do
   end
 
   test "loading a persisted struct starts the FSM with correct current state", setup_attrs do
-%{uuid: uuid, post: _post} = setup_attrs
+    %{uuid: uuid, post: _post} = setup_attrs
     post = fn uuid -> Post |> Repo.get(uuid) |> Repo.preload(:event_log) end
     state = &Finitomata.state/1
 
