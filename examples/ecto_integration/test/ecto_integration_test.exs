@@ -5,7 +5,7 @@ defmodule EctoIntegration.Test do
   alias EctoIntegration.Data.{Post, Post.EventLog}
   alias EctoIntegration.Repo
 
-  setup_all do
+  setup do
     uuid = Ecto.UUID.generate()
     post = Post.create(%{id: uuid, title: "Post 1", body: "Body 1"})
 
