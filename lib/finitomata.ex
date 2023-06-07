@@ -808,7 +808,8 @@ defmodule Finitomata do
           lifecycle: lifecycle,
           persistency: Map.get(init_arg, :persistency, nil),
           timer: @__config__[:timer],
-          payload: payload
+          payload: payload,
+          current: payload.state
         }
 
         :persistent_term.put({Finitomata, state.name}, state.payload)
