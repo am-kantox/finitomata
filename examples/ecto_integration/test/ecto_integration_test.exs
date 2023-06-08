@@ -5,7 +5,7 @@ defmodule EctoIntegration.Test do
   alias EctoIntegration.Data.{Post, Post.EventLog}
   alias EctoIntegration.Repo
 
-  setup_all do
+  setup do
     uuid = Ecto.UUID.generate()
     post = Post.create(%{id: uuid, title: "Post 1", body: "Body 1"})
 
@@ -90,5 +90,29 @@ defmodule EctoIntegration.Test do
                event_payload: %{"__retries__" => 1}
              }
            ] = post.(uuid).event_log |> Enum.sort()
+  end
+
+  test "loading a persisted struct starts the FSM with correct current state", setup_attrs do
+    %{uuid: uuid, post: _post} = setup_attrs
+    post = fn uuid -> Post |> Repo.get(uuid) |> Repo.preload(:event_log) end
+    state = &Finitomata.state/1
+
+    # update data in database directly
+    {:ok, published_post} =
+      post.(uuid)
+      |> Ecto.Changeset.cast(%{state: :published}, [:state])
+      |> Repo.update()
+
+    assert published_post.state == :published
+
+    # kill the FSM process
+    pid = Finitomata.fqn(nil, uuid) |> GenServer.whereis()
+    assert is_pid(pid)
+    assert Process.exit(pid, :kill)
+    Process.sleep(100)
+
+    # re-fetch data, which will start the FSM
+    assert post.(uuid).state == :published
+    assert state.(uuid).current == :published
   end
 end
