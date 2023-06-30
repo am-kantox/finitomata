@@ -824,9 +824,10 @@ defmodule Finitomata do
             {:ok, state, {:continue, {:transition, event_payload({@__config__[:entry], nil})}}}
       end
 
-      defp put_current_state_if_loaded(state, lifecycle, payload) do
-        if lifecycle == :loaded, do: Map.put(state, :current, payload.state), else: state
-      end
+      defp put_current_state_if_loaded(state, :loaded, payload),
+        do: Map.put(state, :current, payload.state)
+
+      defp put_current_state_if_loaded(state, _, payload), do: state
 
       @doc false
       @impl GenServer

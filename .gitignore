@@ -30,3 +30,4 @@ finitomata-*.tar
 
 # Elixir LS
 /.elixir_ls/
+/.elixir-tools/
