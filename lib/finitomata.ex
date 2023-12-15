@@ -322,15 +322,33 @@ defmodule Finitomata do
   The arguments are
 
   - the global name of `Finitomata` instance (optional, defaults to `Finitomata`)
-  - the implementation of FSM (the module, having `use Finitomata`)
   - the name of the FSM (might be any term, but it must be unique)
+  - the implementation of FSM (the module, having `use Finitomata`)
   - the payload to be carried in the FSM state during the lifecycle
+
+  Before `v0.15.0` the second and third parameters were expected in different order.
+  This is deprecated and will be removed in `v1.0.0`.
 
   The FSM is started supervised. If the global name/id is given, it should be passed
     to all calls like `transition/4`
   """
   @spec start_fsm(id(), module(), any(), any()) :: DynamicSupervisor.on_start_child()
-  def start_fsm(id \\ nil, impl, name, payload) do
+  def start_fsm(id \\ nil, impl, name, payload)
+
+  def start_fsm(id, impl, name, payload) when is_atom(impl) and not is_atom(name),
+    do: do_start_fsm(id, name, impl, payload)
+
+  def start_fsm(id, name, impl, payload) when is_atom(impl) and not is_atom(name),
+    do: do_start_fsm(id, name, impl, payload)
+
+  def start_fsm(id, ni1, ni2, payload) when is_atom(ni1) and is_atom(ni2) do
+    case {Code.ensure_loaded?(ni1), Code.ensure_loaded?(ni2)} do
+      {true, false} -> do_start_fsm(id, ni2, ni1, payload)
+      {_, true} -> do_start_fsm(id, ni1, ni2, payload)
+    end
+  end
+
+  defp do_start_fsm(id, name, impl, payload) when is_atom(impl) do
     DynamicSupervisor.start_child(
       Finitomata.Supervisor.manager_name(id),
       {impl, name: fqn(id, name), payload: payload}
@@ -376,7 +394,29 @@ defmodule Finitomata do
   end
 
   @doc """
+  Fast check to validate the FSM process with such `id` and `target` exists.
+
+  The arguments are
+
+  - the id of the FSM (optional)
+  - the name of the FSM
+  """
+  @spec lookup(id(), fsm_name()) :: pid() | nil
+  def lookup(id \\ nil, target) do
+    with {:via, registry_impl, {registry, ^target}} <- fqn(id, target),
+         [{pid, _state}] when is_pid(pid) <- registry_impl.lookup(registry, target),
+         do: pid,
+         else: (_ -> nil)
+  end
+
+  @doc """
   The state of the FSM.
+
+  The arguments are
+
+  - the id of the FSM (optional)
+  - the name of the FSM
+  - defines whether the cached state might be returned or should be reloaded
   """
   @spec state(id(), fsm_name(), reload? :: :cached | :payload | :full) ::
           nil | State.t() | State.payload()
@@ -385,7 +425,8 @@ defmodule Finitomata do
   def state(target, reload?, :full) when reload? in ~w|cached payload full|a,
     do: state(nil, target, reload?)
 
-  def state(id, target, reload?), do: id |> fqn(target) |> do_state(reload?)
+  def state(id, target, reload?),
+    do: id |> fqn(target) |> do_state(reload?)
 
   @spec do_state(fqn :: GenServer.name(), reload? :: :cached | :payload | :full) ::
           nil | State.t() | State.payload()
@@ -592,11 +633,16 @@ defmodule Finitomata do
               line: line,
               column: column,
               description: description,
-              snippet: %{content: snippet, offset: 0}
+              snippet: String.trim(snippet)
 
           {:error, error} ->
             raise TokenMissingError,
-              description: "description is incomplete, error: #{error}"
+              file: "lib/finitomata.ex",
+              line: 0,
+              column: 0,
+              opening_delimiter: ~s|"""|,
+              description: "description is incomplete, error: #{inspect(error)}",
+              snippet: dsl
         end
 
       hard =

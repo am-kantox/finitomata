@@ -88,7 +88,7 @@ defmodule Finitomata.Test do
     start_supervised(Finitomata.Supervisor)
     pid = self()
 
-    Finitomata.start_fsm(Timer, :timer, %{pid: pid})
+    Finitomata.start_fsm(:timer, Timer, %{pid: pid})
     assert_receive :on_transition, 500
     assert_receive :on_timer, 500
     assert_receive :on_timer, 500

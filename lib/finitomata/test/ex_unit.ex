@@ -258,6 +258,7 @@ defmodule Finitomata.ExUnit do
       |> unblock()
       |> Enum.map(fn {:->, meta, [[state], conditions]} ->
         line = Keyword.get(meta, :line, 1)
+        file = Keyword.get(meta, :file, "‹unknown›")
 
         assertions =
           conditions
@@ -283,8 +284,15 @@ defmodule Finitomata.ExUnit do
 
               raise TestTransitionError,
                 message:
-                  "clauses in a call to `assert_transition/5` must be either `:ok`, or `payload.inner.struct ~> match`, given:\n" <>
-                    Exception.format_snippet(%{content: content <> " …", offset: 0}, line)
+                  :elixir_errors.format_snippet(
+                    {line, 0},
+                    file,
+                    "clauses in a call to `assert_transition/5` must be either `:ok`, or `payload.inner.struct ~> match`, given:\n",
+                    content <> " …",
+                    :error,
+                    [],
+                    nil
+                  )
           end)
 
         {state, assertions}
