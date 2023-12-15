@@ -43,8 +43,7 @@ defmodule Finitomata.MixProject do
       {:nimble_options, "~> 0.3 or ~> 1.0"},
       {:estructura, "~> 0.5"},
       # dev / test
-      # {:mox, "~> 1.0", only: [:dev, :test, :ci]},
-      {:mox, git: "https://github.com/dashbitco/mox", only: [:dev, :test, :ci]},
+      {:mox, "~> 1.0", only: [:dev, :test, :ci]},
       {:stream_data, "~> 0.5", only: [:dev, :test, :ci]},
       {:observer_cli, "~> 1.5", only: [:dev]},
       {:credo, "~> 1.0", only: [:dev, :ci]},
