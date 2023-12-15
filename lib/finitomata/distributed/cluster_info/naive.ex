@@ -12,9 +12,9 @@ defmodule Finitomata.ClusterInfo.Naive do
   def nodes, do: [node() | Node.list()]
 
   @impl Finitomata.ClusterInfo
-  def whois(id, sticky) do
-    if sticky, do: :rand.seed(:exsss, term_to_seed(id))
-    Enum.random(nodes())
+  def whois(id) do
+    :rand.seed(:exsss, term_to_seed(id))
+    {Enum.random(nodes()), nil}
   end
 
   @spec term_to_seed(term(), integer()) :: integer()

@@ -19,7 +19,7 @@ defmodule Finitomata.ClusterInfo.External do
 
       @impl Finitomata.ClusterInfo
       def whois(id) do
-        unquote(impl).whois(id)
+        {unquote(impl).whois(id), nil}
       end
     end
   end
