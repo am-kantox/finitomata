@@ -19,7 +19,7 @@ defmodule Finitomata.MixProject do
       aliases: aliases(),
       xref: [exclude: []],
       docs: docs(),
-      elixirc_options: [debug_info: Mix.env() == :dev],
+      elixirc_options: [debug_info: Mix.env() in [:dev, :test, :ci]],
       releases: [],
       dialyzer: [
         plt_file: {:no_warn, ".dialyzer/dialyzer.plt"},
