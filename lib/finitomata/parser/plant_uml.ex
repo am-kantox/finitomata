@@ -73,7 +73,7 @@ defmodule Finitomata.PlantUML do
         ]}
   """
   @impl Parser
-  def validate(parsed), do: Finitomata.validate(parsed)
+  def validate(parsed, env \\ __ENV__), do: Finitomata.validate(parsed, env)
 
   @doc ~S"""
       iex> Finitomata.PlantUML.parse("[*] --> s1 : ok\ns2 --> [*] : ko")
@@ -88,17 +88,16 @@ defmodule Finitomata.PlantUML do
         ]}
   """
   @impl Parser
-  def parse(input) do
+  def parse(input, env \\ __ENV__) do
     case fsm(input) do
       {:ok, result, _, _, _, _} ->
-        validate(result)
+        validate(result, env)
 
       {:error, "[line: " <> _ = msg, _rest, context, _, _} ->
         [numbers, msg] = String.split(msg, "|||")
         {numbers, []} = Code.eval_string(numbers)
 
-        {:error, msg, numbers[:rest], context, {numbers[:line], numbers[:column]},
-         numbers[:offset]}
+        {:error, msg, numbers[:content], context, {env.file, env.line, 0}, numbers[:offset]}
 
       error ->
         error
@@ -117,8 +116,11 @@ defmodule Finitomata.PlantUML do
         ) :: {:error, binary()}
 
   defp abort(rest, content, _context, {line, column}, offset) do
-    rest = content |> Enum.reverse() |> Enum.join() |> Kernel.<>(rest)
-    meta = inspect(line: line, column: column, offset: offset, rest: rest)
-    {:error, meta <> "|||malformed FSM transition, expected `from --> to : event`"}
+    content = content |> Enum.reverse() |> Enum.join() |> String.trim()
+    meta = inspect(line: line, column: column, offset: offset, rest: rest, content: content)
+
+    {:error,
+     meta <>
+       "|||malformed FSM transition (line: #{line}, column: #{column - offset}), expected `from --> to : event`"}
   end
 end

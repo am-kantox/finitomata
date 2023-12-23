@@ -70,7 +70,7 @@ defmodule Finitomata.Mermaid do
         ]}
   """
   @impl Parser
-  def validate(parsed) do
+  def validate(parsed, env \\ __ENV__) do
     parsed =
       Enum.map(parsed, fn {:transition, [from, event, to]} -> {:transition, [from, to, event]} end)
 
@@ -85,7 +85,7 @@ defmodule Finitomata.Mermaid do
 
     amended = start_states ++ parsed ++ final_states
 
-    Finitomata.validate(amended)
+    Finitomata.validate(amended, env)
   end
 
   @doc ~S"""
@@ -99,17 +99,16 @@ defmodule Finitomata.Mermaid do
         ]}
   """
   @impl Parser
-  def parse(input) do
+  def parse(input, env \\ __ENV__) do
     case fsm(input) do
       {:ok, result, _, _, _, _} ->
-        validate(result)
+        validate(result, env)
 
       {:error, "[line: " <> _ = msg, _rest, context, _, _} ->
         [numbers, msg] = String.split(msg, "|||")
         {numbers, []} = Code.eval_string(numbers)
 
-        {:error, msg, numbers[:rest], context, {numbers[:line], numbers[:column]},
-         numbers[:offset]}
+        {:error, msg, numbers[:content], context, {env.file, env.line, 0}, numbers[:offset]}
 
       error ->
         error
@@ -132,8 +131,11 @@ defmodule Finitomata.Mermaid do
         ) :: {:error, binary()}
 
   defp abort(rest, content, _context, {line, column}, offset) do
-    rest = content |> Enum.reverse() |> Enum.join() |> Kernel.<>(rest)
-    meta = inspect(line: line, column: column, offset: offset, rest: rest)
-    {:error, meta <> "|||malformed FSM transition, expected `from --> |event| to`"}
+    content = content |> Enum.reverse() |> Enum.join() |> String.trim()
+    meta = inspect(line: line, column: column, offset: offset, rest: rest, content: content)
+
+    {:error,
+     meta <>
+       "|||malformed FSM transition (line: #{line}, column: #{column - offset}), expected `from --> |event| to`"}
   end
 end

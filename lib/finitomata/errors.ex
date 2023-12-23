@@ -30,7 +30,12 @@ defmodule Finitomata.TestTransitionError do
   end
 
   defp hint do
-    "\nIf you do not want to validate anything after entering some states, use " <>
-      "`:state -> :ok` clause.\n"
+    [
+      :yellow,
+      "\n  💡 If you do not want to validate anything after entering some states, use " <>
+        "`:state -> :ok` clause.\n"
+    ]
+    |> IO.ANSI.format()
+    |> to_string()
   end
 end

@@ -137,6 +137,7 @@ defmodule Finitomata do
 
   require Logger
 
+  require IEx
   alias Finitomata.Transition
 
   @typedoc """
@@ -622,27 +623,29 @@ defmodule Finitomata do
 
       dsl = unquote(options[:fsm])
 
+      env = __ENV__
+
       fsm =
-        case syntax.parse(dsl) do
+        case syntax.parse(dsl, env) do
           {:ok, result} ->
             result
 
-          {:error, description, snippet, _, {line, column}, _} ->
+          {:error, description, snippet, _context, {file, line, column}, _offset} ->
             raise SyntaxError,
-              file: "lib/finitomata.ex",
+              file: file,
               line: line,
               column: column,
               description: description,
-              snippet: String.trim(snippet)
+              snippet: snippet
 
           {:error, error} ->
             raise TokenMissingError,
-              file: "lib/finitomata.ex",
-              line: 0,
+              file: env.file,
+              line: env.line,
               column: 0,
               opening_delimiter: ~s|"""|,
               description: "description is incomplete, error: #{inspect(error)}",
-              snippet: dsl
+              snippet: dsl |> String.split("\n", parts: 2) |> hd()
         end
 
       hard =
@@ -1226,9 +1229,9 @@ defmodule Finitomata do
   @type validation_error :: :initial_state | :final_state | :orphan_from_state | :orphan_to_state
 
   @doc false
-  @spec validate([{:transition, [binary()]}]) ::
+  @spec validate([{:transition, [binary()]}], Macro.Env.t()) ::
           {:ok, [Transition.t()]} | {:error, validation_error()}
-  def validate(parsed) do
+  def validate(parsed, _env \\ __ENV__) do
     from_states = parsed |> Enum.map(fn {:transition, [from, _, _]} -> from end) |> Enum.uniq()
     to_states = parsed |> Enum.map(fn {:transition, [_, to, _]} -> to end) |> Enum.uniq()
 

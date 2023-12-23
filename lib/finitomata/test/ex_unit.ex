@@ -250,15 +250,15 @@ defmodule Finitomata.ExUnit do
   ```
   """
   defmacro assert_transition(id \\ nil, impl, name, event_payload, do: block),
-    do: do_assert_transition(id, impl, name, event_payload, do: block)
+    do: do_assert_transition(id, impl, name, event_payload, __CALLER__, do: block)
 
-  defp do_assert_transition(id, impl, name, event_payload, do: block) do
+  defp do_assert_transition(id, impl, name, event_payload, caller, do: block) do
     states_with_assertions =
       block
       |> unblock()
       |> Enum.map(fn {:->, meta, [[state], conditions]} ->
-        line = Keyword.get(meta, :line, 1)
-        file = Keyword.get(meta, :file, "‹unknown›")
+        line = Keyword.get(meta, :line, caller.line)
+        file = Keyword.get(meta, :file, caller.file)
 
         assertions =
           conditions
@@ -280,19 +280,8 @@ defmodule Finitomata.ExUnit do
               [ast]
 
             other ->
-              content = other |> Macro.to_string() |> String.split("\n") |> hd() |> String.trim()
-
-              raise TestTransitionError,
-                message:
-                  :elixir_errors.format_snippet(
-                    {line, 0},
-                    file,
-                    "clauses in a call to `assert_transition/5` must be either `:ok`, or `payload.inner.struct ~> match`, given:\n",
-                    content <> " …",
-                    :error,
-                    [],
-                    nil
-                  )
+              content = other |> Macro.to_string() |> String.split("\n")
+              raise TestTransitionError, message: format_assertion(line, file, content)
           end)
 
         {state, assertions}
@@ -373,6 +362,29 @@ defmodule Finitomata.ExUnit do
       unquote(init_ast)
       unquote(guard_ast)
       unquote(assertion_ast)
+    end
+  end
+
+  if Version.compare(System.version(), "1.16.0") == :lt do
+    defp format_assertion(line, file, [content | _]) do
+      format_assertion(line, file, content)
+    end
+
+    defp format_assertion(line, _file, content) do
+      "clauses in a call to `assert_transition/5` must be either `:ok`, or `payload.inner.struct ~> match`, given:\n" <>
+        Exception.format_snippet(%{content: content, offset: 0}, line)
+    end
+  else
+    defp format_assertion(line, file, content) do
+      Exception.format_snippet(
+        {line, 1},
+        {line + 1, 1},
+        "clauses in a call to `assert_transition/5` must be either `:ok`, or `payload.inner.struct ~> match`, given:\n",
+        file,
+        content,
+        "⇑ unexpected clause",
+        ""
+      )
     end
   end
 
@@ -471,7 +483,7 @@ defmodule Finitomata.ExUnit do
         end)
 
       {event_payload,
-       do_assert_transition(id, impl, name, event_payload, do: state_assertions_ast)}
+       do_assert_transition(id, impl, name, event_payload, __CALLER__, do: state_assertions_ast)}
     end)
   end
 
