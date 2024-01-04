@@ -2,7 +2,7 @@ defmodule Finitomata.MixProject do
   use Mix.Project
 
   @app :finitomata
-  @version "0.15.0"
+  @version "0.15.1"
 
   def project do
     [
@@ -19,7 +19,7 @@ defmodule Finitomata.MixProject do
       aliases: aliases(),
       xref: [exclude: []],
       docs: docs(),
-      elixirc_options: [debug_info: Mix.env() in [:dev, :test, :ci]],
+      # elixirc_options: [debug_info: Mix.env() in [:dev, :test, :ci]],
       releases: [],
       dialyzer: [
         plt_file: {:no_warn, ".dialyzer/dialyzer.plt"},
