@@ -41,7 +41,7 @@ defmodule Finitomata.MixProject do
     [
       {:nimble_parsec, "~> 1.0"},
       {:nimble_options, "~> 0.3 or ~> 1.0"},
-      {:estructura, "~> 0.5"},
+      {:estructura, "~> 1.0"},
       # dev / test
       {:mox, "~> 1.0", only: [:dev, :test, :ci]},
       {:stream_data, "~> 0.5", only: [:dev, :test, :ci]},
