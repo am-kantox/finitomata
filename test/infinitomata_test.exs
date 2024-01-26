@@ -1,7 +1,7 @@
 defmodule InfinitomataTest do
   use ExUnit.Case, async: true
 
-  # alias Finitomata.Test.Listener, as: FTL
+  @moduletag :distributed
 
   setup do
     {_peers, _nodes} = Enfiladex.start_peers(3)
