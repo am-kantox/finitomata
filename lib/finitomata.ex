@@ -193,23 +193,30 @@ defmodule Finitomata do
               history: [],
               last_error: nil
 
+    @doc false
+    def human_readable_name(%State{name: name}, registry? \\ true) do
+      default_registry = Finitomata.Supervisor.registry_name(nil)
+
+      case {registry?, name} do
+        {_, {:via, Registry, {^default_registry, name}}} -> name
+        {false, {:via, Registry, {_, name}}} -> name
+        {true, {:via, Registry, {registry, name}}} -> {registry, name}
+        other -> other
+      end
+    end
+
     defimpl Inspect do
       @moduledoc false
       import Inspect.Algebra
 
-      def inspect(%Finitomata.State{} = state, %Inspect.Opts{} = opts) do
+      alias Finitomata.State
+
+      def inspect(%State{} = state, %Inspect.Opts{} = opts) do
         doc =
           if true == get_in(opts.custom_options, [:full]) do
             state |> Map.from_struct() |> Map.to_list()
           else
-            default_registry = Finitomata.Supervisor.registry_name(nil)
-
-            name =
-              case state.name do
-                {:via, Registry, {^default_registry, name}} -> name
-                {:via, Registry, {registry, name}} -> {registry, name}
-                other -> other
-              end
+            name = State.human_readable_name(state)
 
             persisted? =
               case state.lifecycle do
@@ -881,6 +888,11 @@ defmodule Finitomata do
       @doc false
       @impl GenServer
       def handle_call(:state, _from, state), do: {:reply, state, state}
+
+      @doc false
+      @impl GenServer
+      def handle_call(:name, _from, state),
+        do: {:reply, State.human_readable_name(state, false), state}
 
       @doc false
       @impl GenServer

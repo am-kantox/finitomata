@@ -39,12 +39,12 @@ defmodule Finitomata.Hook do
           concat(["#Finitomata.Hook<", to_doc(inner, opts), ">"])
 
         _ ->
-          args = args |> Macro.to_string() |> String.slice(1..-2)
+          args = args |> Macro.to_string() |> String.slice(1..-2//1)
 
           guards =
             case guards do
               [] -> ""
-              guards -> " when " <> (guards |> Macro.to_string() |> String.slice(1..-2))
+              guards -> " when " <> (guards |> Macro.to_string() |> String.slice(1..-2//1))
             end
 
           concat([" ↹‹#{inspect(module)}.#{fun}(", args, ")", guards, "›"])

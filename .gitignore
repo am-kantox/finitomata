@@ -31,4 +31,5 @@ finitomata-*.tar
 # Elixir LS
 /.elixir_ls/
 /.elixir-tools/
+/.lexical/
 /examples/ecto_integration/.elixir-tools/
