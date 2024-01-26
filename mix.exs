@@ -12,6 +12,8 @@ defmodule Finitomata.MixProject do
       elixir: "~> 1.12",
       compilers: compilers(Mix.env()),
       elixirc_paths: elixirc_paths(Mix.env()),
+      prune_code_paths: Mix.env() == :prod,
+      preferred_cli_env: [{:"enfiladex.suite", :test}],
       consolidate_protocols: Mix.env() not in [:dev, :test],
       description: description(),
       package: package(),
@@ -43,6 +45,7 @@ defmodule Finitomata.MixProject do
       {:nimble_options, "~> 0.3 or ~> 1.0"},
       {:estructura, "~> 0.5 or ~> 1.0"},
       # dev / test
+      {:enfiladex, "~> 0.1", only: [:dev, :test]},
       {:mox, "~> 1.0", only: [:dev, :test, :ci]},
       {:stream_data, "~> 0.5", only: [:dev, :test, :ci]},
       {:observer_cli, "~> 1.5", only: [:dev]},

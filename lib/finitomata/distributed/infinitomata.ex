@@ -25,6 +25,8 @@ defmodule Infinitomata do
     end
   end
 
+  defdelegate count(id), to: Finitomata.Distributed.GroupMonitor
+
   @doc """
   Starts the FSM somewhere in the cluster.
 
@@ -33,14 +35,15 @@ defmodule Infinitomata do
   @doc since: "0.15.0"
   @spec start_fsm(Finitomata.id(), Finitomata.fsm_name(), module(), any()) ::
           DynamicSupervisor.on_start_child()
-  def start_fsm(id \\ nil, target, implementation, payload) do
+  def start_fsm(id \\ __MODULE__, target, implementation, payload) do
     case Sup.get(id, target) do
       nil ->
         {node, nil} = ClusterInfo.whois({id, target})
 
-        case :rpc.call(node, Finitomata, :start_fsm, [id, target, implementation, payload]) do
+        case :rpc.block_call(node, Finitomata, :start_fsm, [id, target, implementation, payload]) do
           {:ok, pid} ->
-            :pg.join(Sup.group(id), pid)
+            # local_pid = :rpc.call(node, :erlang, :list_to_pid, [:erlang.pid_to_list(pid)]).
+            :ok = :rpc.block_call(node, :pg, :join, [Sup.group(id), pid])
             {:ok, pid}
 
           {:badrpc, reason} ->
@@ -65,7 +68,7 @@ defmodule Infinitomata do
           non_neg_integer()
         ) ::
           :ok
-  def transition(id \\ nil, target, event_payload, delay \\ 0),
+  def transition(id \\ __MODULE__, target, event_payload, delay \\ 0),
     do: distributed_call(:transition, id, target, [event_payload, delay])
 
   @doc """
@@ -73,6 +76,8 @@ defmodule Infinitomata do
 
   See `Finitomata.state/3`.
   """
-  def state(id \\ nil, target, reload? \\ :full),
+  def state(id \\ __MODULE__, target, reload? \\ :full),
     do: distributed_call(:state, id, target, reload?)
+
+  defdelegate all(id \\ __MODULE__), to: Finitomata.Distributed.Supervisor
 end
