@@ -23,8 +23,8 @@ jobs:
       matrix:
         include:
           - pair:
-              otp: 24.2
-              elixir: 1.12
+              otp: 25.2
+              elixir: 1.15
           - pair:
               otp: 26.2
               elixir: 1.16
@@ -34,10 +34,14 @@ jobs:
         with:
           otp-version: ${{matrix.pair.otp}}
           elixir-version: ${{matrix.pair.elixir}}
+      - name: "Start empd"
+        run: |
+          epmd -daemon
       - name: "Compile and Test Library"
         run: |
           mix do deps.get, deps.compile, compile
-          mix test
+          mix test --exclude distributed
+          mix test --include distributed
       - name: "Compile and Test Examples"
         run: |
           cd examples/ecto_integration

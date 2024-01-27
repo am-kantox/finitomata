@@ -5,50 +5,27 @@ defmodule Infinitomata do
   @moduledoc since: "v0.15.0"
 
   alias Finitomata.{ClusterInfo, State, Transition}
+  alias Finitomata.Distributed.Supervisor, as: Sup
 
-  @behaviour ClusterInfo
-
-  @impl Finitomata.ClusterInfo
-  @doc false
-  def init(_opts \\ []) do
-    Finitomata.ClusterInfo.init(__MODULE__)
+  def start_link(id \\ __MODULE__) do
+    Sup.start_link(id)
   end
 
-  @impl Finitomata.ClusterInfo
-  @doc false
-  def nodes, do: [node() | Node.list()]
-
-  @impl Finitomata.ClusterInfo
-  @doc false
-  def whois({id, target}) do
-    nodes = nodes()
-
-    nodes
-    |> :erpc.multicall(Finitomata, :lookup, [id, target])
-    |> Enum.zip(nodes)
-    |> Enum.find(&match?({{:ok, pid}, _node} when is_pid(pid), &1))
-    |> case do
-      {{:ok, pid}, node} when is_pid(pid) and is_atom(node) -> {node, pid}
-      nil -> ClusterInfo.whois({id, target})
-    end
+  def child_spec(id \\ __MODULE__) do
+    Supervisor.child_spec({Sup, id}, id: {Sup, id})
   end
 
   defp distributed_call(fun, id, target, args) do
-    {id, target}
-    |> ClusterInfo.whois()
-    |> case do
-      {node, _pid} -> node
+    case Sup.get(id, target) do
+      %{node: node} ->
+        :rpc.call(node, Finitomata, fun, [id, target | List.wrap(args)])
+
+      _ ->
+        {:error, :not_started}
     end
-    |> :rpc.call(Finitomata, fun, [id, target | List.wrap(args)])
-    |> safe_distributed_call(fun, id, target, args)
   end
 
-  defp safe_distributed_call({:badrpc, _}, fun, id, target, args) do
-    with {node, pid} when is_pid(pid) <- whois({id, target}),
-         do: :rpc.call(node, Finitomata, fun, [id, target | List.wrap(args)])
-  end
-
-  defp safe_distributed_call(value, _, _, _, _), do: value
+  defdelegate count(id), to: Finitomata.Distributed.GroupMonitor
 
   @doc """
   Starts the FSM somewhere in the cluster.
@@ -58,15 +35,23 @@ defmodule Infinitomata do
   @doc since: "0.15.0"
   @spec start_fsm(Finitomata.id(), Finitomata.fsm_name(), module(), any()) ::
           DynamicSupervisor.on_start_child()
-  def start_fsm(id \\ nil, target, implementation, payload) do
-    {id, target}
-    |> whois()
-    |> case do
-      {node, pid} when is_pid(pid) and is_atom(node) ->
-        {:error, {:already_started, {node, pid}}}
+  def start_fsm(id \\ __MODULE__, target, implementation, payload) do
+    case Sup.get(id, target) do
+      nil ->
+        {node, nil} = ClusterInfo.whois({id, target})
 
-      _ ->
-        distributed_call(:start_fsm, id, target, [implementation, payload])
+        case :rpc.block_call(node, Finitomata, :start_fsm, [id, target, implementation, payload]) do
+          {:ok, pid} ->
+            # local_pid = :rpc.call(node, :erlang, :list_to_pid, [:erlang.pid_to_list(pid)]).
+            :ok = :rpc.block_call(node, :pg, :join, [Sup.group(id), pid])
+            {:ok, pid}
+
+          {:badrpc, reason} ->
+            {:error, reason}
+        end
+
+      %{node: node, pid: pid} ->
+        {:error, {:already_started, {node, pid}}}
     end
   end
 
@@ -83,7 +68,7 @@ defmodule Infinitomata do
           non_neg_integer()
         ) ::
           :ok
-  def transition(id \\ nil, target, event_payload, delay \\ 0),
+  def transition(id \\ __MODULE__, target, event_payload, delay \\ 0),
     do: distributed_call(:transition, id, target, [event_payload, delay])
 
   @doc """
@@ -91,6 +76,8 @@ defmodule Infinitomata do
 
   See `Finitomata.state/3`.
   """
-  def state(id \\ nil, target, reload? \\ :full),
+  def state(id \\ __MODULE__, target, reload? \\ :full),
     do: distributed_call(:state, id, target, reload?)
+
+  defdelegate all(id \\ __MODULE__), to: Finitomata.Distributed.Supervisor
 end
