@@ -33,3 +33,4 @@ finitomata-*.tar
 /.elixir-tools/
 /.lexical/
 /examples/ecto_integration/.elixir-tools/
+/.tool-versions

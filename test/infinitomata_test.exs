@@ -5,9 +5,7 @@ defmodule InfinitomataTest do
 
   setup do
     {_peers, _nodes} = Enfiladex.start_peers(3)
-
-    [node() | Node.list()] |> Enum.each(&:rpc.block_call(&1, Infinitomata, :start_link, []))
-
+    Enfiladex.block_call_everywhere(Infinitomata, :start_link, [])
     # on_exit(fn -> Enfiladex.stop_peers(peers) end)
   end
 

@@ -7,10 +7,12 @@ defmodule Infinitomata do
   alias Finitomata.{ClusterInfo, State, Transition}
   alias Finitomata.Distributed.Supervisor, as: Sup
 
+  @doc since: "0.16.0"
   def start_link(id \\ __MODULE__) do
     Sup.start_link(id)
   end
 
+  @doc since: "0.16.0"
   def child_spec(id \\ __MODULE__) do
     Supervisor.child_spec({Sup, id}, id: {Sup, id})
   end
@@ -25,6 +27,7 @@ defmodule Infinitomata do
     end
   end
 
+  @doc since: "0.16.0"
   defdelegate count(id), to: Finitomata.Distributed.GroupMonitor
 
   @doc """
@@ -76,8 +79,10 @@ defmodule Infinitomata do
 
   See `Finitomata.state/3`.
   """
+  @doc since: "0.15.0"
   def state(id \\ __MODULE__, target, reload? \\ :full),
     do: distributed_call(:state, id, target, reload?)
 
+  @doc since: "0.16.0"
   defdelegate all(id \\ __MODULE__), to: Finitomata.Distributed.Supervisor
 end
