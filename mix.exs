@@ -9,7 +9,7 @@ defmodule Finitomata.MixProject do
       app: @app,
       name: "Finitomata",
       version: @version,
-      elixir: "~> 1.12",
+      elixir: "~> 1.15",
       compilers: compilers(Mix.env()),
       elixirc_paths: elixirc_paths(Mix.env()),
       prune_code_paths: Mix.env() == :prod,
