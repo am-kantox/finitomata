@@ -23,6 +23,8 @@ defmodule Finitomata.Supervisor do
   def supervisor_name(id \\ nil), do: fq_module(id, Supervisor, true)
   def registry_name(id \\ nil), do: fq_module(id, Registry, true)
   def manager_name(id \\ nil), do: fq_module(id, Manager, true)
+  def infinitomata_name(id \\ nil), do: fq_module(id, Infinitomata, true)
+  def throttler_name(id \\ nil), do: fq_module(id, Throttler, true)
 
   @spec fq_module(id :: any(), who :: any(), atomize? :: boolean()) :: module() | [any()]
   defp fq_module(id, who, false), do: [Finitomata, id, who]

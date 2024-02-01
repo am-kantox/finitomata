@@ -1,4 +1,4 @@
-defmodule InfinitomataTest do
+defmodule Infinitomata.Test do
   use ExUnit.Case, async: true
 
   @moduletag :distributed
@@ -14,13 +14,13 @@ defmodule InfinitomataTest do
       Infinitomata.start_fsm("FSM_#{i}", Finitomata.Test.Log, %{instance: i})
     end
 
-    assert Infinitomata.count(Infinitomata) == 10
+    assert Infinitomata.count() == 10
 
     for i <- 1..10 do
       Infinitomata.transition("FSM_#{i}", :accept)
     end
 
-    assert %{"FSM_1" => %{}} = Infinitomata.all(Infinitomata)
+    assert %{"FSM_1" => %{}} = Infinitomata.all()
 
     for i <- 1..10 do
       Infinitomata.transition("FSM_#{i}", :__end__)
@@ -28,7 +28,7 @@ defmodule InfinitomataTest do
 
     Process.sleep(1_000)
 
-    assert Infinitomata.count(Infinitomata) == 0
-    assert Infinitomata.all(Infinitomata) == %{}
+    assert Infinitomata.count() == 0
+    assert Infinitomata.all() == %{}
   end
 end

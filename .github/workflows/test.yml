@@ -41,7 +41,7 @@ jobs:
         run: |
           mix do deps.get, deps.compile, compile
           mix test --exclude distributed
-          mix test --include distributed
+          mix test --exclude test --include distributed
       - name: "Compile and Test Examples"
         run: |
           cd examples/ecto_integration

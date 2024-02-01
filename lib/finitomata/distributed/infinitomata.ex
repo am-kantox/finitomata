@@ -8,12 +8,15 @@ defmodule Infinitomata do
   alias Finitomata.Distributed.Supervisor, as: Sup
 
   @doc since: "0.16.0"
-  def start_link(id \\ __MODULE__) do
-    Sup.start_link(id)
+  def start_link(id \\ nil) do
+    id
+    |> Finitomata.Supervisor.infinitomata_name()
+    |> Sup.start_link()
   end
 
   @doc since: "0.16.0"
-  def child_spec(id \\ __MODULE__) do
+  def child_spec(id \\ nil) do
+    id = Finitomata.Supervisor.infinitomata_name(id)
     Supervisor.child_spec({Sup, id}, id: {Sup, id})
   end
 
@@ -28,7 +31,20 @@ defmodule Infinitomata do
   end
 
   @doc since: "0.16.0"
-  defdelegate count(id), to: Finitomata.Distributed.GroupMonitor
+  @doc "Count of children"
+  def count(id \\ nil) do
+    id
+    |> Finitomata.Supervisor.infinitomata_name()
+    |> Finitomata.Distributed.GroupMonitor.count()
+  end
+
+  @doc since: "0.16.0"
+  @doc "The full state with all te children, might be a heavy map"
+  def all(id \\ nil) do
+    id
+    |> Finitomata.Supervisor.infinitomata_name()
+    |> Finitomata.Distributed.Supervisor.all()
+  end
 
   @doc """
   Starts the FSM somewhere in the cluster.
@@ -38,7 +54,9 @@ defmodule Infinitomata do
   @doc since: "0.15.0"
   @spec start_fsm(Finitomata.id(), Finitomata.fsm_name(), module(), any()) ::
           DynamicSupervisor.on_start_child()
-  def start_fsm(id \\ __MODULE__, target, implementation, payload) do
+  def start_fsm(id \\ nil, target, implementation, payload) do
+    id = Finitomata.Supervisor.infinitomata_name(id)
+
     case Sup.get(id, target) do
       nil ->
         {node, nil} = ClusterInfo.whois({id, target})
@@ -71,8 +89,10 @@ defmodule Infinitomata do
           non_neg_integer()
         ) ::
           :ok
-  def transition(id \\ __MODULE__, target, event_payload, delay \\ 0),
-    do: distributed_call(:transition, id, target, [event_payload, delay])
+  def transition(id \\ nil, target, event_payload, delay \\ 0) do
+    id = Finitomata.Supervisor.infinitomata_name(id)
+    distributed_call(:transition, id, target, [event_payload, delay])
+  end
 
   @doc """
   The state of the FSM in the cluster.
@@ -80,9 +100,8 @@ defmodule Infinitomata do
   See `Finitomata.state/3`.
   """
   @doc since: "0.15.0"
-  def state(id \\ __MODULE__, target, reload? \\ :full),
-    do: distributed_call(:state, id, target, reload?)
-
-  @doc since: "0.16.0"
-  defdelegate all(id \\ __MODULE__), to: Finitomata.Distributed.Supervisor
+  def state(id \\ nil, target, reload? \\ :full) do
+    id = Finitomata.Supervisor.infinitomata_name(id)
+    distributed_call(:state, id, target, reload?)
+  end
 end

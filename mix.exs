@@ -43,6 +43,7 @@ defmodule Finitomata.MixProject do
     [
       {:nimble_parsec, "~> 1.0"},
       {:nimble_options, "~> 0.3 or ~> 1.0"},
+      {:gen_stage, "~> 1.0"},
       {:estructura, "~> 0.5 or ~> 1.0"},
       # dev / test
       {:enfiladex, "~> 0.1", only: [:dev, :test]},
@@ -116,8 +117,8 @@ defmodule Finitomata.MixProject do
   defp compilers(_), do: Mix.compilers()
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
-  defp elixirc_paths(:ci), do: ["lib", "test/support"]
-  defp elixirc_paths(:dev), do: ["lib", "test/support"]
+  defp elixirc_paths(:ci), do: ["lib"]
+  defp elixirc_paths(:dev), do: ["lib"]
   defp elixirc_paths(_), do: ["lib"]
 
   defp before_closing_body_tag(:html) do
