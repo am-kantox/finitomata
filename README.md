@@ -153,6 +153,7 @@ end
 
 ## Changelog
 
+- `0.17.0` — [UPD] careful naming and `Finitomata.Throttler`
 - `0.16.0` — [UPD] `Infinitomata` as a self-contained distributed implementation leveraging `:pg`
 - `0.15.0` — [UPD] support snippet formatting for modern Elixir
 - `0.14.6` — [FIX] persistency flaw when loading [credits @peaceful-james]
