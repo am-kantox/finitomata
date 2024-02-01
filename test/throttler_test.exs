@@ -34,8 +34,8 @@ defmodule Finitomata.Throttler.Test do
 
     [long | shorts] = throttlers |> Enum.map(& &1.duration) |> Enum.sort() |> Enum.reverse()
 
-    assert long > 1_000_000
-    assert Enum.all?(shorts, &(&1 <= 1_000_000))
+    assert long > 1_100_000
+    assert Enum.all?(shorts, &(&1 <= 1_100_000))
   end
 
   test "Throttling (function)" do

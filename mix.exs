@@ -96,7 +96,7 @@ defmodule Finitomata.MixProject do
       assets: "stuff/images",
       extras: ~w[README.md stuff/fsm.md stuff/compiler.md],
       groups_for_modules: [
-        FSM: [Finitomata, Infinitomata, Finitomata.ExUnit],
+        FSM: [Finitomata, Infinitomata, Finitomata.Throttler, Finitomata.ExUnit],
         Internals: [
           Finitomata.Listener,
           Finitomata.Parser,
