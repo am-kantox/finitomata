@@ -738,15 +738,17 @@ defmodule Finitomata do
       @__config_soft_events__ Enum.map(soft, & &1.event)
       @__config_hard_states__ Keyword.keys(hard)
 
-      @moduledoc """
-      The instance of _FSM_ backed up by `Finitomata`.
+      if @moduledoc != false do
+        @moduledoc """
+                   The instance of _FSM_ backed up by `Finitomata`.
 
-      ## FSM representation
+                   ## FSM representation
 
-      ```#{@__config__[:syntax] |> Module.split() |> List.last() |> Macro.underscore()}
-      #{@__config__[:syntax].lint(@__config__[:dsl])}
-      ```
-      """
+                   ```#{@__config__[:syntax] |> Module.split() |> List.last() |> Macro.underscore()}
+                   #{@__config__[:syntax].lint(@__config__[:dsl])}
+                   ```
+                   """ <> if(is_nil(@moduledoc), do: "", else: "\n---\n" <> @moduledoc)
+      end
 
       @doc """
       The convenient macro to allow using states in guards, returns a compile-time
@@ -758,7 +760,7 @@ defmodule Finitomata do
       end
 
       @doc """
-      Getter for the internal compiled in _FSM_ information.
+      Getter for the internal compiled-in _FSM_ information.
       """
       @spec __config__(atom()) :: any()
       def __config__(key) when key in @__config_keys__,
@@ -785,8 +787,10 @@ defmodule Finitomata do
 
       Usually one does not want to call this directly, the most common way would be
       to start a `Finitomata` supervision tree or even better embed it into
-      the existing supervision tree _and_ start _FSM_ with `Finitomata.start_fsm/3`
+      the existing supervision tree _and_ start _FSM_ with `Finitomata.start_fsm/4`
       passing `#{inspect(__MODULE__)}` as the first parameter.
+
+      For distributed applications, use `Infinitomata.start_fsm/4` instead.
       """
       def start_link(payload: payload, name: name),
         do: start_link(name: name, payload: payload)
@@ -815,7 +819,7 @@ defmodule Finitomata do
           case err do
             %{__exception__: true} ->
               {ex, st} = Exception.blame(:error, err, __STACKTRACE__)
-              Logger.debug(Exception.format(:error, ex, st))
+              Logger.warning(Exception.format(:error, ex, st))
               {:error, Exception.message(err)}
 
             _ ->

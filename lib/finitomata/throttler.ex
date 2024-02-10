@@ -10,6 +10,24 @@ defmodule Finitomata.Throttler do
     `{Finitomata.Throttler, name: name, initial: [], max_demand: 3, interval: 1_000}`
     to start a throttling process and `Finitomata.Throttler.call/3` to perform throttled
     synchronous calls from different processes.
+
+  ### Usage
+
+  ```elixir
+  {:ok, pid} = Finitomata.Throttler.start_link(name: Throttler)
+
+  Finitomata.Throttler.call(Throttler, {IO, :inspect, [42]})
+  42
+
+  #⇒ %Finitomata.Throttler{
+  #   from: {#PID<0.335.0>, #Reference<0.3154300821.2643722246.59214>},
+  #   fun: {IO, :inspect},
+  #   args: ~c"*",
+  #   result: 42,
+  #   duration: 192402,
+  #   payload: nil
+  # }  
+  ```
   """
 
   @typedoc "The _in/out_ parameter for calls to `Finitomata.Throttler.call/3`"
@@ -91,8 +109,10 @@ defmodule Finitomata.Throttler do
     collects the results, and then returns them to the caller.
 
   The function might be given as `t:Finitomata.Throttler.t/0` or
-    in a simplified form as `{function_of_arity_1, arg}`.
+    in a simplified form as `{function_of_arity_1, arg}` or `{mod, fun, args}`.
   """
+  @spec call(Finitomata.id(), t() | {(any() -> any()), arg} | {module(), atom(), [arg]}) :: any()
+        when arg: any()
   def call(name \\ nil, request, timeout \\ :infinity)
 
   def call(name, requests, timeout) when is_list(requests) do

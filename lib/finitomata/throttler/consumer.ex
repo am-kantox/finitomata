@@ -5,8 +5,8 @@ defmodule Finitomata.Throttler.Consumer do
   alias Finitomata.Throttler
 
   @throttler_options Application.compile_env(:finitomata, :throttler, [])
-  @max_demand Keyword.get(@throttler_options, :max_demand, 10)
-  @interval Keyword.get(@throttler_options, :interval, 1000)
+  @max_demand Keyword.get(@throttler_options, :max_demand, 5)
+  @interval Keyword.get(@throttler_options, :interval, 400)
 
   def start_link(initial \\ :ok),
     do: GenStage.start_link(__MODULE__, initial)
@@ -87,6 +87,7 @@ defmodule Finitomata.Throttler.Consumer do
         case fun do
           f when is_function(f, 0) -> f.()
           f when is_function(f, 1) -> f.(args)
+          {mod, fun} when is_atom(mod) and is_atom(fun) -> apply(mod, fun, args)
         end
 
       case from do

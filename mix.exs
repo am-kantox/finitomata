@@ -2,7 +2,7 @@ defmodule Finitomata.MixProject do
   use Mix.Project
 
   @app :finitomata
-  @version "0.17.0"
+  @version "0.17.1"
 
   def project do
     [
@@ -118,7 +118,7 @@ defmodule Finitomata.MixProject do
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(:ci), do: ["lib"]
-  defp elixirc_paths(:dev), do: ["lib"]
+  defp elixirc_paths(:dev), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
   defp before_closing_body_tag(:html) do

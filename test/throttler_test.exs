@@ -32,10 +32,13 @@ defmodule Finitomata.Throttler.Test do
              %Finitomata.Throttler{args: [value: 11]}
            ] = throttlers = Finitomata.Throttler.call(Throttler, Enum.to_list(1..11))
 
-    [long | shorts] = throttlers |> Enum.map(& &1.duration) |> Enum.sort() |> Enum.reverse()
+    [long, middle, _, _, _, middle_last, short, _, _, _, short_last] =
+      throttlers |> Enum.map(& &1.duration) |> Enum.sort() |> Enum.reverse()
 
-    # assert long > 1_000_100
-    # assert Enum.all?(shorts, &(&1 <= 1_000_100))
+    refute_in_delta(long, middle, 100_000)
+    refute_in_delta(middle, short, 100_000)
+    assert_in_delta(middle, middle_last, 100_000)
+    assert_in_delta(short, short_last, 100_000)
   end
 
   test "Throttling (function)" do

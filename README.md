@@ -17,7 +17,7 @@ It reads a description of the FSM from a string in [PlantUML](https://plantuml.c
 
 Basically, it looks more or less like this
 
-### `PlantUML`
+### `PlantUML` / `:state_diagram`
 
     [*] --> s1 : to_s1
     s1 --> s2 : to_s2
@@ -25,7 +25,7 @@ Basically, it looks more or less like this
     s2 --> [*] : ok
     s3 --> [*] : ok
 
-### `Mermaid`
+### `Mermaid` / `:flowchart`
 
     s1 --> |to_s2| s2
     s1 --> |to_s3| s3
@@ -36,9 +36,9 @@ Basically, it looks more or less like this
 > from the starting state and to the end state(s), these states names are implicitly set to `:*`
 > and events to `:__start__` and `:__end__` respectively.
 
-`Finitomata` validates the FSM is consistent, namely it has a single initial state, one or more final states, and no orphan states. If everything is OK, it generates a `GenServer` that could be used both alone, and with provided supervision tree. This `GenServer` requires to implement three callbacks
+`Finitomata` validates the FSM is consistent, namely it has a single initial state, one or more final states, and no orphan states. If everything is OK, it generates a `GenServer` that could be used both alone, and with provided supervision tree. This `GenServer` requires to implement six callbacks
 
-- `on_transition/4` — mandatory
+- `on_transition/4` — **mandatory**
 - `on_failure/3` — optional
 - `on_enter/2` — optional
 - `on_exit/2` — optional

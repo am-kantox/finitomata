@@ -30,8 +30,16 @@ defmodule Finitomata.Throttler.Producer do
       %Throttler{} = t ->
         %Throttler{t | from: from, duration: DateTime.utc_now(:microsecond)}
 
-      {fun, args} when is_function(fun, 1) and is_list(args) ->
+      {fun, args} when is_function(fun, 1) ->
         %Throttler{from: from, fun: fun, args: args, duration: DateTime.utc_now(:microsecond)}
+
+      {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
+        %Throttler{
+          from: from,
+          fun: {mod, fun},
+          args: args,
+          duration: DateTime.utc_now(:microsecond)
+        }
 
       fun when is_function(fun, 0) ->
         %Throttler{from: from, fun: fun, args: [], duration: DateTime.utc_now(:microsecond)}
