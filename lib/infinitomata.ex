@@ -1,6 +1,26 @@
 defmodule Infinitomata do
   @moduledoc """
   The sibling of `Finitomata`, but runs transparently in the cluster.
+
+  If you want to use a _stateful consistent hash ring_ like [`libring`](https://hexdocs.pm/libring),
+    implement the behaviour `Finitomata.ClusterInfo` wrapping calls to it and 
+    invoke `Finitomata.ClusterInfo.init(Impl)` before using `Infinitomata.start_fsm/4`.
+
+  The example of such an implementation for `libring` (assuming the named ring `@ring`
+    has been started in the supervision tree) follows.
+
+  ```elixir
+  defmodule MyApp.ClusterInfo do
+    @moduledoc false
+    @behaviour Finitomata.ClusterInfo
+
+    @impl Finitomata.ClusterInfo
+    def nodes, do: HashRing.nodes(@ring)
+
+    @impl Finitomata.ClusterInfo
+    def whois(id), do: HashRing.key_to_node(@ring, id) 
+  end
+  ```
   """
   @moduledoc since: "v0.15.0"
 
@@ -61,7 +81,7 @@ defmodule Infinitomata do
 
     case InfSup.get(id, target) do
       nil ->
-        {node, nil} = ClusterInfo.whois({id, target})
+        node = ClusterInfo.whois({id, target})
 
         case :rpc.block_call(node, Finitomata, :start_fsm, [id, target, implementation, payload]) do
           {:ok, pid} ->

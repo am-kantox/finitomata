@@ -3,18 +3,12 @@ defmodule Finitomata.ClusterInfo.Naive do
   @behaviour Finitomata.ClusterInfo
 
   @impl Finitomata.ClusterInfo
-  def init(seed) do
-    :rand.seed(:exsss, seed)
-    Finitomata.ClusterInfo.init(__MODULE__)
-  end
-
-  @impl Finitomata.ClusterInfo
   def nodes, do: [node() | Node.list()]
 
   @impl Finitomata.ClusterInfo
   def whois(id) do
     :rand.seed(:exsss, term_to_seed(id))
-    {Enum.random(nodes()), nil}
+    Enum.random(nodes())
   end
 
   @spec term_to_seed(term(), integer()) :: integer()
@@ -25,7 +19,6 @@ defmodule Finitomata.ClusterInfo.Naive do
     |> :binary.encode_hex()
     |> Integer.parse(16)
     |> case do
-      {result, ""} -> result
       {result, _tail} -> result
       :error -> default
     end
