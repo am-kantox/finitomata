@@ -40,6 +40,6 @@ defmodule Finitomata.Pool.Test do
       |> Enum.uniq()
       |> Enum.count()
 
-    assert count_of_processes == 8
+    assert count_of_processes == System.schedulers_online()
   end
 end
