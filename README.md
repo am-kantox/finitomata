@@ -153,6 +153,7 @@ end
 
 ## Changelog
 
+- `0.18.0` — [UPD] asynchronous `Finitomata.Pool` on top of `Infinitomata` 
 - `0.17.0` — [UPD] careful naming and `Finitomata.Throttler`
 - `0.16.0` — [UPD] `Infinitomata` as a self-contained distributed implementation leveraging `:pg`
 - `0.15.0` — [UPD] support snippet formatting for modern Elixir
