@@ -58,6 +58,7 @@ defmodule Finitomata.MixProject do
 
   defp aliases do
     [
+      test: ["test --exclude distributed", "test --exclude test include distributed"],
       quality: ["format", "credo --strict", "dialyzer --unmatched_returns"],
       "quality.ci": [
         "format --check-formatted",

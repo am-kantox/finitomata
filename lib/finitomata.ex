@@ -131,6 +131,20 @@ defmodule Finitomata do
   #{NimbleOptions.docs(@using_schema)}
   """
 
+  use_defstate = """
+  ## State as Nested structure
+
+  For convenience, one might use `defshape/1` macro, turning the `Finitomata`
+    instance into `Estructura.Nested`, with such options as _coercion_, _validation,
+    and _generation_. The example of usage would be:
+
+  ```elixir
+  use Finitomata, ...
+
+  defshape %{value: :integer, retries: %{attempts: :integer, errors: [:string]}}
+  ```    
+  """
+
   doc_readme = "README.md" |> File.read!() |> String.split("\n---") |> Enum.at(1)
 
   @moduledoc Enum.join([doc_readme, use_finitomata, doc_options], "\n\n")
@@ -264,10 +278,10 @@ defmodule Finitomata do
   This callback will be called from each transition processor.
   """
   @callback on_transition(
-              Transition.state(),
-              Transition.event(),
-              event_payload(),
-              State.payload()
+              current_state :: Transition.state(),
+              event :: Transition.event(),
+              event_payload :: event_payload(),
+              state_payload :: State.payload()
             ) :: transition_resolution()
 
   @doc """
@@ -281,36 +295,40 @@ defmodule Finitomata do
   `{:ok, new_payload}` prevents the _FSM_ from automatically getting into start state,
     and the respective transition must be called manually.
   """
-  @callback on_start(State.payload()) ::
+  @callback on_start(state :: State.payload()) ::
               {:continue, State.payload()} | {:ok, State.payload()} | :ignore
 
   @doc """
   This callback will be called if the transition failed to complete to allow
   the consumer to take an action upon failure.
   """
-  @callback on_failure(Transition.event(), event_payload(), State.t()) :: :ok
+  @callback on_failure(
+              event :: Transition.event(),
+              event_payload :: event_payload(),
+              state :: State.t()
+            ) :: :ok
 
   @doc """
   This callback will be called on entering the state.
   """
-  @callback on_enter(Transition.state(), State.t()) :: :ok
+  @callback on_enter(current_state :: Transition.state(), state :: State.t()) :: :ok
 
   @doc """
   This callback will be called on exiting the state.
   """
-  @callback on_exit(Transition.state(), State.t()) :: :ok
+  @callback on_exit(current_state :: Transition.state(), state :: State.t()) :: :ok
 
   @doc """
   This callback will be called on transition to the final state to allow
   the consumer to perform some cleanup, or like.
   """
-  @callback on_terminate(State.t()) :: :ok
+  @callback on_terminate(state :: State.t()) :: :ok
 
   @doc """
   This callback will be called recurrently if `timer: pos_integer()`
     option has been given to `use Finitomata`.
   """
-  @callback on_timer(Transition.state(), State.t()) ::
+  @callback on_timer(current_state :: Transition.state(), state :: State.t()) ::
               :ok
               | {:ok, State.payload()}
               | {:transition, {Transition.event(), event_payload()}, State.payload()}

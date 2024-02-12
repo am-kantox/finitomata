@@ -34,6 +34,20 @@ defmodule Finitomata.Supervisor do
     |> fq_module(who, false)
     |> Enum.reject(&is_nil/1)
     |> Enum.map(&inspect/1)
-    |> Module.concat()
+    |> smart_concat()
+  end
+
+  defp smart_concat([fqn]), do: Module.concat([fqn])
+
+  defp smart_concat([fqn, id_who]) do
+    if String.starts_with?(id_who, fqn),
+      do: Module.concat([id_who]),
+      else: Module.concat([fqn, id_who])
+  end
+
+  defp smart_concat([fqn, id, who]) do
+    if String.starts_with?(id, fqn),
+      do: Module.concat([id, who]),
+      else: Module.concat([fqn, id, who])
   end
 end

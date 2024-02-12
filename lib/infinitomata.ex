@@ -22,7 +22,7 @@ defmodule Infinitomata do
   end
   ```
   """
-  @moduledoc since: "v0.15.0"
+  @moduledoc since: "0.15.0"
 
   alias Finitomata.{ClusterInfo, State, Transition}
   alias Finitomata.Distributed.GroupMonitor, as: InfMon
@@ -66,6 +66,16 @@ defmodule Infinitomata do
     id
     |> FinSup.infinitomata_name()
     |> InfSup.all()
+  end
+
+  @doc since: "0.18.0"
+  @doc "Returns the random _FSM_ from the pool"
+  def random(id \\ nil) do
+    id
+    |> FinSup.infinitomata_name()
+    |> InfSup.all()
+    |> Map.keys()
+    |> Enum.random()
   end
 
   @doc """

@@ -10,10 +10,10 @@ defmodule Finitomata.Test.Listener do
 
   use Finitomata, fsm: @fsm, auto_terminate: true, listener: Finitomata.Test.Listener.Mox
 
-  defstate(%{
+  defstate %{
     pid: {StreamData, :constant, [self()]},
-    internals: %{counter: {StreamData, :integer, []}}
-  })
+    internals: %{counter: :integer}
+  }
 
   @impl Finitomata
   def on_start(state), do: {:continue, put_in(state, [:internals, :counter], 0)}
