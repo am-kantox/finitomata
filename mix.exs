@@ -48,7 +48,7 @@ defmodule Finitomata.MixProject do
       # dev / test
       {:enfiladex, "~> 0.1", only: [:dev, :test]},
       {:mox, "~> 1.0", only: [:dev, :test, :ci]},
-      {:stream_data, "~> 0.5", only: [:dev, :test, :ci]},
+      {:stream_data, "~> 0.5"},
       {:observer_cli, "~> 1.5", only: [:dev]},
       {:credo, "~> 1.0", only: [:dev, :ci]},
       {:dialyxir, "~> 1.0", only: [:dev, :ci], runtime: false},
@@ -97,9 +97,10 @@ defmodule Finitomata.MixProject do
       assets: "stuff/images",
       extras: ~w[README.md stuff/fsm.md stuff/compiler.md],
       groups_for_modules: [
-        FSM: [Finitomata, Infinitomata, Finitomata.Throttler, Finitomata.ExUnit],
+        FSM: [Finitomata, Infinitomata, Finitomata.Throttler, Finitomata.Pool, Finitomata.ExUnit],
         Internals: [
           Finitomata.Listener,
+          Finitomata.ClusterInfo,
           Finitomata.Parser,
           Finitomata.State,
           Finitomata.Transition,
