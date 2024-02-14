@@ -34,6 +34,7 @@ defmodule Infinitomata do
     id
     |> FinSup.infinitomata_name()
     |> InfSup.start_link()
+    |> tap(fn _ -> synch(id) end)
   end
 
   @doc since: "0.16.0"
@@ -76,6 +77,12 @@ defmodule Infinitomata do
     |> InfSup.all()
     |> Map.keys()
     |> Enum.random()
+  end
+
+  @doc since: "0.19.0"
+  @doc "Synchronizes the local `Infinitomata` instance with the cluster"
+  def synch(id \\ nil) do
+    InfSup.synch(id, FinSup.infinitomata_name(id))
   end
 
   @doc """
