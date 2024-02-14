@@ -3,24 +3,28 @@ defmodule Finitomata.Pool.Test do
 
   doctest Finitomata.Pool
 
-  def actor(arg) when is_atom(arg) do
+  @behaviour Finitomata.Pool.Actor
+
+  @impl Finitomata.Pool.Actor
+  def actor(arg, _state) when is_atom(arg) do
     {:ok, arg}
   end
 
-  def actor(_arg) do
+  def actor(_arg, _state) do
     {:error, "Atom required"}
   end
 
+  @impl Finitomata.Pool.Actor
   def on_result(atom), do: Atom.to_string(atom)
 
   setup do
     pool =
       start_supervised!(
         Finitomata.Pool,
-        Finitomata.Pool.pool_spec(id: Pool, actor: &actor/1, on_result: &on_result/1)
+        Finitomata.Pool.pool_spec(id: Pool, implementation: __MODULE__)
       )
 
-    Finitomata.Pool.initialize(Pool, nil)
+    Finitomata.Pool.initialize(Pool, %{foo: 42})
 
     %{pool: pool}
   end

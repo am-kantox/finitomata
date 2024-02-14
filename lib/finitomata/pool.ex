@@ -29,10 +29,24 @@ defmodule Finitomata.Pool do
 
   use Finitomata, fsm: @fsm, auto_terminate: true
 
+  @typedoc "The simple actor function in the pool"
+  @type naive_actor :: (term() -> {:ok, term()} | {:error, any()})
+
+  @typedoc "The actor function in the pool, receiving the state as a second argument"
+  @type responsive_actor ::
+          (term(), Finitomata.State.payload() -> {:ok, term()} | {:error, any()})
+
   @typedoc "The actor function in the pool"
-  @type actor ::
-          (term() -> {:ok, term()} | {:error, any()})
-          | (term(), Finitomata.State.payload() -> {:ok, term()} | {:error, any()})
+  @type actor :: naive_actor() | responsive_actor()
+
+  @typedoc "The simple handler of result/error in the pool"
+  @type naive_handler :: (term() -> any())
+
+  @typedoc "The actor function in the pool, receiving the state as a second argument"
+  @type responsive_handler :: (term(), Finitomata.State.payload() -> any())
+
+  @typedoc "The handler function in the pool"
+  @type handler :: naive_handler() | responsive_handler()
 
   defstate %{
     actor: {StreamData, :constant, &Function.identity/1},
@@ -62,15 +76,34 @@ defmodule Finitomata.Pool do
   @spec start_pool(
           id :: Finitomata.id(),
           count :: pos_integer(),
-          keyword()
+          [{:actor, actor()} | {:on_error, handler()} | {:on_result, handler()}]
           | %{
               required(:actor) => actor(),
-              optional(:on_error) => (any() -> any()),
-              optional(:on_result) => (any() -> any())
+              optional(:on_error) => handler(),
+              optional(:on_result) => handler()
             }
+          | [{:implementation, module()}]
+          | %{required(:implementation) => module()}
         ) ::
           GenServer.on_start()
   def start_pool(id, count, state) when is_list(state), do: start_pool(id, count, Map.new(state))
+
+  def start_pool(id, count, %{implementation: impl}) do
+    state =
+      %{actor: &impl.actor/2}
+      |> then(fn spec ->
+        if function_exported?(impl, :on_result, 1),
+          do: Map.put(spec, :on_result, &impl.on_result/1),
+          else: spec
+      end)
+      |> then(fn spec ->
+        if function_exported?(impl, :on_error, 1),
+          do: Map.put(spec, :on_error, &impl.on_error/1),
+          else: spec
+      end)
+
+    start_pool(id, count, state)
+  end
 
   def start_pool(id, count, %{actor: actor} = state)
       when is_function(actor, 1) or is_function(actor, 2) do

@@ -2,7 +2,7 @@ defmodule Finitomata.MixProject do
   use Mix.Project
 
   @app :finitomata
-  @version "0.18.0"
+  @version "0.18.1"
 
   def project do
     [
@@ -102,6 +102,7 @@ defmodule Finitomata.MixProject do
           Finitomata.Listener,
           Finitomata.ClusterInfo,
           Finitomata.Parser,
+          Finitomata.Pool.Actor,
           Finitomata.State,
           Finitomata.Transition,
           Finitomata.Transition.Path
