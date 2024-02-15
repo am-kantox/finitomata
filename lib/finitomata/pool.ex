@@ -77,7 +77,7 @@ defmodule Finitomata.Pool do
           GenServer.on_start()
   def start_pool(opts \\ []) do
     {id, opts} = Keyword.pop(opts, :id)
-    {count, opts} = Keyword.pop(opts, :id, @pool_size)
+    {count, opts} = Keyword.pop(opts, :count, @pool_size)
     start_pool(id, count, opts)
   end
 
