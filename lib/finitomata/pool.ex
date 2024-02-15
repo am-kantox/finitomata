@@ -22,6 +22,7 @@ defmodule Finitomata.Pool do
 
   @fsm """
   idle --> |init| ready
+  idle --> |do| ready
   ready --> |do| ready
   ready --> |stop| done
   """
@@ -186,7 +187,8 @@ defmodule Finitomata.Pool do
   end
 
   @doc false
-  def on_transition(:ready, :do, {pid, payload}, %{actor: actor} = state) do
+  def on_transition(current, :do, {pid, payload}, %{actor: actor} = state)
+      when current in ~w|idle ready|a do
     state =
       case invoke(actor, payload, state.payload) do
         {:ok, result} ->

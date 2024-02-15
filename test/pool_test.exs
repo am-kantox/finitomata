@@ -20,15 +20,20 @@ defmodule Finitomata.Pool.Test do
   def on_result(atom, id), do: atom |> Atom.to_string() |> tap(&Actor.result_logger(&1, id))
 
   setup do
-    pool =
-      start_supervised!(
-        Finitomata.Pool,
-        Finitomata.Pool.pool_spec(id: Pool, implementation: __MODULE__)
+    [no_init, pool] =
+      Enum.map(
+        [NoInit, Pool],
+        &start_supervised!(Finitomata.Pool.pool_spec(id: &1, implementation: __MODULE__))
       )
 
     Finitomata.Pool.initialize(Pool, %{foo: 42})
 
-    %{pool: pool}
+    %{pool: pool, no_init: no_init}
+  end
+
+  test "Can run w/out initialize" do
+    Finitomata.Pool.run(NoInit, :atom)
+    assert_receive {:transition, :success, _pid, {:atom, :atom, "atom"}}
   end
 
   test "Pooling" do
