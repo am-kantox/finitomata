@@ -3,9 +3,11 @@ defmodule Finitomata.Pool.Test do
 
   doctest Finitomata.Pool
 
-  @behaviour Finitomata.Pool.Actor
+  alias Finitomata.Pool.Actor
 
-  @impl Finitomata.Pool.Actor
+  @behaviour Actor
+
+  @impl Actor
   def actor(arg, _state) when is_atom(arg) do
     {:ok, arg}
   end
@@ -14,8 +16,8 @@ defmodule Finitomata.Pool.Test do
     {:error, "Atom required"}
   end
 
-  @impl Finitomata.Pool.Actor
-  def on_result(atom), do: Atom.to_string(atom)
+  @impl Actor
+  def on_result(atom, id), do: atom |> Atom.to_string() |> tap(&Actor.result_logger(&1, id))
 
   setup do
     pool =

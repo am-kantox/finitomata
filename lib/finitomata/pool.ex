@@ -12,11 +12,13 @@ defmodule Finitomata.Pool do
   Once `initialize/2` has been called, the `run/3` function might be invoked to
     asynchronously execute the function passed as `actor` to `start_pool/1`.
 
-  If the callbacks `on_result/1` and/or `on_error/1` are defined, they will be invoked
+  If the callbacks `on_result/2` and/or `on_error/2` are defined, they will be invoked
     respectively. Finally, the message to the calling process will be sent, unless
     the third argument in a call to `run/3` is `nil`.
   """
   @moduledoc since: "0.18.0"
+
+  alias Finitomata.Pool.Actor
 
   @fsm """
   idle --> |init| ready
@@ -28,6 +30,9 @@ defmodule Finitomata.Pool do
   @actor_prefix Application.compile_env(:finitomata, :pool_worker_prefix, "PoolWorker")
 
   use Finitomata, fsm: @fsm, auto_terminate: true
+
+  @typedoc "The ID of the Pool"
+  @type id :: Finitomata.id()
 
   @typedoc "The simple actor function in the pool"
   @type naive_actor :: (term() -> {:ok, term()} | {:error, any()})
@@ -43,15 +48,16 @@ defmodule Finitomata.Pool do
   @type naive_handler :: (term() -> any())
 
   @typedoc "The actor function in the pool, receiving the state as a second argument"
-  @type responsive_handler :: (term(), Finitomata.State.payload() -> any())
+  @type responsive_handler :: (term(), id() -> any())
 
   @typedoc "The handler function in the pool"
   @type handler :: naive_handler() | responsive_handler()
 
   defstate %{
-    actor: {StreamData, :constant, &Function.identity/1},
-    on_error: {StreamData, :constant, &Function.identity/1},
-    on_result: {StreamData, :constant, &Function.identity/1},
+    id: {StreamData, :atom, [:alias]},
+    actor: {StreamData, :constant, [&Function.identity/1]},
+    on_error: {Actor, :handler, [:error]},
+    on_result: {Actor, :handler, [[]]},
     errors: [:term],
     payload: :term
   }
@@ -61,10 +67,11 @@ defmodule Finitomata.Pool do
   """
   @spec start_pool([
           {:id, Finitomata.id()}
+          | {:payload, :term}
           | {:count, pos_integer()}
           | {:actor, actor()}
-          | {:on_error, (any() -> any())}
-          | {:on_result, (any() -> any())}
+          | {:on_error, handler()}
+          | {:on_result, handler()}
         ]) ::
           GenServer.on_start()
   def start_pool(opts \\ []) do
@@ -76,29 +83,35 @@ defmodule Finitomata.Pool do
   @spec start_pool(
           id :: Finitomata.id(),
           count :: pos_integer(),
-          [{:actor, actor()} | {:on_error, handler()} | {:on_result, handler()}]
+          [
+            {:actor, actor()}
+            | {:on_error, handler()}
+            | {:on_result, handler()}
+            | {:payload, :term}
+          ]
           | %{
               required(:actor) => actor(),
               optional(:on_error) => handler(),
-              optional(:on_result) => handler()
+              optional(:on_result) => handler(),
+              optional(:payload) => :term
             }
-          | [{:implementation, module()}]
-          | %{required(:implementation) => module()}
+          | [{:implementation, module()} | {:payload, :term}]
+          | %{required(:implementation) => module(), optional(:payload) => :term}
         ) ::
           GenServer.on_start()
   def start_pool(id, count, state) when is_list(state), do: start_pool(id, count, Map.new(state))
 
-  def start_pool(id, count, %{implementation: impl}) do
+  def start_pool(id, count, %{implementation: impl} = state) do
     state =
-      %{actor: &impl.actor/2}
+      %{payload: Map.get(state, :payload), actor: &impl.actor/2}
       |> then(fn spec ->
-        if function_exported?(impl, :on_result, 1),
-          do: Map.put(spec, :on_result, &impl.on_result/1),
+        if function_exported?(impl, :on_result, 2),
+          do: Map.put(spec, :on_result, &impl.on_result/2),
           else: spec
       end)
       |> then(fn spec ->
-        if function_exported?(impl, :on_error, 1),
-          do: Map.put(spec, :on_error, &impl.on_error/1),
+        if function_exported?(impl, :on_error, 2),
+          do: Map.put(spec, :on_error, &impl.on_error/2),
           else: spec
       end)
 
@@ -107,7 +120,7 @@ defmodule Finitomata.Pool do
 
   def start_pool(id, count, %{actor: actor} = state)
       when is_function(actor, 1) or is_function(actor, 2) do
-    {:ok, state} = Estructura.coerce(__MODULE__, state)
+    {:ok, state} = Estructura.coerce(__MODULE__, Map.put(state, :id, id))
 
     id
     |> Infinitomata.start_link()
@@ -158,7 +171,7 @@ defmodule Finitomata.Pool do
   Basically, upon calling `run/3`, the following chain of calls would have happened:
 
   1. `actor.(payload, state)` (or `actor.(payload)` if the function of arity one had been given)
-  2. `on_result(result, state)` / `on_error(result, state)` if callbacks are specified
+  2. `on_result(result, id)` / `on_error(result, id)` if callbacks are specified
   3. the message of the shape `{:transition, :success/:failure, self(), {payload, result, on_result/on_error}})` 
      will be sent to `pid` unless `nil` given as a third argument 
   """
@@ -177,7 +190,7 @@ defmodule Finitomata.Pool do
     state =
       case invoke(actor, payload, state.payload) do
         {:ok, result} ->
-          on_result = invoke(state.on_result, result, state.payload)
+          on_result = invoke(state.on_result, result, state.id)
 
           if not is_nil(pid),
             do: send(pid, {:transition, :success, self(), {payload, result, on_result}})
@@ -185,7 +198,7 @@ defmodule Finitomata.Pool do
           state
 
         {:error, reason} ->
-          on_error = invoke(state.on_error, reason, state.payload)
+          on_error = invoke(state.on_error, reason, state.id)
 
           if not is_nil(pid),
             do: send(pid, {:transition, :failure, self(), {payload, reason, on_error}})
