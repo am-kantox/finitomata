@@ -151,7 +151,6 @@ defmodule Finitomata do
 
   require Logger
 
-  require IEx
   alias Finitomata.Transition
 
   @typedoc """

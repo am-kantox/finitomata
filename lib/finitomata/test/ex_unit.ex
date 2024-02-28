@@ -26,7 +26,7 @@ defmodule Finitomata.ExUnit do
         ],
         implementation: [
           required: true,
-          type: {:custom, Finitomata, :behaviour, [Finitomata]},
+          type: {:or, [:atom, {:custom, Finitomata, :behaviour, [Finitomata]}]},
           doc: "The implementatoin of `Finitomata` (the module with `use Finitomata`.)"
         ],
         name: [
@@ -148,14 +148,20 @@ defmodule Finitomata.ExUnit do
       quote generated: true,
             location: :keep,
             bind_quoted: [id: id, impl: impl, name: name, payload: payload, options: options] do
-        mock = Module.concat(impl, "Mox")
+        mocker = &Module.concat(&1, "Mox")
+
+        mock =
+          if is_map(payload),
+            do: Map.get_lazy(payload, :mock, fn -> mocker.(impl) end),
+            else: mocker.(impl)
+
         fsm_name = {:via, Registry, {Finitomata.Supervisor.registry_name(id), name}}
         transition_count = Keyword.get(options, :transition_count, Enum.count(impl.states()))
 
         parent = self()
 
         unless Code.ensure_loaded?(mock),
-          do: Mox.defmock(mock, for: Finitomata.Listener)
+          do: raise("Listener mock must be defined for `Finitomata` to use `ex_unit` extensions")
 
         start_supervised({Finitomata.Supervisor, id: id})
 
