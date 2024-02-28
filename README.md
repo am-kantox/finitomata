@@ -153,6 +153,7 @@ end
 
 ## Changelog
 
+- `0.19.0` — [UPD] `Finitomata.ExUnit` lighten options check (compile-time module dependencies suck in >=1.16) 
 - `0.18.0` — [UPD] asynchronous `Finitomata.Pool` on top of `Infinitomata` 
 - `0.17.0` — [UPD] careful naming and `Finitomata.Throttler`
 - `0.16.0` — [UPD] `Infinitomata` as a self-contained distributed implementation leveraging `:pg`
