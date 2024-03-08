@@ -8,7 +8,7 @@ defmodule Mix.Tasks.Compile.Finitomata do
   alias Finitomata.{Hook, Mix.Events, Transition}
 
   @preferred_cli_env :dev
-  @manifest_events "finitomata_events"
+  @manifest_events "finitomata"
 
   @impl Compiler
   def run(argv) do
@@ -125,35 +125,38 @@ defmodule Mix.Tasks.Compile.Finitomata do
     fsm
     |> Transition.ambiguous()
     |> Enum.reduce(initial, fn {from, {event, tos}}, acc ->
+      {declared, {from, {event, tos}}, acc}
       add_diagnostic(declared, {from, {event, tos}}, acc)
     end)
   end
 
   @spec add_diagnostic([Hook.t()], ambiguous(), diagnostics()) :: diagnostics()
-  defp add_diagnostic([], {from, {event, tos}}, diagnostics),
-    do: %{diagnostics | unhandled: [{from, {event, tos}} | diagnostics.unhandled]}
-
   defp add_diagnostic(hooks, {from, {event, tos}}, diagnostics) do
-    Enum.reduce(hooks, diagnostics, fn
+    hooks
+    |> Enum.reduce_while(diagnostics, fn
       %Hook{args: [^from, ^event, _, _]} = hook, acc ->
-        %{acc | explicit: [{from, {event, tos, hook}} | acc.explicit]}
+        {:halt, %{acc | explicit: [{from, {event, tos, hook}} | acc.explicit]}}
 
       %Hook{args: [^from, {e, _, _}, _, _], guards: []} = hook, acc when is_atom(e) ->
-        %{acc | partial: [{from, {event, tos, hook}} | acc.partial]}
+        {:halt, %{acc | partial: [{from, {event, tos, hook}} | acc.partial]}}
 
       %Hook{args: [{f, _, _}, ^event, _, _], guards: []} = hook, acc when is_atom(f) ->
-        %{acc | partial: [{from, {event, tos, hook}} | acc.partial]}
+        {:halt, %{acc | partial: [{from, {event, tos, hook}} | acc.partial]}}
 
       %Hook{args: [{f, _, _}, {e, _, _}, _, _], guards: []} = hook, acc
       when is_atom(f) and is_atom(e) ->
-        %{acc | implicit: [{from, {event, tos, hook}} | acc.implicit]}
+        {:halt, %{acc | implicit: [{from, {event, tos, hook}} | acc.implicit]}}
 
-      %Hook{args: args, guards: guards} = hook, acc ->
-        cover(args, {from, {event, tos, hook}}, guards, acc)
+      %Hook{args: args, guards: [_ | _] = guards} = hook, acc ->
+        {:halt, cover(args, {from, {event, tos, hook}}, guards, acc)}
 
       %Hook{}, acc ->
-        acc
+        {:cont, acc}
     end)
+    |> case do
+      ^diagnostics -> %{diagnostics | unhandled: [{from, {event, tos}} | diagnostics.unhandled]}
+      diagnostics -> diagnostics
+    end
   end
 
   @spec add_diagnostics(diagnostics()) :: diagnostics()
@@ -272,6 +275,8 @@ defmodule Mix.Tasks.Compile.Finitomata do
   defp amend_using_info(%{unhandled: []}, _module), do: :ok
 
   defp amend_using_info(%{unhandled: unhandled}, module) do
+    unhandled = Enum.uniq(unhandled)
+
     module
     |> Events.declaration()
     |> case do
