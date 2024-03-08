@@ -130,25 +130,27 @@ defmodule Mix.Tasks.Compile.Finitomata do
     end)
   end
 
+  defmacrop v, do: {:{}, [], [{:_, [], nil}, {:_, [], nil}, nil]}
+
   @spec add_diagnostic([Hook.t()], ambiguous(), diagnostics()) :: diagnostics()
   defp add_diagnostic(hooks, {from, {event, tos}}, diagnostics) do
     hooks
     |> Enum.reduce_while(diagnostics, fn
-      %Hook{args: [^from, ^event, _, _]} = hook, acc ->
+      %Hook{args: [^from, ^event, v(), v()]} = hook, acc ->
         {:halt, %{acc | explicit: [{from, {event, tos, hook}} | acc.explicit]}}
 
-      %Hook{args: [^from, {e, _, _}, _, _], guards: []} = hook, acc when is_atom(e) ->
+      %Hook{args: [^from, {e, _, _}, v(), v()], guards: []} = hook, acc when is_atom(e) ->
         {:halt, %{acc | partial: [{from, {event, tos, hook}} | acc.partial]}}
 
-      %Hook{args: [{f, _, _}, ^event, _, _], guards: []} = hook, acc when is_atom(f) ->
+      %Hook{args: [{f, _, _}, ^event, v(), v()], guards: []} = hook, acc when is_atom(f) ->
         {:halt, %{acc | partial: [{from, {event, tos, hook}} | acc.partial]}}
 
-      %Hook{args: [{f, _, _}, {e, _, _}, _, _], guards: []} = hook, acc
+      %Hook{args: [{f, _, _}, {e, _, _}, v(), v()], guards: []} = hook, acc
       when is_atom(f) and is_atom(e) ->
         {:halt, %{acc | implicit: [{from, {event, tos, hook}} | acc.implicit]}}
 
-      %Hook{args: args, guards: [_ | _] = guards} = hook, acc ->
-        {:halt, cover(args, {from, {event, tos, hook}}, guards, acc)}
+      %Hook{args: args, guards: guards} = hook, acc ->
+        {:cont, cover(args, {from, {event, tos, hook}}, guards, acc)}
 
       %Hook{}, acc ->
         {:cont, acc}
@@ -157,11 +159,29 @@ defmodule Mix.Tasks.Compile.Finitomata do
       ^diagnostics -> %{diagnostics | unhandled: [{from, {event, tos}} | diagnostics.unhandled]}
       diagnostics -> diagnostics
     end
+    |> then(fn diagnostics ->
+      handled =
+        diagnostics
+        |> Map.take(~w|explicit partial implicit|a)
+        |> Map.values()
+        |> Enum.reduce(
+          [],
+          &(&2 ++ Enum.map(&1, fn {from, {event, tos, _hook}} -> {from, {event, tos}} end))
+        )
+        |> Enum.uniq()
+
+      unhandled =
+        diagnostics.unhandled
+        |> Enum.uniq()
+        |> Kernel.--(handled)
+
+      %{diagnostics | unhandled: unhandled}
+    end)
   end
 
   @spec add_diagnostics(diagnostics()) :: diagnostics()
-  defp add_diagnostics(%{explicit: _, partial: _, implicit: _} = hooks) do
-    hooks
+  defp add_diagnostics(%{explicit: _, partial: _, implicit: _} = diagnostics) do
+    diagnostics
     |> Map.take(~w|explicit partial implicit|a)
     |> Enum.each(fn {type, hooks} ->
       Enum.each(hooks, fn
@@ -180,7 +200,7 @@ defmodule Mix.Tasks.Compile.Finitomata do
       end)
     end)
 
-    hooks
+    diagnostics
   end
 
   @spec cover(
@@ -275,8 +295,6 @@ defmodule Mix.Tasks.Compile.Finitomata do
   defp amend_using_info(%{unhandled: []}, _module), do: :ok
 
   defp amend_using_info(%{unhandled: unhandled}, module) do
-    unhandled = Enum.uniq(unhandled)
-
     module
     |> Events.declaration()
     |> case do
@@ -285,11 +303,11 @@ defmodule Mix.Tasks.Compile.Finitomata do
 
         message =
           [
-            "This FSM declaration contains ambiguous transitions which are not handled:"
+            "This FSM declaration contains ambiguous transitions which are not fully handled:"
             | Enum.map(unhandled, fn {from, {event, tos}} ->
                 "    " <>
                   inspect(%Transition{from: from, to: tos, event: event}) <>
-                  " must be handled"
+                  " should be handled more strictly (have kinda catch-all clause)"
               end)
           ]
           |> Enum.join("\n")
