@@ -134,14 +134,14 @@ defmodule Finitomata do
   use_defstate = """
   ## State as Nested structure
 
-  For convenience, one might use `defshape/1` macro, turning the `Finitomata`
+  For convenience, one might use `defstate/1` macro, turning the `Finitomata`
     instance into `Estructura.Nested`, with such options as _coercion_, _validation,
     and _generation_. The example of usage would be:
 
   ```elixir
   use Finitomata, ...
 
-  defshape %{value: :integer, retries: %{attempts: :integer, errors: [:string]}}
+  defstate %{value: :integer, retries: %{attempts: :integer, errors: [:string]}}
   ```    
   """
 
@@ -218,6 +218,42 @@ defmodule Finitomata do
       end
     end
 
+    @doc false
+    def persisted?(%State{lifecycle: :unknown}), do: false
+    def persisted?(%State{lifecycle: :loaded}), do: true
+    def persisted?(%State{lifecycle: :created}), do: true
+
+    @doc false
+    def errored?(%State{last_error: nil}), do: false
+
+    def errored?(%State{last_error: %{error: {:error, kind}} = error}),
+      do: [{kind, Map.delete(error, :error)}]
+
+    def errored?(%State{last_error: %{error: error}}), do: error
+    def errored?(%State{last_error: error}), do: error
+
+    @doc false
+    def previous_state(%State{history: []}), do: nil
+    def previous_state(%State{history: [{last, _} | _]}), do: last
+    def previous_state(%State{history: [last | _]}), do: last
+
+    @doc "Exposes the short excerpt from state of FSM which is log-friendly"
+    def excerpt(%State{} = state, payload? \\ true) do
+      %{
+        finitomata: State.human_readable_name(state),
+        state: state.current
+      }
+      |> Map.merge(if payload?, do: %{payload: state.payload}, else: %{})
+      |> Map.merge(if errored?(state), do: %{error: errored?(state)}, else: %{})
+      |> Map.merge(if previous_state(state), do: %{previous: previous_state(state)}, else: %{})
+      |> Map.to_list()
+    end
+
+    @history_size Application.compile_env(:finitomata, :history_size, 5)
+
+    @doc false
+    def history_size, do: @history_size
+
     defimpl Inspect do
       @moduledoc false
       import Inspect.Algebra
@@ -230,28 +266,9 @@ defmodule Finitomata do
             state |> Map.from_struct() |> Map.to_list()
           else
             name = State.human_readable_name(state)
-
-            persisted? =
-              case state.lifecycle do
-                :unknown -> false
-                :loaded -> true
-                :created -> true
-              end
-
-            errored? =
-              case state.last_error do
-                nil -> false
-                %{error: {:error, kind}} = error -> [{kind, Map.delete(error, :error)}]
-                %{error: error} -> error
-                error -> error
-              end
-
-            previous =
-              case state.history do
-                [{last, _} | _] -> last
-                [last | _] -> last
-                [] -> nil
-              end
+            persisted? = State.persisted?(state)
+            errored? = State.errored?(state)
+            previous = State.previous_state(state)
 
             [
               name: name,
@@ -927,8 +944,30 @@ defmodule Finitomata do
 
       @doc false
       @impl GenServer
+      def handle_call(whatever, _from, state) do
+        Logger.error(
+          "Unexpected `GenServer.call/2` with a message ‹#{inspect(whatever)}›. " <>
+            "`Finitomata` does not accept direct calls. Please use `on_transition/4` callback instead."
+        )
+
+        {:reply, :not_allowed, state}
+      end
+
+      @doc false
+      @impl GenServer
       def handle_cast({event, payload}, state),
         do: {:noreply, state, {:continue, {:transition, {event, payload}}}}
+
+      @doc false
+      @impl GenServer
+      def handle_cast(whatever, state) do
+        Logger.error(
+          "Unexpected `GenServer.cast/2` with a message ‹#{inspect(whatever)}›. " <>
+            "`Finitomata` does not accept direct casts. Please use `on_transition/4` callback instead."
+        )
+
+        {:noreply, state}
+      end
 
       @doc false
       @impl GenServer
@@ -941,13 +980,56 @@ defmodule Finitomata do
         safe_on_terminate(state)
       end
 
+      @doc false
+      @impl GenServer
+
+      def handle_info(whatever, state)
+          when not is_integer(state.timer) or whatever != :on_timer do
+        Logger.error(
+          "Unexpected message ‹#{inspect(whatever)}› received by #{State.human_readable_name(state)}. " <>
+            "`Finitomata` does not accept direct messages. Please use `on_transition/4` callback instead."
+        )
+
+        {:noreply, state}
+      end
+
+      @doc false
+      @impl GenServer
+      def code_change(_old_vsn, state, extra) when extra in [[], %{}, nil],
+        do: {:ok, state}
+
+      @doc false
+      @impl GenServer
+      def code_change(_old_vsn, state, _extra) do
+        Logger.warning(
+          "Hot code swapping is requested. `Finitomata` does not accept changes through hot swap. " <>
+            "The request would be ignored."
+        )
+
+        {:ok, state}
+      end
+
+      @doc false
+      @impl GenServer
+      def format_status(:normal, [pdict, state]) do
+        {:state, State.excerpt(state, false)}
+      end
+
+      @doc false
+      @impl GenServer
+      def format_status(:terminate, [pdict, state]) do
+        {:state, State.excerpt(state, true)}
+      end
+
       @spec history(Transition.state(), [Transition.state()]) :: [Transition.state()]
       defp history(current, history) do
-        case history do
+        history
+        |> case do
           [^current | rest] -> [{current, 2} | rest]
           [{^current, count} | rest] -> [{current, count + 1} | rest]
           _ -> [current | history]
         end
+        |> Enum.take(State.history_size())
       end
 
       @spec event_payload(Transition.event() | {Transition.event(), Finitomata.event_payload()}) ::
