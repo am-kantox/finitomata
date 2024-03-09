@@ -70,7 +70,7 @@ then `c:Finitomata.on_timer/2` callback will be executed recurrently.
 This might be helpful if _FSM_ needs to update its state from the outside
 world on regular basis.
 
-## Automatic FSM Termination
+### Automatic FSM Termination
 
 If `auto_terminate: true() | state() | [state()]` option is passed to `use Finitomata`,
 the special `__end__` event to transition to the end state will be called automatically
