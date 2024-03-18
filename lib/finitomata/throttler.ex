@@ -121,6 +121,11 @@ defmodule Finitomata.Throttler do
     |> Task.await_many()
   end
 
+  @utc_now_truncate_to if(Version.compare(System.version(), "1.15.0") == :lt,
+                         do: Calendar.ISO,
+                         else: :microsecond
+                       )
+
   def call(name, request, timeout) do
     name
     |> producer()
@@ -128,7 +133,8 @@ defmodule Finitomata.Throttler do
     |> then(
       &%Finitomata.Throttler{
         &1
-        | duration: DateTime.diff(DateTime.utc_now(:microsecond), &1.duration, :microsecond)
+        | duration:
+            DateTime.diff(DateTime.utc_now(@utc_now_truncate_to), &1.duration, :microsecond)
       }
     )
   end
