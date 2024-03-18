@@ -25,31 +25,46 @@ defmodule Finitomata.Throttler.Producer do
   def handle_call({:add, item}, from, state),
     do: handle_call({:add, [item]}, from, state)
 
+  @utc_now_truncate_to if(Version.compare(System.version(), "1.15.0") == :lt,
+                         do: Calendar.ISO,
+                         else: :microsecond
+                       )
+
   defp normalize(from, items) do
     Enum.map(items, fn
       %Throttler{} = t ->
-        %Throttler{t | from: from, duration: DateTime.utc_now(:microsecond)}
+        %Throttler{t | from: from, duration: DateTime.utc_now(@utc_now_truncate_to)}
 
       {fun, args} when is_function(fun, 1) ->
-        %Throttler{from: from, fun: fun, args: args, duration: DateTime.utc_now(:microsecond)}
+        %Throttler{
+          from: from,
+          fun: fun,
+          args: args,
+          duration: DateTime.utc_now(@utc_now_truncate_to)
+        }
 
       {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
         %Throttler{
           from: from,
           fun: {mod, fun},
           args: args,
-          duration: DateTime.utc_now(:microsecond)
+          duration: DateTime.utc_now(@utc_now_truncate_to)
         }
 
       fun when is_function(fun, 0) ->
-        %Throttler{from: from, fun: fun, args: [], duration: DateTime.utc_now(:microsecond)}
+        %Throttler{
+          from: from,
+          fun: fun,
+          args: [],
+          duration: DateTime.utc_now(@utc_now_truncate_to)
+        }
 
       value ->
         %Throttler{
           from: from,
           fun: &Throttler.debug/1,
           args: [value: value],
-          duration: DateTime.utc_now(:microsecond)
+          duration: DateTime.utc_now(@utc_now_truncate_to)
         }
     end)
   end
