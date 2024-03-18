@@ -63,7 +63,7 @@ defmodule Finitomata.Distributed.Supervisor do
 
   def delete_by_pids(id, pids) do
     {match, mismatch} =
-      Agent.get(agent(id), &Map.split_with(&1, fn {_, %{pid: pid}} -> pid in pids end))
+      Agent.get(agent(id), &split_with(&1, fn {_, %{pid: pid}} -> pid in pids end))
 
     Agent.update(agent(id), fn _ -> mismatch end)
     match
@@ -84,6 +84,15 @@ defmodule Finitomata.Distributed.Supervisor do
     pid_tail = skip_node(pid)
 
     Enum.find(pids, &(skip_node(&1) == pid_tail))
+  end
+
+  if Version.compare(System.version(), "1.15.0") == :lt do
+    defp split_with(%{} = map, fun) when is_function(fun, 1) do
+      {truthy, falsey} = Enum.split_with(map, fun)
+      {Map.new(truthy), Map.new(falsey)}
+    end
+  else
+    defdelegate split_with(map, fun), to: Map
   end
 
   @doc false
