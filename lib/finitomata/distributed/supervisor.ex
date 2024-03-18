@@ -73,6 +73,7 @@ defmodule Finitomata.Distributed.Supervisor do
     Agent.update(agent(id), &Map.put(&1, name, data))
   end
 
+  defp skip_node(nil), do: nil
   defp skip_node(pid) when is_pid(pid), do: pid |> :erlang.pid_to_list() |> skip_node()
   defp skip_node([?. | tail]), do: tail
   defp skip_node([_ | tail]), do: skip_node(tail)
