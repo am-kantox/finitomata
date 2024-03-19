@@ -39,8 +39,7 @@ defmodule Finitomata.Distributed.Supervisor do
           result -> result
         end
         |> Map.new(&fix_pid(&1, known_processes_alive))
-        |> Map.merge(acc, fn _k, %{node: node, pid: pid}, %{node: node, pid: pid}
-                             when is_pid(pid) ->
+        |> Map.merge(acc, fn _k, %{node: node, pid: pid}, %{node: node, pid: pid} ->
           %{node: node, pid: pid, ref: make_ref()}
         end)
       end)
