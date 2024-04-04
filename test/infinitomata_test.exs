@@ -8,6 +8,7 @@ defmodule Infinitomata.Test do
     # Enfiladex.block_call_everywhere(Infinitomata, :start_link, [InfiniTest])
     Infinitomata.start_link(InfiniTest)
     # on_exit(fn -> Enfiladex.stop_peers(peers) end)
+    Enfiladex.call_everywhere(Infinitomata, :start_link, [InfiniTest])
     :ok
   end
 
