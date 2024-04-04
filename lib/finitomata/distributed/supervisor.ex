@@ -1,5 +1,8 @@
 defmodule Finitomata.Distributed.Supervisor do
   @moduledoc false
+
+  require Logger
+
   use Supervisor
 
   def start_link(id) do
@@ -35,8 +38,12 @@ defmodule Finitomata.Distributed.Supervisor do
         node
         |> :rpc.block_call(Infinitomata, :all, [id])
         |> case do
-          {:badrpc, _} -> []
-          result -> result
+          {:badrpc, error} ->
+            Logger.warning("[♻️] Synch Error: " <> inspect(id: id, node: node, error: error))
+            []
+
+          result ->
+            result
         end
         |> Map.new(&fix_pid(&1, known_processes_alive))
         |> Map.merge(acc, fn _k, %{node: node, pid: pid}, %{node: node, pid: pid} ->

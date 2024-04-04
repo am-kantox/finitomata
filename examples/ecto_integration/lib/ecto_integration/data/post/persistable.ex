@@ -51,7 +51,7 @@ defimpl Finitomata.Persistency.Persistable, for: EctoIntegration.Data.Post do
     |> Map.to_list()
     |> Logger.metadata()
 
-    Logger.warn("[DB ERROR]: " <> reason)
+    Logger.warn("[♻️] DB Error: " <> reason)
     Logger.metadata(metadata)
   end
 end

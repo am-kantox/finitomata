@@ -117,7 +117,7 @@ defmodule Finitomata.MixProject do
     ]
   end
 
-  defp compilers(_), do: Mix.compilers()
+  defp compilers(_), do: Mix.compilers() ++ [:finitomata]
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(:ci), do: ["lib"]

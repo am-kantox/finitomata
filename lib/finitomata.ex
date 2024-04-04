@@ -1170,7 +1170,7 @@ defmodule Finitomata do
         if function_exported?(__MODULE__, :on_failure, 3) do
           with other when other != :ok <-
                  apply(__MODULE__, :on_failure, [event, event_payload, state_payload]) do
-            Logger.info("Unexpected return from a callback [#{inspect(other)}], must be :ok")
+            Logger.info("[♻️] Unexpected return from a callback [#{inspect(other)}], must be :ok")
             :ok
           end
         else
@@ -1184,7 +1184,7 @@ defmodule Finitomata do
       defp safe_on_enter(state, state_payload) do
         if function_exported?(__MODULE__, :on_enter, 2) do
           with other when other != :ok <- apply(__MODULE__, :on_enter, [state, state_payload]) do
-            Logger.info("Unexpected return from a callback [#{inspect(other)}], must be :ok")
+            Logger.info("[♻️] Unexpected return from a callback [#{inspect(other)}], must be :ok")
             :ok
           end
         else
@@ -1198,7 +1198,7 @@ defmodule Finitomata do
       defp safe_on_exit(state, state_payload) do
         if function_exported?(__MODULE__, :on_exit, 2) do
           with other when other != :ok <- apply(__MODULE__, :on_exit, [state, state_payload]) do
-            Logger.info("Unexpected return from a callback [#{inspect(other)}], must be :ok")
+            Logger.info("[♻️] Unexpected return from a callback [#{inspect(other)}], must be :ok")
             :ok
           end
         else
@@ -1212,7 +1212,7 @@ defmodule Finitomata do
       defp safe_on_terminate(state) do
         if function_exported?(__MODULE__, :on_terminate, 1) do
           with other when other != :ok <- apply(__MODULE__, :on_terminate, [state]) do
-            Logger.info("Unexpected return from a callback [#{inspect(other)}], must be :ok")
+            Logger.info("[♻️] Unexpected return from a callback [#{inspect(other)}], must be :ok")
             :ok
           end
         else
@@ -1316,7 +1316,7 @@ defmodule Finitomata do
             with some when some != :ok <-
                    @__config__[:listener].after_transition(name, state, payload) do
               Logger.warning(
-                "[LISTENER] ‹" <>
+                "[♻️] Listener ‹" <>
                   inspect(Function.capture(@__config__[:listener], :after_transition, 3)) <>
                   "› returned unexpected ‹" <>
                   inspect(some) <>

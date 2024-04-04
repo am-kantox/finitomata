@@ -24,6 +24,8 @@ defmodule Infinitomata do
   """
   @moduledoc since: "0.15.0"
 
+  require Logger
+
   alias Finitomata.{ClusterInfo, State, Transition}
   alias Finitomata.Distributed.GroupMonitor, as: InfMon
   alias Finitomata.Distributed.Supervisor, as: InfSup
@@ -46,7 +48,15 @@ defmodule Infinitomata do
   defp distributed_call(fun, id, target, args) do
     case InfSup.get(id, target) do
       %{node: node} ->
-        :rpc.call(node, Finitomata, fun, [id, target | List.wrap(args)])
+        with {:badrpc, error} <-
+               :rpc.call(node, Finitomata, fun, [id, target | List.wrap(args)]) do
+          Logger.error(
+            "[♻️] Distributed: " <> inspect(id: id, node: node, target: target, error: error)
+          )
+
+          :ok = synch(id)
+          distributed_call(fun, id, target, args)
+        end
 
       _ ->
         {:error, :not_started}

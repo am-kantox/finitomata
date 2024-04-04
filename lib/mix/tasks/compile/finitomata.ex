@@ -39,7 +39,7 @@ defmodule Mix.Tasks.Compile.Finitomata do
 
   @doc false
   @impl Compiler
-  def clean, do: Events.stop()
+  def clean, do: if(GenServer.whereis(Events), do: Events.stop())
 
   @doc false
   def trace({remote, meta, Finitomata, :__using__, 1}, env)
