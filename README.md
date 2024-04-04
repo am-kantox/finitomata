@@ -146,13 +146,13 @@ Typically, one would implement all the `on_transition/4` handlers, pattern match
 ```elixir
 def deps do
   [
-    {:finitomata, "~> 0.1"}
+    {:finitomata, "~> 0.20"}
   ]
 end
 ```
 
 ## Changelog
-
+- `0.20.0` — [FIX] starting pool on distribution, re-synch on `:badrpc` failure
 - `0.19.0` — [UPD] `Finitomata.ExUnit` lighten options check (compile-time module dependencies suck in >=1.16) 
 - `0.18.0` — [UPD] asynchronous `Finitomata.Pool` on top of `Infinitomata` 
 - `0.17.0` — [UPD] careful naming and `Finitomata.Throttler`
