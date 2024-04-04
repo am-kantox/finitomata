@@ -5,8 +5,22 @@ defmodule Finitomata.Distributed.Supervisor do
 
   use Supervisor
 
-  def start_link(id) do
-    Supervisor.start_link(__MODULE__, id, name: Module.concat(id, Sup))
+  def start_link(id, nodes \\ Node.list()) do
+    sup_id = Finitomata.Supervisor.infinitomata_name(id)
+
+    __MODULE__
+    |> Supervisor.start_link(sup_id, name: Module.concat(sup_id, Sup))
+    |> tap(fn _ ->
+      Enum.each(nodes, fn node ->
+        with {:badrpc, error} <- :rpc.block_call(node, __MODULE__, :start_link, [id, []]) do
+          Logger.error(
+            "[♻️] Remote start: " <> inspect(id: id, sup_id: sup_id, node: node, error: error)
+          )
+        end
+      end)
+
+      synch(id)
+    end)
   end
 
   @impl true

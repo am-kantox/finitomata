@@ -32,16 +32,12 @@ defmodule Infinitomata do
   alias Finitomata.Supervisor, as: FinSup
 
   @doc since: "0.16.0"
-  def start_link(id \\ nil) do
-    id
-    |> FinSup.infinitomata_name()
-    |> InfSup.start_link()
-    |> tap(fn _ -> synch(id) end)
+  def start_link(id \\ nil, nodes \\ Node.list()) do
+    InfSup.start_link(id, nodes)
   end
 
   @doc since: "0.16.0"
   def child_spec(id \\ nil) do
-    id = FinSup.infinitomata_name(id)
     Supervisor.child_spec({InfSup, id}, id: {InfSup, id})
   end
 

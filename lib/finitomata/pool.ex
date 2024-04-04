@@ -32,6 +32,12 @@ defmodule Finitomata.Pool do
 
   use Finitomata, fsm: @fsm, auto_terminate: true
 
+  @impl Finitomata
+  def on_terminate(state) do
+    require Logger
+    Logger.info("[♻️] Terminating: " <> inspect(state))
+  end
+
   @typedoc "The ID of the Pool"
   @type id :: Finitomata.id()
 
