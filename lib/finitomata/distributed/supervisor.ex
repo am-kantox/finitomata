@@ -46,9 +46,10 @@ defmodule Finitomata.Distributed.Supervisor do
   def synch(id, fqn_id \\ nil) do
     fqn_id = if is_nil(fqn_id), do: Finitomata.Supervisor.infinitomata_name(id), else: fqn_id
     known_processes_alive = fqn_id |> group() |> :pg.get_members()
+    domestic = Map.new(Infinitomata.all(id), &fix_pid(&1, known_processes_alive))
 
     known_fsms_alive =
-      Enum.reduce([node() | Node.list()], %{}, fn node, acc ->
+      Enum.reduce(Node.list(), domestic, fn node, acc ->
         node
         |> :rpc.block_call(Infinitomata, :all, [id])
         |> case do

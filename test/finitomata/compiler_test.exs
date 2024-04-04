@@ -39,12 +39,11 @@ defmodule Finitomata.Compiler.Test do
 
     assert "" ==
              capture_io(fn ->
-               nil
                # Mix.Tasks.Compile.run(["test/seeds/compiler_test_modules.ex"])
-
-               # Uncomment when no v1.15 support
-               # {[{TestInplace, _}], []} =
-               #   Code.with_diagnostics(fn -> Code.compile_string(module) end)
+               if Version.compare(System.version(), "1.16.0") >= :lt do
+                 {[{TestInplace, _}], []} =
+                   Code.with_diagnostics(fn -> Code.compile_string(module) end)
+               end
              end)
   end
 end
