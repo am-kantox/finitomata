@@ -5,8 +5,10 @@ defmodule Infinitomata.Test do
 
   setup do
     {_peers, _nodes} = Enfiladex.start_peers(3)
-    Enfiladex.block_call_everywhere(Infinitomata, :start_link, [InfiniTest])
+    # Enfiladex.block_call_everywhere(Infinitomata, :start_link, [InfiniTest])
+    Infinitomata.start_link(InfiniTest)
     # on_exit(fn -> Enfiladex.stop_peers(peers) end)
+    :ok
   end
 
   test "many instances (distributed)" do
