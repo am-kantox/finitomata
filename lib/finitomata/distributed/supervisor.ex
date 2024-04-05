@@ -6,25 +6,30 @@ defmodule Finitomata.Distributed.Supervisor do
   use Supervisor
 
   def start_link(id, nodes \\ Node.list()) do
-    sup_id = Finitomata.Supervisor.infinitomata_name(id)
-
     __MODULE__
-    |> Supervisor.start_link(sup_id, name: Module.concat(sup_id, Sup))
-    |> tap(fn _ ->
-      Enum.each(nodes, fn node ->
-        with {:badrpc, error} <- :rpc.block_call(node, __MODULE__, :start_link, [id, []]) do
-          Logger.error(
-            "[♻️] Remote start: " <> inspect(id: id, sup_id: sup_id, node: node, error: error)
-          )
-        end
-      end)
+    |> Supervisor.start_link(id, name: sup_name(id))
+    |> tap(fn
+      {:ok, pid} when is_pid(pid) ->
+        Enum.each(nodes, fn node ->
+          with {:badrpc, error} <- :rpc.block_call(node, __MODULE__, :start_link, [id, []]) do
+            Logger.error(
+              "[♻️] Remote start: " <>
+                inspect(id: id, name: sup_name(id), node: node, error: error)
+            )
+          end
+        end)
 
-      synch(id)
+        Task.start(fn -> synch(id) end)
+
+      other ->
+        other
     end)
   end
 
   @impl true
   def init(id) do
+    id = Finitomata.Supervisor.infinitomata_name(id)
+
     children = [
       %{id: {:pg, id}, start: {__MODULE__, :start_pg, []}},
       {Finitomata, id},
@@ -34,6 +39,8 @@ defmodule Finitomata.Distributed.Supervisor do
 
     Supervisor.init(children, strategy: :one_for_one)
   end
+
+  defp sup_name(id), do: id |> Finitomata.Supervisor.infinitomata_name() |> Module.concat(Sup)
 
   defp agent(nil), do: agent(__MODULE__)
   defp agent(id), do: Module.concat(id, IdLookup)
@@ -69,7 +76,12 @@ defmodule Finitomata.Distributed.Supervisor do
     fqn_id |> agent() |> Agent.update(fn _ -> known_fsms_alive end)
   end
 
-  def all(id), do: Agent.get(agent(id), & &1)
+  def all(id) do
+    with empty when empty == %{} <- Agent.get(agent(id), & &1) do
+      Supervisor.stop(sup_name(id), :boom)
+      {:error, :restarting}
+    end
+  end
 
   def del(id, name), do: Agent.update(agent(id), &Map.delete(&1, name))
 

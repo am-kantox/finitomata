@@ -79,8 +79,7 @@ defmodule Infinitomata do
   @doc "Returns the random _FSM_ from the pool"
   def random(id \\ nil) do
     id
-    |> FinSup.infinitomata_name()
-    |> InfSup.all()
+    |> all()
     |> Map.keys()
     |> Enum.random()
   end
