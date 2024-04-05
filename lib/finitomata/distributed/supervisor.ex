@@ -78,8 +78,8 @@ defmodule Finitomata.Distributed.Supervisor do
 
   def all(id) do
     with empty when empty == %{} <- Agent.get(agent(id), & &1) do
-      Supervisor.stop(sup_name(id), :boom)
-      {:error, :restarting}
+      Logger.error("[♻️] Empty pool for ‹#{inspect(id)}›")
+      %{}
     end
   end
 
