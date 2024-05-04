@@ -206,6 +206,19 @@ defmodule Finitomata.ExUnit do
     end
   end
   ```
+
+  Any matchers should be available on the right side of `~>` operator in the same way as the first
+    argument of [`match?/2`](https://hexdocs.pm/elixir/Kernel.html#match?/2).
+
+  Each argument might be matched several times.
+
+  ```elixir
+    ...
+    assert_payload do
+      user_data.counter ~> {:foo, _}
+      internals.pid ~> pid when is_pid(pid)
+    end
+  ```
   """
   defmacro assert_transition(ctx, event_payload, do: block) do
     quote do
@@ -234,13 +247,6 @@ defmodule Finitomata.ExUnit do
     define an _FSM_ in `setup_finitomata/1` block and use `assert_transition/3`
     or even better `test_path/3`.
 
-  Last regular argument in a call to `assert_transition/3` would be an
-    `event_payload` in a form of `{event, payload}`, or just `event`
-    for no payload.
-
-  `to_state` argument would be matched to the resulting state of the transition,
-    and `block` accepts validation of the `payload` after transition in a form of
-
   ```elixir
   parent = self()
 
@@ -254,6 +260,8 @@ defmodule Finitomata.ExUnit do
       assert_receive {:increased, 2}
   end
   ```
+
+  _See:_ `assert_transition/3` for examples of matches and arguments
   """
   defmacro assert_transition(id \\ nil, impl, name, event_payload, do: block),
     do: do_assert_transition(id, impl, name, event_payload, __CALLER__, do: block)
@@ -501,6 +509,13 @@ defmodule Finitomata.ExUnit do
 
   defp do_handle_matches([]), do: []
 
+  defp do_handle_matches({:when, _, [{:~>, _meta, [_var, _match_ast]}, _guard]} = guard),
+    do: do_handle_matches([guard])
+
+  defp do_handle_matches([{:when, guard_meta, [{:~>, meta, [var, match_ast]}, guard]} | more]) do
+    do_handle_matches([{:~>, meta, [var, {:when, guard_meta, [match_ast, guard]}]} | more])
+  end
+
   defp do_handle_matches([{:->, meta, [[{_, _, _} = var], match_ast]} | more]),
     do: do_handle_matches([{:~>, meta, [var, match_ast]} | more])
 
@@ -515,5 +530,6 @@ defmodule Finitomata.ExUnit do
     [match | do_handle_matches(more)]
   end
 
-  defp do_handle_matches(any), do: any |> unblock() |> do_handle_matches()
+  defp do_handle_matches(any),
+    do: any |> unblock() |> do_handle_matches()
 end

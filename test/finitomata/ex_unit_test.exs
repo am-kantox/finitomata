@@ -59,13 +59,14 @@ defmodule Finitomata.ExUnit.Test do
     test "low level with assert_transition", %{finitomata: %{test_pid: parent, fsm: fsm}} do
       assert_transition fsm.id, fsm.implementation, fsm.name, {:start, parent} do
         :started ->
-          assert_payload do: internals.counter ~> 1
+          assert_payload do: internals.counter ~> i when is_integer(i)
           assert_receive {:on_start, ^parent}
       end
 
       assert_transition fsm.id, fsm.implementation, fsm.name, :do do
         :done ->
           assert_payload do
+            internals.counter ~> _
             internals.counter ~> 2
             pid ~> ^parent
           end
