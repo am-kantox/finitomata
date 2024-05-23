@@ -706,8 +706,12 @@ defmodule Finitomata.ExUnit do
       state_assertions_ast =
         state_assertions
         |> unblock()
-        |> Enum.map(fn {:assert_state, meta, [state, [do: block]]} ->
-          {:->, meta, [[state], {:__block__, meta, unblock(block)}]}
+        |> Enum.map(fn
+          {:assert_state, meta, [state]} ->
+            {:->, meta, [[state], {:__block__, meta, []}]}
+
+          {:assert_state, meta, [state, [do: block]]} ->
+            {:->, meta, [[state], {:__block__, meta, unblock(block)}]}
         end)
 
       {event_payload,

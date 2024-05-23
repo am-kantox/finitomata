@@ -126,9 +126,7 @@ defmodule Finitomata.ExUnit.Test do
           assert_receive :on_do
         end
 
-        assert_state :* do
-          assert_receive :on_end
-        end
+        assert_state :*
     end
   end
 end
