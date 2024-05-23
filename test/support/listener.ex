@@ -1,5 +1,3 @@
-Mox.defmock(Finitomata.Test.Listener.Mox, for: Finitomata.Listener)
-
 defmodule Finitomata.Test.Listener do
   @moduledoc false
 
@@ -8,7 +6,7 @@ defmodule Finitomata.Test.Listener do
   started --> |do| done
   """
 
-  use Finitomata, fsm: @fsm, auto_terminate: true, listener: Finitomata.Test.Listener.Mox
+  use Finitomata, fsm: @fsm, auto_terminate: true, listener: :mox
 
   defstate %{
     pid: {StreamData, :constant, [self()]},

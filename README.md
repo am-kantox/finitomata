@@ -152,6 +152,7 @@ end
 ```
 
 ## Changelog
+- `0.21.1` — [UPD] `listener: :mox` and better `Finitomata.ExUnit` docs 
 - `0.20.2` — [UPD] allow guard matches in the RHO of `~>` operator in `assert_transition/3` 
 - `0.20.0` — [FIX] starting pool on distribution, re-synch on `:badrpc` failure
 - `0.19.0` — [UPD] `Finitomata.ExUnit` lighten options check (compile-time module dependencies suck in >=1.16) 

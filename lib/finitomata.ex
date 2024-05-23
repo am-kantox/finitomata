@@ -93,7 +93,7 @@ defmodule Finitomata do
       type:
         {:or,
          [
-           {:in, [nil]},
+           {:in, [nil, :mox]},
            {:custom, Finitomata, :behaviour, [[handle_info: 2]]},
            {:custom, Finitomata, :behaviour, [Finitomata.Listener]}
          ]},
@@ -589,6 +589,8 @@ defmodule Finitomata do
       @on_definition Finitomata.Hook
       @before_compile Finitomata.Hook
 
+      reporter = if Code.ensure_loaded?(Mix), do: Mix.shell(), else: Logger
+
       syntax =
         Keyword.get(
           unquote(options),
@@ -597,8 +599,6 @@ defmodule Finitomata do
         )
 
       if syntax in [Finitomata.Mermaid, Finitomata.PlantUML] do
-        reporter = if Code.ensure_loaded?(Mix), do: Mix.shell(), else: Logger
-
         reporter.info([
           [:yellow, "deprecated: ", :reset],
           "using built-in modules as syntax names is deprecated, please use ",
@@ -643,6 +643,32 @@ defmodule Finitomata do
           :listener,
           Application.compile_env(:finitomata, :listener, nil)
         )
+
+      listener =
+        with :mox <- listener do
+          if Mix.env() == :test do
+            with {:error, error} <- Code.ensure_compiled(Mox) do
+              reporter.info([
+                [:yellow, "expectation: ", :reset],
+                "to be able to use ",
+                [:blue, ":mox", :reset],
+                " listener in tests with ",
+                [:blue, "`Finitomata.ExUnit`", :reset],
+                ", please add ",
+                [:blue, "`{:mox, \"~> 1.0\", only: [:test]}`", :reset],
+                " as a dependency to your ",
+                [:blue, "`mix.exs`", :reset],
+                " project file (got: ",
+                [:yellow, inspect(error), :reset],
+                ")"
+              ])
+            end
+
+            [__MODULE__, Mox]
+            |> Module.concat()
+            |> tap(&Mox.defmock(&1, for: Finitomata.Listener))
+          end
+        end
 
       use GenServer, restart: :transient, shutdown: shutdown
 
