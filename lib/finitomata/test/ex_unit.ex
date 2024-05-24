@@ -9,7 +9,7 @@ defmodule Finitomata.ExUnit do
   In the first place, `mox` dependency should be included in your `mix.exs` project file
 
   ```elixir
-    {:mox, "~> 1.0", only: [:test]}
+  {:mox, "~> 1.0", only: [:test]}
   ```
 
   Then, the `Finitomata` declaration should include a listener. If you already have the
@@ -172,7 +172,7 @@ defmodule Finitomata.ExUnit do
   With this approach, one could test the payload in the intermediate states, and validate
     messages received from the FSM with `assert_receive/3`.
 
-  No other code besides `assert_state/2`, `assert_payload/2`, and `assert_receive/3` is
+  No other code besides `assert_state/2`, `assert_payload/1`, and `ExUnit.Assertions.assert_receive/3` is
     permitted to fully isolate the FSM execution from side effects.
   """
 
