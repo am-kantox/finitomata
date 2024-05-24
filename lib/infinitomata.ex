@@ -104,19 +104,41 @@ defmodule Infinitomata do
     case InfSup.get(id, target) do
       nil ->
         node = ClusterInfo.whois({id, target})
-
-        case :rpc.block_call(node, Finitomata, :start_fsm, [id, target, implementation, payload]) do
-          {:ok, pid} ->
-            # local_pid = :rpc.call(node, :erlang, :list_to_pid, [:erlang.pid_to_list(pid)]).
-            :ok = :rpc.block_call(node, :pg, :join, [InfSup.group(id), pid])
-            {:ok, pid}
-
-          {:badrpc, reason} ->
-            {:error, reason}
-        end
+        do_start_fsm(node == node(), node, id, target, implementation, payload)
 
       %{node: node, pid: pid} ->
         {:error, {:already_started, {node, pid}}}
+    end
+  end
+
+  @spec do_start_fsm(boolean(), node(), Finitomata.id(), Finitomata.fsm_name(), module(), any()) ::
+          DynamicSupervisor.on_start_child()
+  defp do_start_fsm(false, node, id, target, implementation, payload) do
+    case :rpc.block_call(node, Finitomata, :start_fsm, [id, target, implementation, payload]) do
+      {:ok, pid} ->
+        # local_pid = :rpc.call(node, :erlang, :list_to_pid, [:erlang.pid_to_list(pid)]).
+        :ok = :rpc.block_call(node, :pg, :join, [InfSup.group(id), pid])
+        {:ok, pid}
+
+      {:error, {:already_started, pid}} ->
+        {:error, {:already_started, {node, pid}}}
+
+      {error, reason} when error in [:error, :badrpc] ->
+        {:error, reason}
+    end
+  end
+
+  defp do_start_fsm(true, node, id, target, implementation, payload) do
+    case Finitomata.start_fsm(id, target, implementation, payload) do
+      {:ok, pid} ->
+        :ok = :pg.join(InfSup.group(id), pid)
+        {:ok, pid}
+
+      {:error, {:already_started, pid}} ->
+        {:error, {:already_started, {node, pid}}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
