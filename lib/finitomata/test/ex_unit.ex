@@ -250,6 +250,9 @@ defmodule Finitomata.ExUnit do
   end
   ```
   """
+  @dialyzer {:no_return, {:assert_state, 1}}
+  @spec assert_state(state :: Finitomata.Transition.state()) :: any()
+  @dialyzer {:no_return, {:assert_state, 2}}
   @spec assert_state(state :: Finitomata.Transition.state(), do_block :: [{:do, Macro.t()}]) ::
           any()
   def assert_state(state, do_block \\ []) do
@@ -268,6 +271,7 @@ defmodule Finitomata.ExUnit do
   end
   ```
   """
+  @dialyzer {:no_return, {:assert_payload, 1}}
   def assert_payload(do_block) do
     _ = do_block
     raise(%UndefinedFunctionError{module: __MODULE__, function: :assert_payload, arity: 1})
