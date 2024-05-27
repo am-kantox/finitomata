@@ -129,14 +129,27 @@ defmodule Finitomata.Pool do
       when is_function(actor, 1) or is_function(actor, 2) do
     {:ok, state} = Estructura.coerce(__MODULE__, Map.put(state, :id, id))
 
-    id
-    |> Infinitomata.start_link()
-    |> tap(fn _ ->
+    actor_launcher = fn ->
       Enum.each(
         1..count,
         &Infinitomata.start_fsm(id, "#{@actor_prefix}_#{&1}", Finitomata.Pool, state)
       )
-    end)
+    end
+
+    id
+    |> Infinitomata.start_link()
+    |> case do
+      {:ok, pid} ->
+        actor_launcher.()
+        {:ok, pid}
+
+      {:error, {:already_started, pid}} ->
+        actor_launcher.()
+        {:ok, pid}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   @doc """
