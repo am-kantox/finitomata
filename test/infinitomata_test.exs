@@ -15,9 +15,15 @@ defmodule Infinitomata.Test do
 
   test "kinda stress-test instances (distributed)" do
     for i <- 1..100 do
-      Infinitomata.start_fsm(InfiniTest, "FSM_ST_#{i}", Finitomata.Test.Log, %{instance: i})
-      Infinitomata.transition(InfiniTest, "FSM_ST_#{i}", :accept)
-      Infinitomata.transition(InfiniTest, "FSM_ST_#{i}", :__end__)
+      assert match?(
+               {:ok, pid} when is_pid(pid),
+               Infinitomata.start_fsm(InfiniTest, "FSM_ST_#{i}", Finitomata.Test.Log, %{
+                 instance: i
+               })
+             )
+
+      assert :ok = Infinitomata.transition(InfiniTest, "FSM_ST_#{i}", :accept)
+      assert :ok = Infinitomata.transition(InfiniTest, "FSM_ST_#{i}", :__end__)
     end
   end
 
