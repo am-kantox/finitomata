@@ -45,7 +45,7 @@ defmodule Infinitomata do
     case InfSup.get(id, target) do
       %{node: node} ->
         with {:badrpc, error} <-
-               :rpc.call(node, Finitomata, fun, [id, target | List.wrap(args)]) do
+               :rpc.block_call(node, Finitomata, fun, [id, target | List.wrap(args)]) do
           Logger.error(
             "[♻️] Distributed: " <> inspect(id: id, node: node, target: target, error: error)
           )
