@@ -54,6 +54,10 @@ defmodule Infinitomata do
           distributed_call(fun, id, target, args)
         end
 
+      nil ->
+        Process.sleep(1)
+        distributed_call(fun, id, target, args)
+
       _ ->
         {:error, :not_started}
     end

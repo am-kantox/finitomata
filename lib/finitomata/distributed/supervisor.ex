@@ -55,25 +55,29 @@ defmodule Finitomata.Distributed.Supervisor do
     known_processes_alive = fqn_id |> group() |> :pg.get_members()
     domestic = Map.new(Infinitomata.all(id), &fix_pid(&1, known_processes_alive))
 
-    known_fsms_alive =
+    known_fsms_alive = fn _ ->
+      merger =
+        fn _k, %{node: node, pid: pid}, %{node: node, pid: pid} ->
+          %{node: node, pid: pid, ref: make_ref()}
+        end
+
+      call_handler = fn result, id, node ->
+        with {:badrpc, error} <- result do
+          Logger.warning("[♻️] Synch Error: " <> inspect(id: id, node: node, error: error))
+          []
+        end
+      end
+
       Enum.reduce(Node.list(), domestic, fn node, acc ->
         node
         |> :rpc.block_call(Infinitomata, :all, [id])
-        |> case do
-          {:badrpc, error} ->
-            Logger.warning("[♻️] Synch Error: " <> inspect(id: id, node: node, error: error))
-            []
-
-          result ->
-            result
-        end
+        |> call_handler.(id, node)
         |> Map.new(&fix_pid(&1, known_processes_alive))
-        |> Map.merge(acc, fn _k, %{node: node, pid: pid}, %{node: node, pid: pid} ->
-          %{node: node, pid: pid, ref: make_ref()}
-        end)
+        |> Map.merge(acc, merger)
       end)
+    end
 
-    fqn_id |> agent() |> Agent.update(fn _ -> known_fsms_alive end)
+    fqn_id |> agent() |> Agent.update(known_fsms_alive)
   end
 
   def all(id) do
