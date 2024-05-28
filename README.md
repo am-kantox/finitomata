@@ -152,6 +152,7 @@ end
 ```
 
 ## Changelog
+- `0.22.0` — [FIX] `Infinitomata.start_fsm/4` is finally 102% sync
 - `0.21.4` — [FIX] `Finitomata.Pool` initialization in cluster
 - `0.21.3` — [FIX] proper return from `Infinitomata.start_fsm/4`
 - `0.21.1` — [UPD] `listener: :mox` and better `Finitomata.ExUnit` docs 
