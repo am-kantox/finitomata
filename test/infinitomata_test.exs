@@ -13,6 +13,14 @@ defmodule Infinitomata.Test do
     :ok
   end
 
+  test "kinda stress-test instances (distributed)" do
+    for i <- 1..100 do
+      Infinitomata.start_fsm(InfiniTest, "FSM_ST_#{i}", Finitomata.Test.Log, %{instance: i})
+      Infinitomata.transition(InfiniTest, "FSM_ST_#{i}", :accept)
+      Infinitomata.transition(InfiniTest, "FSM_ST_#{i}", :__end__)
+    end
+  end
+
   test "many instances (distributed)" do
     for i <- 1..10 do
       Infinitomata.start_fsm(InfiniTest, "FSM_#{i}", Finitomata.Test.Log, %{instance: i})
