@@ -20,6 +20,24 @@ defmodule Finitomata.Test do
     end
   end
 
+  test "match_test?/2" do
+    start_supervised({Finitomata.Supervisor, id: SimpleFSM})
+
+    Finitomata.start_fsm(SimpleFSM, SimpleFSM, "SimpleFSM", %{foo: :bar})
+
+    %{current: current} = Finitomata.state(SimpleFSM, "SimpleFSM", :full)
+    assert Finitomata.match_state?(:ready, current)
+
+    Finitomata.transition(SimpleFSM, "SimpleFSM", {:publish, false})
+    Finitomata.transition(SimpleFSM, "SimpleFSM", {:publish, false})
+    Finitomata.transition(SimpleFSM, "SimpleFSM", {:publish, true})
+
+    assert Finitomata.match_state?(:ready, {:ready, 3})
+    assert Finitomata.match_state?({:ready, 2}, :ready)
+    assert Finitomata.match_state?({:ready, 2}, {:ready, 3})
+    refute Finitomata.match_state?({:ready, 2}, :idle)
+  end
+
   test "callbacks (log)" do
     start_supervised({Finitomata.Supervisor, id: LogFSM})
 

@@ -374,8 +374,9 @@ defmodule Finitomata do
   The FSM is started supervised. If the global name/id is given, it should be passed
     to all calls like `transition/4`
   """
-  @spec start_fsm(id(), module(), any(), any()) :: DynamicSupervisor.on_start_child()
-  def start_fsm(id \\ nil, impl, name, payload)
+  @spec start_fsm(id(), any() | module(), module() | any(), any()) ::
+          DynamicSupervisor.on_start_child()
+  def start_fsm(id \\ nil, name, impl, payload)
 
   def start_fsm(id, impl, name, payload) when is_atom(impl) and not is_atom(name),
     do: do_start_fsm(id, name, impl, payload)
@@ -533,6 +534,19 @@ defmodule Finitomata do
   """
   @spec alive?(any(), fsm_name()) :: boolean()
   def alive?(id \\ nil, target), do: id |> fqn(target) |> GenServer.whereis() |> is_pid()
+
+  @doc """
+  Helper to match finitomata state from history, which can be `:state`, or `{:state, reenters}`
+  """
+  @spec match_state?(
+          matched :: Finitomata.Transition.state(),
+          state :: Finitomata.Transition.state() | {Finitomata.Transition.state(), pos_integer()}
+        ) :: boolean()
+  def match_state?(state, state), do: true
+  def match_state?(state, {state, _reenters}), do: true
+  def match_state?({state, _reenters}, state), do: true
+  def match_state?({state, _}, {state, _}), do: true
+  def match_state?(_, _), do: false
 
   @doc false
   @spec child_spec(any()) :: Supervisor.child_spec()

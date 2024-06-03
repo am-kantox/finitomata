@@ -135,10 +135,6 @@ defmodule Finitomata.Distributed.Supervisor do
 
   @doc false
   def start_pg do
-    case :pg.start_link() do
-      {:ok, pid} -> {:ok, pid}
-      {:error, {:already_started, pid}} -> {:ok, pid}
-      error -> error
-    end
+    with {:error, {:already_started, pid}} <- :pg.start_link(), do: :ignore
   end
 end
