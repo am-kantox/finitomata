@@ -59,7 +59,7 @@ defmodule Finitomata.Transition do
           if is_map(fancy) do
             path
             |> Enum.reduce([], fn {event, to}, acc ->
-              [to_doc(to, opts), fancy.to, to_doc(event, opts), fancy.from | acc]
+              [to_doc(to, opts), fancy.to, to_doc("#{event}", opts), fancy.from | acc]
             end)
             |> Enum.reverse()
           end

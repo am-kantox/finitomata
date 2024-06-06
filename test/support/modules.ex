@@ -40,7 +40,7 @@ defmodule Finitomata.Test.Transition do
   done --> |end!| ended
   """
 
-  use Finitomata, fsm: @fsm
+  use Finitomata, fsm: @fsm, listener: :mox
 end
 
 defmodule Finitomata.Test.Sequenced do
@@ -54,7 +54,7 @@ defmodule Finitomata.Test.Sequenced do
   done --> |end!| ended
   """
 
-  use Finitomata, fsm: @fsm
+  use Finitomata, fsm: @fsm, listener: :mox
 end
 
 defmodule Finitomata.Test.Log do
