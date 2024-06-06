@@ -174,6 +174,20 @@ defmodule Finitomata.ExUnit do
 
   No other code besides `assert_state/2`, `assert_payload/1`, and `ExUnit.Assertions.assert_receive/3` is
     permitted to fully isolate the FSM execution from side effects.
+
+  ## Test Scaffold Generation
+
+  > ### `mix` tasks to simplify testing {: .info}
+  >
+  > One might generate the tests scaffold for all possible paths in the FSM with a `mix` task
+  >
+  >  ```bash
+  >  mix finitomata.generate.test --module MyApp.FSM
+  >  ```
+  >
+  > besides the mandatory `--module ModuleWithUseFinitomata` argument, it also accepts
+  > `--dir` and `--file` arguments (defaulted to `test/finitomata` and
+  > `Macro.underscore(module) <> "_test.exs`) respectively.)
   """
 
   alias Finitomata.TestTransitionError

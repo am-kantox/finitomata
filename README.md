@@ -152,6 +152,7 @@ end
 ```
 
 ## Changelog
+- `0.23.0` — [UPD] `mix finitomata.generate.test --module MyApp.FSM` to generate a `Finitomata.ExUnit` test scaffold
 - `0.22.0` — [FIX] `Infinitomata.start_fsm/4` is finally 102% sync
 - `0.21.4` — [FIX] `Finitomata.Pool` initialization in cluster
 - `0.21.3` — [FIX] proper return from `Infinitomata.start_fsm/4`
