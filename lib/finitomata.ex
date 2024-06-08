@@ -816,11 +816,29 @@ defmodule Finitomata do
         @moduledoc """
                    The instance of _FSM_ backed up by `Finitomata`.
 
+                   - _entry event_ → `:#{@__config__[:entry]}`
+                   - _persistency_ → `#{inspect(@__config__[:persistency] || false)}`
+                   - _listener_ → `#{inspect(@__config__[:listener] || false)}`
+                   - _timer_ → `#{@__config__[:timer] || "disabled"}`
+
                    ## FSM representation
 
                    ```#{@__config__[:syntax] |> Module.split() |> List.last() |> Macro.underscore()}
                    #{@__config__[:syntax].lint(@__config__[:dsl])}
                    ```
+
+                   ### FSM paths
+
+                   ```elixir
+                   #{Enum.map_join(@__config__[:paths], "\n", &inspect/1)}
+                   ```
+
+                   ### FSM loops
+
+                   ```elixir
+                   #{if [] != @__config__[:loops], do: Enum.map_join(@__config__[:loops], "\n", &inspect/1), else: "no loops"}
+                   ```
+
                    """ <> if(is_nil(@moduledoc), do: "", else: "\n---\n" <> @moduledoc)
       end
 

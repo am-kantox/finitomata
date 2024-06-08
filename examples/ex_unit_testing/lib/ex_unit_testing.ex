@@ -32,6 +32,7 @@ defmodule ExUnitTesting do
 
   @fsm """
   idle --> |start| started
+  started --> |retry| started
   started --> |do| done
   """
 

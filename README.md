@@ -86,6 +86,11 @@ until succeeded. Neither `on_failure/2` callback is called nor warning message i
 The payload would be updated to hold `__retries__: pos_integer()` key. If the payload was not a map,
 it will be converted to a map `%{payload: payload}`.
 
+### Examples
+
+See [examples directory](https://github.com/am-kantox/finitomata/tree/main/examples) for
+real-life examples of `Finitomata` usage.
+
 ## Example
 
 Let’s define the FSM instance
