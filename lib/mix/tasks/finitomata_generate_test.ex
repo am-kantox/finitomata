@@ -11,6 +11,9 @@ defmodule Mix.Tasks.Finitomata.Generate.Test do
   @impl Mix.Task
   @doc false
   def run(args) do
+    Mix.Task.run("compile")
+    Finitomata.Mix.load_app()
+
     {opts, _pass_thru, []} =
       OptionParser.parse(args, strict: [module: :string, file: :string, dir: :string])
 
@@ -28,7 +31,7 @@ defmodule Mix.Tasks.Finitomata.Generate.Test do
 
     if module?(module) do
       paths =
-        module.fsm |> Finitomata.Transition.paths() |> Enum.map(&{&1, transform_path(&1)})
+        module.fsm() |> Finitomata.Transition.paths() |> Enum.map(&{&1, transform_path(&1)})
 
       test_module = Module.concat([module, "Test"])
       target_file = Path.join(test_dir, test_file)
@@ -79,7 +82,7 @@ defmodule Mix.Tasks.Finitomata.Generate.Test do
       _ ->
         Mix.shell().error([
           :yellow,
-          "* #{module}",
+          "* #{inspect(module)}",
           :reset,
           " is not found or is not a `Finitomata` instance"
         ])

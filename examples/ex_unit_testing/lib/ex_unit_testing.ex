@@ -60,6 +60,12 @@ defmodule ExUnitTesting do
   end
 
   @impl Finitomata
+  def on_transition(:started, :retry, _, %{pid: pid} = state) do
+    send(pid, :on_retry)
+    {:ok, :strarted, update_in(state, [:internals, :counter], &(&1 + 1))}
+  end
+
+  @impl Finitomata
   def on_transition(:started, :do, _, %{pid: pid} = state) do
     send(pid, :on_do)
     {:ok, :done, update_in(state, [:internals, :counter], &(&1 + 1))}

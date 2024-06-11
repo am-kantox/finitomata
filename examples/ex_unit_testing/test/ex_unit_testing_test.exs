@@ -1,4 +1,4 @@
-defmodule ExUnitTesting.Test do
+defmodule ExUnitTesting.CustomTest do
   use ExUnit.Case, async: true
   doctest ExUnitTesting
 

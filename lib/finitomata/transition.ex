@@ -636,7 +636,7 @@ defmodule Finitomata.Transition do
     def inspect(%Finitomata.Transition{from: from, to: to, event: event}, opts) do
       case Keyword.get(opts.custom_options, :fancy, true) do
         false ->
-          inner = [from: from, to: to, event: event]
+          inner = [from: from, to: to, event: to_string(event)]
           concat(["#Finitomata.Transition<", to_doc(inner, opts), ">"])
 
         _ ->
