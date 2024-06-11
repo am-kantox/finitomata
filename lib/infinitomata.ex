@@ -72,7 +72,10 @@ defmodule Infinitomata do
   end
 
   @doc since: "0.16.0"
-  @doc "The full state with all te children, might be a heavy map"
+  @doc "The full state with all the children acrosss the cluster, might be a heavy map"
+  @spec all(Finitomata.id()) :: %{
+          optional(Finitomata.fsm_name()) => %{pid: pid(), node: node(), reference: reference()}
+        }
   def all(id \\ nil) do
     id
     |> FinSup.infinitomata_name()

@@ -1426,8 +1426,32 @@ defmodule Finitomata do
     end
   end
 
-  @spec fqn(any(), fsm_name()) :: {:via, module(), {module, any()}}
+  @spec fqn(id(), fsm_name()) :: {:via, module(), {module, any()}}
   @doc "Fully qualified name of the _FSM_ backed by `Finitonata`"
   def fqn(id, name),
     do: {:via, Registry, {Finitomata.Supervisor.registry_name(id), name}}
+
+  @doc since: "0.23.3"
+  @doc "The full state with all the children, might be a heavy list"
+  @spec all(id()) :: %{
+          optional(fsm_name()) => %{pid: pid(), module: module()}
+        }
+  def all(id \\ nil) do
+    pid_to_module =
+      id
+      |> Finitomata.Supervisor.manager_name()
+      |> DynamicSupervisor.which_children()
+      |> Enum.flat_map(fn
+        {_undefined, pid, :worker, [module]} -> [{pid, module}]
+        _ -> []
+      end)
+      |> Map.new()
+
+    id
+    |> Finitomata.Supervisor.registry_name()
+    |> Registry.select([{{:"$1", :"$2", :_}, [], [{{:"$1", :"$2"}}]}])
+    |> Map.new(fn {name, pid} ->
+      {name, %{pid: pid, module: Map.get(pid_to_module, pid, :unknown)}}
+    end)
+  end
 end
