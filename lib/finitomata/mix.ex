@@ -54,7 +54,6 @@ defmodule Finitomata.Mix do
 
       visited
     end
-    |> IO.inspect(label: "LoadAppRecursive")
   end
 
   defp load_compile_time_deps do
