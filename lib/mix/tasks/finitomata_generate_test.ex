@@ -31,7 +31,9 @@ defmodule Mix.Tasks.Finitomata.Generate.Test do
 
     if module?(module) do
       paths =
-        module.fsm() |> Finitomata.Transition.paths() |> Enum.map(&{&1, transform_path(&1)})
+        module.fsm()
+        |> Finitomata.Transition.paths()
+        |> Enum.map(&{&1, transform_path(module.__config__(:auto_terminate), &1)})
 
       test_module = Module.concat([module, "Test"])
       target_file = Path.join(test_dir, test_file)
@@ -58,9 +60,10 @@ defmodule Mix.Tasks.Finitomata.Generate.Test do
   end
 
   @doc false
-  defp transform_path(%Finitomata.Transition.Path{path: path}), do: transform_path(path)
+  defp transform_path(auto_terminate?, %Finitomata.Transition.Path{path: path}),
+    do: transform_path(auto_terminate?, path)
 
-  defp transform_path(path) do
+  defp transform_path(auto_terminate?, path) do
     path
     |> Enum.reduce([], fn
       {event, state}, [] ->
@@ -71,8 +74,12 @@ defmodule Mix.Tasks.Finitomata.Generate.Test do
           do: [curr ++ [{event, state}] | rest],
           else: [[{event, state}], curr | rest]
     end)
+    |> then(&maybe_join_ending(auto_terminate?, &1))
     |> Enum.reverse()
   end
+
+  defp maybe_join_ending(false, path), do: path
+  defp maybe_join_ending(true, [[{:__end__, :*}] = last, prev | rest]), do: [prev ++ last | rest]
 
   defp module?(module) do
     with {:module, ^module} <- Code.ensure_compiled(module),

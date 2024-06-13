@@ -16,14 +16,23 @@ defmodule <%= inspect(@test_module) %> do
         fsm: [
           implementation: <%= inspect(@module) %>,
           payload: %{},
-          options: [transition_count: <%= length(path) + 1 %>]
+          options: [transition_count: <%= path |> List.flatten() |> length() %>]
         ],
         context: [parent: parent]
       ]
     end
 
-    test_path "path #<%= number %>", %{parent: _parent} = _ctx do
-      <%= for [{event, state} | states] <- path, event != :__start__ do %>
+    test_path "path #<%= number %>", %{finitomata: %{}, parent: _} = _ctx do
+      <%= for [{event, state} | states] <- path do %>
+      <%= if event == :__start__ do %>
+      :* ->
+        # these validations are not yet handled by `Finitomata.ExUnit`
+        # pattern match directly in the context above as shown below to validate
+        #
+        # %{finitomata: %{auto_init_msgs: %{idle: :foo, started: :bar}}} = _ctx
+        assert_state <%= inspect(state) %> <%= for {_event, state} <- states do %>
+          assert_state <%= inspect(state) %> <% end %>
+      <% else %>
       {<%= inspect(event) %>, nil} ->
         assert_state <%= inspect(state) %> do
           assert_payload do
@@ -35,7 +44,10 @@ defmodule <%= inspect(@test_module) %> do
           assert_payload do
             # baz ~> ^parent
           end
-        end <% end %> <% end %>
+        end
+        <% end %>
+      <% end %>
+      <% end %>
     end
   end <% end %>
 end

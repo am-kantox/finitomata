@@ -33,7 +33,7 @@ defmodule Finitomata.TestTransitionError do
     [
       :yellow,
       "\n  💡 If you do not want to validate anything after entering some states, use " <>
-        "`:state -> :ok` clause.\n"
+        "`{:event, payload} -> :ok` clause.\n"
     ]
     |> IO.ANSI.format()
     |> to_string()

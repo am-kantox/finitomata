@@ -190,7 +190,7 @@ defmodule Finitomata.ExUnit do
   > `Macro.underscore(module) <> "_test.exs`) respectively.)
   """
 
-  alias Finitomata.TestTransitionError
+  alias Finitomata.{ExUnit, TestTransitionError}
 
   @doc false
   def estructura_path({{:., _, [{hd, _, _}, tl]}, _, []}) do
@@ -291,6 +291,25 @@ defmodule Finitomata.ExUnit do
     raise(%UndefinedFunctionError{module: __MODULE__, function: :assert_payload, arity: 1})
   end
 
+  @doc false
+  def do_flush(messages \\ []) do
+    receive do
+      msg -> do_flush([msg | messages])
+    after
+      100 -> Map.new(messages, fn {:on_transition, _fsm, state, payload} -> {state, payload} end)
+    end
+  end
+
+  @doc false
+  def assertions_to_states({:__block__, _, states}) do
+    Enum.flat_map(states, fn
+      {:assert_state, _, [state | _]} -> [state]
+      _ -> []
+    end)
+  end
+
+  def assertions_to_states(_), do: []
+
   @doc """
   Setups `Finitomata` for testing in the case and/or in `ExUnit.Case.describe/2` block.
 
@@ -340,7 +359,12 @@ defmodule Finitomata.ExUnit do
           |> Map.new()
 
         init_finitomata(fini.id, @fini_implementation, fini.name, fini.payload, fini.options)
-        Keyword.put(@fini_context, :finitomata, %{test_pid: self(), fsm: Map.new(fini)})
+
+        Keyword.put(@fini_context, :finitomata, %{
+          test_pid: self(),
+          auto_init_msgs: Finitomata.ExUnit.do_flush(),
+          fsm: Map.new(fini)
+        })
       end
     end
   end
@@ -720,20 +744,31 @@ defmodule Finitomata.ExUnit do
   defmacro test_path_transitions(id, impl, name, do: block) do
     block
     |> unblock()
-    |> Enum.map(fn {:->, _meta, [[event_payload], state_assertions]} ->
-      state_assertions_ast =
-        state_assertions
-        |> unblock()
-        |> Enum.map(fn
-          {:assert_state, meta, [state]} ->
-            {:->, meta, [[state], {:__block__, meta, []}]}
+    |> Enum.flat_map(fn
+      {:->, _meta, [[:*], state_assertions]} ->
+        # gathered states declared under `:*`
+        # maybe compare them against `auto_init_msgs`
+        _states = assertions_to_states(state_assertions)
+        ExUnit.do_flush()
 
-          {:assert_state, meta, [state, [do: block]]} ->
-            {:->, meta, [[state], {:__block__, meta, unblock(block)}]}
-        end)
+      {:->, _meta, [[event_payload], state_assertions]} ->
+        state_assertions_ast =
+          state_assertions
+          |> unblock()
+          |> Enum.map(fn
+            {:assert_state, meta, [state]} ->
+              {:->, meta, [[state], {:__block__, meta, []}]}
 
-      {event_payload,
-       do_assert_transition(id, impl, name, event_payload, __CALLER__, do: state_assertions_ast)}
+            {:assert_state, meta, [state, [do: block]]} ->
+              {:->, meta, [[state], {:__block__, meta, unblock(block)}]}
+          end)
+
+        [
+          {event_payload,
+           do_assert_transition(id, impl, name, event_payload, __CALLER__,
+             do: state_assertions_ast
+           )}
+        ]
     end)
   end
 

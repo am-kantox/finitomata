@@ -118,20 +118,47 @@ defmodule Finitomata.Test.Auto do
   use Finitomata, fsm: @fsm, auto_terminate: true
 
   @impl Finitomata
-  def on_transition(:idle, :start!, _, %{pid: pid} = state) do
-    send(pid, :on_start!)
+  def on_transition(:idle, :start!, _, state) do
+    send(state.pid, :on_start!)
     {:ok, :started, state}
   end
 
   @impl Finitomata
-  def on_transition(:started, :do!, _, %{pid: pid} = state) do
-    send(pid, :on_do!)
+  def on_transition(:started, :do!, _, state) do
+    send(state.pid, :on_do!)
     {:ok, :done, state}
   end
 
   @impl Finitomata
-  def on_transition(:done, :__end__, _, %{pid: pid} = state) do
-    send(pid, :on_end)
+  def on_transition(:done, :__end__, _, state) do
+    send(state.pid, :on_end)
+    {:ok, :*, state}
+  end
+end
+
+defmodule Finitomata.Test.AutoExUnit do
+  @moduledoc false
+
+  @fsm """
+  idle --> |start!| started
+  started --> |do!| done
+  done --> |exit| exited
+  """
+
+  use Finitomata, fsm: @fsm, auto_terminate: true, listener: :mox
+
+  @impl Finitomata
+  def on_transition(:idle, :start!, _, state) do
+    {:ok, :started, state}
+  end
+
+  @impl Finitomata
+  def on_transition(:started, :do!, _, state) do
+    {:ok, :done, state}
+  end
+
+  @impl Finitomata
+  def on_transition(:exited, :__end__, _, state) do
     {:ok, :*, state}
   end
 end
