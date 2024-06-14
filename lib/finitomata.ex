@@ -1044,7 +1044,7 @@ defmodule Finitomata do
       def handle_info(whatever, state)
           when not is_integer(state.timer) or whatever != :on_timer do
         Logger.error(
-          "Unexpected message ‹#{inspect(whatever)}› received by #{State.human_readable_name(state)}. " <>
+          "Unexpected message ‹#{inspect(whatever)}› received by #{inspect(State.human_readable_name(state))}. " <>
             "`Finitomata` does not accept direct messages. Please use `on_transition/4` callback instead."
         )
 
