@@ -157,7 +157,7 @@ end
 ```
 
 ## Changelog
-- `0.23.4` — [FIX] many fixes to a Finitomata.ExUnit` test scaffold generation
+- `0.23.4` — [FIX] many fixes to a `Finitomata.ExUnit` test scaffold generation
 - `0.23.0` — [UPD] `mix finitomata.generate.test --module MyApp.FSM` to generate a `Finitomata.ExUnit` test scaffold
 - `0.22.0` — [FIX] `Infinitomata.start_fsm/4` is finally 102% sync
 - `0.21.4` — [FIX] `Finitomata.Pool` initialization in cluster
@@ -198,6 +198,6 @@ end
 - `0.5.0` — all callbacks but `on_transition/4` are optional, accept `impl_for:` param to `use Finitomata`
 - `0.4.0` — allow anonymous FSM instances
 - `0.3.0` — `en_entry/2` and `on_exit/2` optional callbacks
-- `0.2.0` — [Mermaid](https://mermaid.live) support
+- `0.2.0` — [`Mermaid`](https://mermaid.live) support
 
 [Documentation](https://hexdocs.pm/finitomata).
