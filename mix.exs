@@ -77,7 +77,7 @@ defmodule Finitomata.MixProject do
   defp package do
     [
       name: @app,
-      files: ~w|stuff lib mix.exs README.md LICENSE|,
+      files: ~w|stuff lib mix.exs README.md LICENSE .formatter.exs|,
       maintainers: ["Aleksei Matiushkin"],
       licenses: ["Kantox LTD"],
       links: %{
