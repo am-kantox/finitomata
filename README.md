@@ -157,6 +157,7 @@ end
 ```
 
 ## Changelog
+- `0.23.7` — [UPD] allow both `:mox` and `{:mox, MyApp.Listener}` as well as just `MyApp.Listener` as a listener in FSM definition
 - `0.23.4` — [FIX] many fixes to a `Finitomata.ExUnit` test scaffold generation
 - `0.23.0` — [UPD] `mix finitomata.generate.test --module MyApp.FSM` to generate a `Finitomata.ExUnit` test scaffold
 - `0.22.0` — [FIX] `Infinitomata.start_fsm/4` is finally 102% sync

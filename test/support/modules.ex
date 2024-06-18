@@ -54,7 +54,19 @@ defmodule Finitomata.Test.Sequenced do
   done --> |end!| ended
   """
 
-  use Finitomata, fsm: @fsm, listener: :mox
+  defmodule Listener do
+    @moduledoc false
+
+    require Logger
+
+    @behaviour Finitomata.Listener
+    @impl Finitomata.Listener
+    def after_transition(id, state, payload) do
+      Logger.warning(inspect(id: id, state: state, payload: payload))
+    end
+  end
+
+  use Finitomata, fsm: @fsm, listener: {:mox, Listener}
 end
 
 defmodule Finitomata.Test.Log do

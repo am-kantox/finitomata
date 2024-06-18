@@ -94,6 +94,11 @@ defmodule Finitomata do
         {:or,
          [
            {:in, [nil, :mox]},
+           {:tuple,
+            [
+              {:in, [:mox]},
+              {:custom, Finitomata, :behaviour, [Finitomata.Listener]}
+            ]},
            {:custom, Finitomata, :behaviour, [[handle_info: 2]]},
            {:custom, Finitomata, :behaviour, [Finitomata.Listener]}
          ]},
@@ -658,30 +663,32 @@ defmodule Finitomata do
           Application.compile_env(:finitomata, :listener, nil)
         )
 
-      listener =
-        with :mox <- listener do
-          if Mix.env() == :test do
-            with {:error, error} <- Code.ensure_compiled(Mox) do
-              reporter.info([
-                [:yellow, "expectation: ", :reset],
-                "to be able to use ",
-                [:blue, ":mox", :reset],
-                " listener in tests with ",
-                [:blue, "`Finitomata.ExUnit`", :reset],
-                ", please add ",
-                [:blue, "`{:mox, \"~> 1.0\", only: [:test]}`", :reset],
-                " as a dependency to your ",
-                [:blue, "`mix.exs`", :reset],
-                " project file (got: ",
-                [:yellow, inspect(error), :reset],
-                ")"
-              ])
-            end
+      def_mock = fn ->
+        with {:error, error} <- Code.ensure_compiled(Mox) do
+          reporter.info([
+            [:yellow, "expectation: ", :reset],
+            "to be able to use ",
+            [:blue, ":mox", :reset],
+            " listener in tests with ",
+            [:blue, "`Finitomata.ExUnit`", :reset],
+            ", please add ",
+            [:blue, "`{:mox, \"~> 1.0\", only: [:test]}`", :reset],
+            " as a dependency to your ",
+            [:blue, "`mix.exs`", :reset],
+            " project file (got: ",
+            [:yellow, inspect(error), :reset],
+            ")"
+          ])
+        end
 
-            [__MODULE__, Mox]
-            |> Module.concat()
-            |> tap(&Mox.defmock(&1, for: Finitomata.Listener))
-          end
+        [__MODULE__, Mox] |> Module.concat() |> tap(&Mox.defmock(&1, for: Finitomata.Listener))
+      end
+
+      listener =
+        case listener do
+          :mox -> if Mix.env() == :test, do: def_mock.()
+          {:mox, listener} -> if Mix.env() == :test, do: def_mock.(), else: listener
+          listener -> listener
         end
 
       use GenServer, restart: :transient, shutdown: shutdown
