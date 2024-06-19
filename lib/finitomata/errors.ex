@@ -39,3 +39,33 @@ defmodule Finitomata.TestTransitionError do
     |> to_string()
   end
 end
+
+defmodule Finitomata.TestSyntaxError do
+  defexception code: nil, message: nil
+
+  @impl true
+  def message(%{message: nil, code: code}) do
+    code = code |> String.split("\n") |> Enum.map_join("\n", &("    " <> &1))
+
+    "The state validation withing the block must be shaped as `deeply.nested.element ~> ^value`\n  Code:\n#{code}"
+  end
+
+  def message(%{message: message}) do
+    message
+  end
+
+  @impl true
+  def blame(exception, stacktrace) do
+    message = message(exception) <> hint()
+    {%{exception | message: message}, stacktrace}
+  end
+
+  defp hint do
+    [
+      :yellow,
+      "\n  💡 If you want to pattern match the result directly, pass it as the first parameter, without `do:` block\n"
+    ]
+    |> IO.ANSI.format()
+    |> to_string()
+  end
+end

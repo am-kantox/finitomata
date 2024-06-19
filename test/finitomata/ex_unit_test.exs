@@ -126,7 +126,9 @@ defmodule Finitomata.ExUnit.Test do
           assert_receive :on_do
         end
 
-        assert_state :*
+        assert_state :* do
+          assert_payload %{internals: %{counter: 2}, pid: ^parent}
+        end
     end
   end
 end

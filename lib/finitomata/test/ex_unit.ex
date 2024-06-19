@@ -481,8 +481,8 @@ defmodule Finitomata.ExUnit do
           %{finitomata: %{fsm: fsm}} ->
             fsm
 
-          other ->
-            raise TestTransitionError,
+          _other ->
+            raise Finitomata.TestTransitionError,
               message:
                 "in order to use `assert_transition/3` one should declare _FSM_ in `setup_finitomata/1` callback"
         end
@@ -778,19 +778,20 @@ defmodule Finitomata.ExUnit do
   defp unblock({:__block__, _, block}), do: unblock(block)
   defp unblock(block), do: List.wrap(block)
 
-  defp do_handle_matches([]), do: []
+  defp do_handle_matches(ast, loop? \\ false)
+  defp do_handle_matches([], _), do: []
 
-  defp do_handle_matches({:when, _, [{:~>, _meta, [_var, _match_ast]}, _guard]} = guard),
+  defp do_handle_matches({:when, _, [{:~>, _meta, [_var, _match_ast]}, _guard]} = guard, _),
     do: do_handle_matches([guard])
 
-  defp do_handle_matches([{:when, guard_meta, [{:~>, meta, [var, match_ast]}, guard]} | more]) do
+  defp do_handle_matches([{:when, guard_meta, [{:~>, meta, [var, match_ast]}, guard]} | more], _) do
     do_handle_matches([{:~>, meta, [var, {:when, guard_meta, [match_ast, guard]}]} | more])
   end
 
-  defp do_handle_matches([{:->, meta, [[{_, _, _} = var], match_ast]} | more]),
+  defp do_handle_matches([{:->, meta, [[{_, _, _} = var], match_ast]} | more], _),
     do: do_handle_matches([{:~>, meta, [var, match_ast]} | more])
 
-  defp do_handle_matches([{:~>, _meta, [{_, _, _} = var, match_ast]} | more]) do
+  defp do_handle_matches([{:~>, _meta, [{_, _, _} = var, match_ast]} | more], _) do
     path = var |> estructura_path() |> Enum.reverse()
 
     match =
@@ -801,6 +802,9 @@ defmodule Finitomata.ExUnit do
     [match | do_handle_matches(more)]
   end
 
-  defp do_handle_matches(any),
-    do: any |> unblock() |> do_handle_matches()
+  defp do_handle_matches(any, false),
+    do: any |> unblock() |> do_handle_matches(true)
+
+  defp do_handle_matches(any, true),
+    do: raise(Finitomata.TestSyntaxError, code: Macro.to_string(any))
 end
