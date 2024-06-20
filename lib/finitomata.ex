@@ -765,7 +765,12 @@ defmodule Finitomata do
 
       hard =
         Enum.map(hard, fn {from, event} ->
-          {from, Enum.find(fsm, &match?(%Transition{from: ^from, event: ^event}, &1))}
+          tos =
+            fsm
+            |> Enum.filter(&match?(%Transition{from: ^from, event: ^event}, &1))
+            |> Enum.map(& &1.to)
+
+          {from, %Transition{from: from, event: event, to: tos}}
         end)
 
       soft =

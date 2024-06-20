@@ -199,9 +199,9 @@ defmodule Finitomata.Transition do
       iex> {:ok, transitions} =
       ...>   Finitomata.PlantUML.parse("[*] --> entry : start\nentry --> exit : go!\nexit --> done : finish\ndone --> [*] : terminate")
       ...> Finitomata.Transition.continuation(:entry, Finitomata.Transition.hard(:transitions, transitions))
-      %Finitomata.Transition.Path{from: :entry, to: :exit, path: [go!: :exit]}
+      [%Finitomata.Transition.Path{from: :entry, to: :exit, path: [go!: :exit]}]
   """
-  @spec continuation(:states | :transitions, state(), [t()]) :: nil | Path.t() | [t()]
+  @spec continuation(:states | :transitions, state(), [t()]) :: nil | [Path.t()] | [t()]
   def continuation(states \\ :states, from, transitions)
 
   def continuation(:states, from, transitions) do
@@ -209,7 +209,7 @@ defmodule Finitomata.Transition do
     |> continuation(from, transitions)
     |> case do
       [] -> nil
-      path -> [path] |> to_path() |> hd()
+      path -> to_path([path])
     end
   end
 
@@ -219,14 +219,17 @@ defmodule Finitomata.Transition do
 
   defp do_continuation(from, transitions, path) do
     transitions
-    |> Enum.filter(&match?(%Transition{from: ^from}, &1))
-    |> case do
-      [%Transition{from: from, to: to} = t] when from != to ->
-        do_continuation(to, transitions, [t | path])
-
-      _ ->
+    |> Enum.flat_map(fn
+      %Transition{from: from_to, to: from_to} ->
         Enum.reverse(path)
-    end
+
+      %Transition{from: ^from, to: to} = t ->
+        if Enum.member?(path, t), do: [], else: do_continuation(to, transitions, [t | path])
+
+      _other ->
+        Enum.reverse(path)
+    end)
+    |> Enum.uniq()
   end
 
   @doc ~S"""
@@ -264,6 +267,13 @@ defmodule Finitomata.Transition do
     end)
     |> Stream.uniq()
   end
+
+  @doc false
+  def flatten(%Transition{to: to} = transition) when is_atom(to),
+    do: [transition]
+
+  def flatten(%Transition{from: from, to: to, event: event}) when is_list(to),
+    do: Enum.map(to, &%Transition{from: from, to: &1, event: event})
 
   @doc ~S"""
   Returns all the loops aka internal paths where starting and ending states are the same one.
@@ -636,7 +646,7 @@ defmodule Finitomata.Transition do
     def inspect(%Finitomata.Transition{from: from, to: to, event: event}, opts) do
       case Keyword.get(opts.custom_options, :fancy, true) do
         false ->
-          inner = [from: from, to: to, event: to_string(event)]
+          inner = [from: from, to: to, event: event]
           concat(["#Finitomata.Transition<", to_doc(inner, opts), ">"])
 
         _ ->
@@ -644,9 +654,7 @@ defmodule Finitomata.Transition do
           concat([
             "↹‹",
             to_doc(from, opts),
-            " ⇥ ",
-            to_doc(event, opts),
-            " ↦ ",
+            " ⇥ ‹#{event}› ↦ ",
             to_doc(to, opts),
             "›"
           ])

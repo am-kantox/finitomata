@@ -3,7 +3,7 @@ defmodule Finitomata.Transition.Test do
 
   doctest Finitomata.Transition
 
-  alias Finitomata.Test.Transition
+  alias Finitomata.Test.{Hard, Transition}
 
   test "loops" do
     assert [
@@ -213,5 +213,18 @@ defmodule Finitomata.Transition.Test do
   test "exiting" do
     assert [%Finitomata.Transition.Path{from: :done, to: :*, path: [end!: :ended, __end__: :*]}] =
              Finitomata.Transition.exiting(Transition.fsm())
+  end
+
+  test "hard" do
+    assert [
+             ended: %Finitomata.Transition{from: :ended, to: [:*], event: :__end__},
+             done: %Finitomata.Transition{from: :done, to: [:ended], event: :end!},
+             reload: %Finitomata.Transition{from: :reload, to: [:ready], event: :reloaded!},
+             ready: %Finitomata.Transition{
+               from: :ready,
+               to: [:ready, :reload, :done],
+               event: :do!
+             }
+           ] == Hard.__config__(:hard)
   end
 end

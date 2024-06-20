@@ -4,7 +4,7 @@ defmodule Finitomata.TestTransitionError do
   @impl true
   def message(%{message: nil} = exception) do
     [
-      "The transition validation must include all possible continuations.",
+      "The transition validation should include all possible continuations.",
       if(not Enum.empty?(exception.transition),
         do: "  Transition: " <> inspect(exception.transition) <> "."
       ),

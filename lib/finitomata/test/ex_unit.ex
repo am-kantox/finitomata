@@ -577,26 +577,45 @@ defmodule Finitomata.ExUnit do
           |> Enum.filter(&match?(%Finitomata.Transition{to: ^state, event: ^event_name}, &1))
 
         case states -- impl.__config__(:states) do
-          [] -> :ok
-          some -> raise TestTransitionError, transition: transitions, unknown_states: some
+          [] ->
+            :ok
+
+          some ->
+            IO.warn(
+              TestTransitionError.message(%TestTransitionError{
+                message: nil,
+                transition: transitions,
+                unknown_states: some
+              })
+            )
         end
 
         expected_continuation =
+          impl.__config__(:hard)
+          |> Keyword.values()
+          |> Enum.flat_map(&Finitomata.Transition.flatten/1)
+
+        expected_continuation =
           :transitions
-          |> Finitomata.Transition.continuation(
-            state,
-            Keyword.values(impl.__config__(:hard))
-          )
+          |> Finitomata.Transition.continuation(state, expected_continuation)
           |> Enum.map(& &1.to)
 
-        [continuation, expected_continuation]
-        |> Enum.map(&MapSet.new/1)
-        |> Enum.reduce(&MapSet.equal?/2)
-        |> unless do
-          raise TestTransitionError,
-            transition: transitions,
-            missing_states: expected_continuation -- continuation,
-            unknown_states: continuation -- expected_continuation
+        shortened_expected_continuation =
+          case Enum.chunk_by(expected_continuation, &(&1 == state)) do
+            [] -> []
+            [_] -> []
+            [_before, _state | _rest] = chunks -> List.last(chunks)
+          end
+
+        if continuation not in [expected_continuation, shortened_expected_continuation] do
+          IO.warn(
+            TestTransitionError.message(%TestTransitionError{
+              message: nil,
+              transition: transitions,
+              missing_states: expected_continuation -- continuation,
+              unknown_states: continuation -- expected_continuation
+            })
+          )
         end
       end
 

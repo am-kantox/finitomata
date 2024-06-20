@@ -43,6 +43,26 @@ defmodule Finitomata.Test.Transition do
   use Finitomata, fsm: @fsm, listener: :mox
 end
 
+defmodule Finitomata.Test.Hard do
+  @moduledoc false
+
+  @fsm """
+  idle --> |start| ready
+  ready --> |do!| ready
+  ready --> |do!| reload
+  ready --> |do!| done
+  reload --> |reloaded!| ready
+  done --> |end!| ended
+  """
+
+  use Finitomata, fsm: @fsm, auto_terminate: true, listener: :mox
+
+  @impl Finitomata
+  def on_transition(:ready, :do!, _, state) do
+    {:ok, :done, state}
+  end
+end
+
 defmodule Finitomata.Test.Sequenced do
   @moduledoc false
 
