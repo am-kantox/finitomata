@@ -595,25 +595,31 @@ defmodule Finitomata.ExUnit do
           |> Keyword.values()
           |> Enum.flat_map(&Finitomata.Transition.flatten/1)
 
-        expected_continuation =
+        expected_continuations =
           :transitions
           |> Finitomata.Transition.continuation(state, expected_continuation)
-          |> Enum.map(& &1.to)
+          |> Enum.map(&Enum.map(&1, fn %Finitomata.Transition{to: to} -> to end))
 
-        shortened_expected_continuation =
-          case Enum.chunk_by(expected_continuation, &(&1 == state)) do
-            [] -> []
-            [_] -> []
-            [_before, _state | _rest] = chunks -> List.last(chunks)
-          end
+        shortened_expected_continuations =
+          expected_continuations
+          |> Enum.map(fn expected_continuation ->
+            case Enum.chunk_by(expected_continuation, &(&1 == state)) do
+              [] -> []
+              [_] -> []
+              [_before | _rest] = chunks -> List.last(chunks)
+            end
+          end)
+          |> Enum.reject(&(&1 == []))
 
-        if continuation not in [expected_continuation, shortened_expected_continuation] do
+        expected = Enum.uniq([[] | expected_continuations ++ shortened_expected_continuations])
+
+        if continuation not in expected do
           IO.warn(
             TestTransitionError.message(%TestTransitionError{
               message: nil,
               transition: transitions,
-              missing_states: expected_continuation -- continuation,
-              unknown_states: continuation -- expected_continuation
+              missing_states: expected -- continuation,
+              unknown_states: continuation -- expected
             })
           )
         end

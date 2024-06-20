@@ -209,7 +209,7 @@ defmodule Finitomata.Transition do
     |> continuation(from, transitions)
     |> case do
       [] -> nil
-      path -> to_path([path])
+      path -> to_path(path)
     end
   end
 
@@ -217,19 +217,25 @@ defmodule Finitomata.Transition do
     do_continuation(from, transitions, [])
   end
 
+  # [↹‹:ended ⇥ ‹__end__› ↦ :*›,
+  #  ↹‹:done ⇥ ‹end!› ↦ :ended›,
+  #  ↹‹:reload ⇥ ‹reloaded!› ↦ :ready›,
+  #  ↹‹:ready ⇥ ‹do!› ↦ :ready›,
+  #  ↹‹:ready ⇥ ‹do!› ↦ :reload›,
+  #  ↹‹:ready ⇥ ‹do!› ↦ :done›]
   defp do_continuation(from, transitions, path) do
     transitions
-    |> Enum.flat_map(fn
-      %Transition{from: from_to, to: from_to} ->
-        Enum.reverse(path)
-
+    |> Enum.reject(&match?(%Transition{from: from_to, to: from_to}, &1))
+    |> Enum.map(fn
       %Transition{from: ^from, to: to} = t ->
-        if Enum.member?(path, t), do: [], else: do_continuation(to, transitions, [t | path])
+        if Enum.member?(path, t),
+          do: [],
+          else: Enum.uniq(List.flatten(do_continuation(to, transitions, [t | path])))
 
       _other ->
         Enum.reverse(path)
     end)
-    |> Enum.uniq()
+    |> Enum.reject(&(&1 == []))
   end
 
   @doc ~S"""
