@@ -21,6 +21,11 @@ defmodule Finitomata.Distributed.Supervisor do
 
         Task.start(fn -> synch(id) end)
 
+        {:ok, pid}
+
+      {:error, {:already_started, _pid}} ->
+        :ignore
+
       other ->
         other
     end)
@@ -82,7 +87,7 @@ defmodule Finitomata.Distributed.Supervisor do
 
   def all(id) do
     with empty when empty == %{} <- Agent.get(agent(id), & &1) do
-      Logger.error("[♻️] Empty pool for ‹#{inspect(id)}›")
+      Logger.debug("[♻️] Empty pool for ‹#{inspect(id)}›")
       %{}
     end
   end
