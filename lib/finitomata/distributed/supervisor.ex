@@ -8,7 +8,7 @@ defmodule Finitomata.Distributed.Supervisor do
   def start_link(id, nodes \\ Node.list()) do
     __MODULE__
     |> Supervisor.start_link(id, name: sup_name(id))
-    |> tap(fn
+    |> then(fn
       {:ok, pid} when is_pid(pid) ->
         Enum.each(nodes, fn node ->
           with {:badrpc, error} <- :rpc.block_call(node, __MODULE__, :start_link, [id, []]) do
