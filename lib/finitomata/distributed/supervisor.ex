@@ -23,8 +23,8 @@ defmodule Finitomata.Distributed.Supervisor do
 
         {:ok, pid}
 
-      {:error, {:already_started, _pid}} ->
-        :ignore
+      {:error, {:already_started, pid}} ->
+        {:ok, pid}
 
       other ->
         other
