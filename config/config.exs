@@ -1,5 +1,4 @@
 import Config
 
-config :logger,
-  level: :debug,
-  backends: [:console]
+config :logger, :default_handler, level: :debug
+config :logger, :default_formatter, colors: [info: :magenta]

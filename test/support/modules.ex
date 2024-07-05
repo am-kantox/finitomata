@@ -263,3 +263,30 @@ defmodule Finitomata.Test.ErrorAttach do
     Logger.debug("[failure] event: " <> inspect(last_error.event))
   end
 end
+
+defmodule Finitomata.Test.Determined do
+  @moduledoc false
+
+  @fsm """
+  idle --> |start!| started
+  started --> |step!| step1
+  step1 --> |step!| step2
+  step2 --> |continue| step3
+  step3 --> |exit!| done
+  """
+
+  use Finitomata, fsm: @fsm, auto_terminate: true, listener: :mox
+
+  @impl Finitomata
+  def on_transition(:started, :step!, _, state) do
+    {:ok, :step1, Map.update(state, :step, 1, &(&1 + 1))}
+  end
+
+  def on_transition(:step1, :step!, _, state) do
+    {:ok, :step2, Map.update(state, :step, 1, &(&1 + 1))}
+  end
+
+  def on_transition(:step2, :continue, data, state) do
+    {:ok, :step3, Map.put(state, :data, data)}
+  end
+end

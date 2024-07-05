@@ -19,6 +19,8 @@ defmodule Finitomata.ExUnit do
   ```elixir
   @listener (if Mix.env() == :test, do: MyFSM.Mox, else: MyFSM.Listener)
   use Finitomata, fsm: @fsm, listener: @listener
+  # or
+  # use Finitomata, fsm: @fsm, listener: {:mox, MyFSM.Listener}
   ```
 
   If you don’t have an actual listener, the special `:mox` value for `listener` would do
@@ -190,6 +192,7 @@ defmodule Finitomata.ExUnit do
   > `Macro.underscore(module) <> "_test.exs`) respectively.)
   """
 
+  require Logger
   alias Finitomata.{ExUnit, TestTransitionError}
 
   @doc false
@@ -717,6 +720,14 @@ defmodule Finitomata.ExUnit do
   defmacro test_path(test_name, ctx \\ quote(do: _), do: block) do
     quote generated: true, location: :keep do
       test unquote(test_name), unquote(ctx) = ctx do
+        debug =
+          Map.get(ctx, :ex_unit_debug, Application.get_env(:finitomata, :ex_unit_debug, false))
+
+        if debug == true or (is_list(debug) and ctx.test in debug) or ctx.test == debug do
+          require Logger
+          [ctx.test, inspect(ctx)] |> Enum.join(" (context):\n") |> Logger.notice()
+        end
+
         fsm =
           case ctx do
             %{finitomata: %{fsm: fsm}} ->
@@ -774,7 +785,7 @@ defmodule Finitomata.ExUnit do
         # gathered states declared under `:*`
         # maybe compare them against `auto_init_msgs`
         _states = assertions_to_states(state_assertions)
-        ExUnit.do_flush()
+        %{} = ExUnit.do_flush()
 
       {:->, _meta, [[event_payload], state_assertions]} ->
         state_assertions_ast =
