@@ -193,7 +193,7 @@ defmodule Finitomata.ExUnit do
   """
 
   require Logger
-  alias Finitomata.{ExUnit, TestTransitionError}
+  alias Finitomata.TestTransitionError
 
   @doc false
   def estructura_path({{:., _, [{hd, _, _}, tl]}, _, []}) do
@@ -295,11 +295,15 @@ defmodule Finitomata.ExUnit do
   end
 
   @doc false
+  @spec do_flush(keyword()) :: keyword()
   def do_flush(messages \\ []) do
     receive do
       msg -> do_flush([msg | messages])
     after
-      100 -> Map.new(messages, fn {:on_transition, _fsm, state, payload} -> {state, payload} end)
+      100 ->
+        messages
+        |> Enum.map(fn {:on_transition, _fsm, state, payload} -> {state, payload} end)
+        |> Enum.reverse()
     end
   end
 
@@ -523,9 +527,9 @@ defmodule Finitomata.ExUnit do
   @doc deprecated: "Use `assert_transition/3` instead"
 
   defmacro assert_transition(id \\ nil, impl, name, event_payload, do: block),
-    do: do_assert_transition(id, impl, name, event_payload, __CALLER__, do: block)
+    do: do_assert_transition(id, impl, name, event_payload, __CALLER__, nil, do: block)
 
-  defp do_assert_transition(id, impl, name, event_payload, caller, do: block) do
+  defp do_assert_transition(id, impl, name, event_payload, caller, matches, do: block) do
     states_with_assertions =
       block
       |> unblock()
@@ -544,7 +548,7 @@ defmodule Finitomata.ExUnit do
               do_handle_matches(matches)
 
             {:assert_payload, _meta, [assertion]} ->
-              [quote(do: assert(unquote(assertion) = payload))]
+              [quote(do: if(not is_nil(payload), do: assert(unquote(assertion) = payload)))]
 
             {:refute_receive, _, _} = ast ->
               [ast]
@@ -639,15 +643,23 @@ defmodule Finitomata.ExUnit do
       |> Enum.with_index()
       |> Enum.map(fn {{to_state, ast}, idx} ->
         transition_ast =
-          if idx == 0 do
+          if idx == 0 and is_nil(matches) do
             quote do: Finitomata.transition(unquote(id), unquote(name), unquote(event_payload))
           end
 
         action_ast =
-          quote generated: true, location: :keep do
-            to_state = unquote(to_state)
-            assert_receive {:on_transition, ^fsm_name, ^to_state, payload}, 1_000
-            unquote(ast)
+          if is_nil(matches) do
+            quote generated: true, location: :keep do
+              to_state = unquote(to_state)
+              assert_receive({:on_transition, ^fsm_name, ^to_state, payload}, 1_000)
+              unquote(ast)
+            end
+          else
+            quote generated: true, location: :keep do
+              to_state = unquote(to_state)
+              payload = Keyword.get(unquote(matches), to_state)
+              unquote(ast)
+            end
           end
 
         quote generated: true, location: :keep do
@@ -718,6 +730,8 @@ defmodule Finitomata.ExUnit do
   ```
   """
   defmacro test_path(test_name, ctx \\ quote(do: _), do: block) do
+    {entry, block} = Enum.split_with(block, &match?({:->, _, [[:*] | _]}, &1))
+
     quote generated: true, location: :keep do
       test unquote(test_name), unquote(ctx) = ctx do
         debug =
@@ -728,10 +742,10 @@ defmodule Finitomata.ExUnit do
           [ctx.test, inspect(ctx)] |> Enum.join(" (context):\n") |> Logger.notice()
         end
 
-        fsm =
+        {fsm, matches} =
           case ctx do
-            %{finitomata: %{fsm: fsm}} ->
-              fsm
+            %{finitomata: %{fsm: fsm, auto_init_msgs: matches}} ->
+              {fsm, matches}
 
             other ->
               raise TestTransitionError,
@@ -739,12 +753,8 @@ defmodule Finitomata.ExUnit do
                   "in order to use `test_path/3` one should declare _FSM_ in `setup_finitomata/1` callback"
           end
 
-        test_path_transitions(
-          fsm.id,
-          fsm.implementation,
-          fsm.name,
-          do: unquote(block)
-        )
+        test_entry_transitions(fsm.id, fsm.implementation, fsm.name, matches, do: unquote(entry))
+        test_path_transitions(fsm.id, fsm.implementation, fsm.name, do: unquote(block))
       end
     end
   end
@@ -777,40 +787,56 @@ defmodule Finitomata.ExUnit do
   end
 
   @doc false
-  defmacro test_path_transitions(id, impl, name, do: block) do
+  defmacro test_entry_transitions(id, impl, name, matches, do: block) do
     block
     |> unblock()
     |> Enum.flat_map(fn
-      {:->, _meta, [[:*], state_assertions]} ->
-        # gathered states declared under `:*`
-        # maybe compare them against `auto_init_msgs`
-        _states = assertions_to_states(state_assertions)
-        %{} = ExUnit.do_flush()
-
       {:->, _meta, [[event_payload], state_assertions]} ->
         state_assertions_ast =
-          state_assertions
-          |> unblock()
-          |> Enum.map(fn
-            {:assert_state, meta, [state]} ->
-              {:->, meta, [[state], {:__block__, meta, []}]}
-
-            {:assert_state, meta, [state, [do: block]]} ->
-              {:->, meta, [[state], {:__block__, meta, unblock(block)}]}
-          end)
+          parse_assert_state_block(state_assertions)
 
         [
           {event_payload,
-           do_assert_transition(id, impl, name, event_payload, __CALLER__,
+           do_assert_transition(id, impl, name, event_payload, __CALLER__, matches,
              do: state_assertions_ast
            )}
         ]
     end)
   end
 
+  @doc false
+  defmacro test_path_transitions(id, impl, name, do: block) do
+    block
+    |> unblock()
+    |> Enum.flat_map(fn
+      {:->, _meta, [[event_payload], state_assertions]} ->
+        state_assertions_ast = parse_assert_state_block(state_assertions)
+
+        [
+          {event_payload,
+           do_assert_transition(id, impl, name, event_payload, __CALLER__, nil,
+             do: state_assertions_ast
+           )}
+        ]
+    end)
+  end
+
+  defp parse_assert_state_block(block) do
+    block
+    |> unblock()
+    |> Enum.map(&do_parse_assert_state_block/1)
+  end
+
+  defp do_parse_assert_state_block({:assert_state, meta, [state]}),
+    do: {:->, meta, [[state], {:__block__, meta, []}]}
+
+  defp do_parse_assert_state_block({:assert_state, meta, [state, [do: block]]}),
+    do: {:->, meta, [[state], {:__block__, meta, unblock(block)}]}
+
   defp event_name({event, _payload}) when is_atom(event), do: event
   defp event_name(event) when is_atom(event), do: event
 
+  defp unblock([{:__block__, _, block}]), do: unblock(block)
   defp unblock({:__block__, _, block}), do: unblock(block)
   defp unblock(block), do: List.wrap(block)
 

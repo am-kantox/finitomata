@@ -26,12 +26,12 @@ defmodule <%= inspect(@test_module) %> do
       <%= for [{event, state} | states] <- path do %>
       <%= if event == :__start__ do %>
       :* ->
-        # these validations are not yet handled by `Finitomata.ExUnit`
-        # pattern match directly in the context above as shown below to validate
+        # these validations allow `assert_payload/2` calls only 
         #
-        # %{finitomata: %{auto_init_msgs: %{idle: :foo, started: :bar}}} = _ctx
+        # also one might pattern match to entry events with payloads directly
+        # %{finitomata: %{auto_init_msgs: [idle: :foo, started: :bar]} = _ctx
         assert_state <%= inspect(state) %> <%= for {_event, state} <- states do %>
-          assert_state <%= inspect(state) %> <% end %>
+          assert_state <%= inspect(state) %>, do: assert_payload(%{}) <% end %>
       <% else %>
       {<%= inspect(event) %>, nil} ->
         assert_state <%= inspect(state) %> do
