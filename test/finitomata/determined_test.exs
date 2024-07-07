@@ -9,6 +9,7 @@ defmodule Finitomata.Test.Determined.Test do
       # **** PUT THE INITIALIZATION HERE ****
       # *************************************
 
+      # **** context example:
       parent = self()
 
       [
@@ -17,18 +18,21 @@ defmodule Finitomata.Test.Determined.Test do
           payload: %{parent: parent},
           options: [transition_count: 7]
         ],
-        context: [ex_unit_debug: true]
+        context: [parent: parent]
       ]
     end
 
-    test_path "path #0", _ctx = %{finitomata: %{}} do
+    test_path "path #0", %{finitomata: %{}, parent: _} = _ctx do
       :* ->
-        # these validations are not yet handled by `Finitomata.ExUnit`
-        # pattern match directly in the context above as shown below to validate
+        # these validations allow `assert_payload/2` calls only
         #
-        # %{finitomata: %{auto_init_msgs: %{idle: :foo, started: :bar}}} = _ctx
+        # also one might pattern match to entry events with payloads directly
+        # %{finitomata: %{auto_init_msgs: [idle: :foo, started: :bar]} = _ctx
         assert_state(:idle)
-        assert_state(:started)
+
+        assert_state :started do
+          assert_payload %{}
+        end
 
         assert_state :step1 do
           assert_payload %{step: 1}
@@ -42,20 +46,16 @@ defmodule Finitomata.Test.Determined.Test do
 
       {:continue, nil} ->
         assert_state :step3 do
-          assert_payload do
-            # foo.bar.baz ~> ^parent
-          end
+          assert_payload %{step: 2}
         end
 
         assert_state :done do
-          assert_payload do
-            # baz ~> ^parent
-          end
+          assert_payload %{step: 2}
         end
 
         assert_state :* do
           assert_payload do
-            # baz ~> ^parent
+            step ~> 2
           end
         end
     end

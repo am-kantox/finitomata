@@ -157,6 +157,7 @@ end
 ```
 
 ## Changelog
+- `0.25.0` — [UPD] allow assertions of entry states in `Finitomata.ExUnit`
 - `0.24.2` — [UPD/FIX] many fixes for better diagnostics in `Finitomata.ExUnit` 
 - `0.23.7` — [UPD] allow both `:mox` and `{:mox, MyApp.Listener}` as well as just `MyApp.Listener` as a listener in FSM definition
 - `0.23.4` — [FIX] many fixes to a `Finitomata.ExUnit` test scaffold generation
