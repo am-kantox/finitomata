@@ -100,6 +100,38 @@ defmodule Finitomata.Test.Log do
   use Finitomata, fsm: @fsm, syntax: Finitomata.Mermaid, impl_for: :all
 end
 
+defmodule Finitomata.Test.WithMocks do
+  @moduledoc false
+
+  defmodule ExtBehaviour do
+    @moduledoc false
+    @callback void(term()) :: term()
+  end
+
+  @fsm """
+  idle --> |process| processed
+  """
+
+  use Finitomata, fsm: @fsm, auto_terminate: true, listener: :mox
+
+  @behaviour ExtBehaviour
+
+  @impl ExtBehaviour
+  def void(term), do: term
+
+  Mox.defmock(Finitomata.Test.WithMocks.ExtBehaviour.Mox,
+    for: Finitomata.Test.WithMocks.ExtBehaviour
+  )
+
+  @ext_behaviour Application.compile_env(:finitomata, :ext_behaviour, __MODULE__)
+
+  @impl Finitomata
+  def on_transition(:idle, :process, _, state_payload) do
+    state_payload = @ext_behaviour.void(state_payload)
+    {:ok, :processed, state_payload}
+  end
+end
+
 defmodule Finitomata.Test.Callback do
   @moduledoc false
 
