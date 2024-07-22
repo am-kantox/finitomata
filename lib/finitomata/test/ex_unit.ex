@@ -245,9 +245,16 @@ defmodule Finitomata.ExUnit do
         ]
       ]
     ],
+    mocks: [
+      required: false,
+      type: {:list, :atom},
+      default: [],
+      doc: "Additional mocks to be passed to the test."
+    ],
     context: [
       required: false,
       type: :keyword_list,
+      default: [],
       doc: "The additional context to be passed to actual `ExUnit.Callbacks.setup/2` call."
     ]
   ]
@@ -365,9 +372,17 @@ defmodule Finitomata.ExUnit do
           end)
           |> Map.new()
 
-        init_finitomata(fini.id, @fini_implementation, fini.name, fini.payload, fini.options)
+        init_finitomata(
+          fini.id,
+          @fini_implementation,
+          fini.name,
+          fini.payload,
+          fini.options,
+          Keyword.get(unquote(block), :mocks, [])
+        )
 
-        Keyword.put(@fini_context, :finitomata, %{
+        @fini_context
+        |> Keyword.put(:finitomata, %{
           test_pid: self(),
           auto_init_msgs: Finitomata.ExUnit.do_flush(),
           fsm: Map.new(fini)
@@ -402,13 +417,20 @@ defmodule Finitomata.ExUnit do
   """
   @doc deprecated: "Use `setup_finitomata/1` instead"
 
-  defmacro init_finitomata(id \\ nil, impl, name, payload, options \\ []) do
+  defmacro init_finitomata(id \\ nil, impl, name, payload, options \\ [], mocks \\ []) do
     require_ast = quote generated: true, location: :keep, do: require(unquote(impl))
 
     init_ast =
       quote generated: true,
             location: :keep,
-            bind_quoted: [id: id, impl: impl, name: name, payload: payload, options: options] do
+            bind_quoted: [
+              id: id,
+              impl: impl,
+              name: name,
+              payload: payload,
+              options: options,
+              mocks: mocks
+            ] do
         mocker = &Module.concat(&1, "Mox")
 
         mock =
@@ -426,13 +448,15 @@ defmodule Finitomata.ExUnit do
 
         start_supervised({Finitomata.Supervisor, id: id})
 
+        Enum.each(mocks, &allow(&1, parent, fn -> GenServer.whereis(fsm_name) end))
+
         mock
         |> allow(parent, fn -> GenServer.whereis(fsm_name) end)
         |> expect(:after_transition, transition_count, fn id, state, payload ->
           parent |> send({:on_transition, id, state, payload}) |> then(fn _ -> :ok end)
         end)
 
-        Finitomata.start_fsm(id, impl, name, payload)
+        {:ok, _fsm_pid} = Finitomata.start_fsm(id, impl, name, payload)
 
         entry_state = impl.entry()
         assert_receive {:on_transition, ^fsm_name, ^entry_state, ^payload}, 1_000

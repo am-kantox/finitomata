@@ -47,7 +47,8 @@ defmodule Finitomata.MixProject do
       {:estructura, "~> 1.4"},
       # dev / test
       {:enfiladex, "~> 0.1", only: [:dev, :test]},
-      {:mox, "~> 1.0", only: [:dev, :test, :ci]},
+      {:nimble_ownership, "~> 0.3", only: [:dev, :test, :ci], override: true},
+      {:mox, github: "dashbitco/mox", only: [:dev, :test, :ci]},
       {:stream_data, "~> 1.0"},
       {:observer_cli, "~> 1.5", only: [:dev]},
       {:credo, "~> 1.0", only: [:dev, :ci]},
