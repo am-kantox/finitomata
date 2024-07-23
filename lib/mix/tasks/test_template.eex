@@ -2,6 +2,9 @@ defmodule <%= inspect(@test_module) %> do
   use ExUnit.Case
   import Finitomata.ExUnit
   import Mox
+
+  @moduletag :finitomata
+
   <%= for {{path_def, path}, number} <- Enum.with_index(@paths) do %>
   describe "<%= path_def |> inspect() |> String.replace(~r/⇥ \"[\w!?]+\" /, "") %>" do
     setup_finitomata do

@@ -177,6 +177,25 @@ defmodule Finitomata.ExUnit do
   No other code besides `assert_state/2`, `assert_payload/1`, and `ExUnit.Assertions.assert_receive/3` is
     permitted to fully isolate the FSM execution from side effects.
 
+  ## Custom environments
+
+  In the bigger application, it might be not convenient to declare mocks for
+    each and every case when `Finitomata`/`Infinitomata` might have been called under the hood.
+
+  For such cases, one might pass `mox_envs: :finitomata` to an FSM declaration,
+    or set such a config options as `config :finitomata, :mox_envs, :finitomata`. That would result
+    in mocks implemented for `listener: :mox` in this environment(s) _only_.
+
+  Then the tests should have been split into two groups assuming the finitomata tests
+    were generated with the mix task (see below)
+
+  ```
+  mix test --exclude finitomata
+  MIX_ENV=finitomata mix test --exclude test --include finitomata
+  ```
+
+  Don’t forget to add `:finitomata` env to the list of envs where `mox` is installed
+
   ## Test Scaffold Generation
 
   > ### `mix` tasks to simplify testing {: .info}

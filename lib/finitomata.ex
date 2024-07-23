@@ -48,43 +48,43 @@ defmodule Finitomata do
            {:in, [:flowchart, :state_diagram]},
            {:custom, Finitomata, :behaviour, [Finitomata.Parser]}
          ]},
-      default: :flowchart,
+      default: Application.compile_env(:finitomata, :syntax, :flowchart),
       doc: "The FSM dialect parser to convert the declaration to internal FSM representation."
     ],
     impl_for: [
       required: false,
       type: {:or, [{:in, [:all, :none]}, :atom, {:list, :atom}]},
-      default: :all,
+      default: Application.compile_env(:finitomata, :impl_for, :all),
       doc: "The list of transitions to inject default implementation for."
     ],
     timer: [
       required: false,
       type: :pos_integer,
-      default: 5_000,
+      default: Application.compile_env(:finitomata, :timer, 5_000),
       doc: "The interval to call `on_timer/2` recurrent event."
     ],
     auto_terminate: [
       required: false,
       type: {:or, [:boolean, :atom, {:list, :atom}]},
-      default: false,
+      default: Application.compile_env(:finitomata, :auto_terminate, false),
       doc: "When `true`, the transition to the end state is initiated automatically."
     ],
     ensure_entry: [
       required: false,
       type: {:or, [{:list, :atom}, :boolean]},
-      default: [],
+      default: Application.compile_env(:finitomata, :ensure_entry, []),
       doc: "The list of states to retry transition to until succeeded."
     ],
     shutdown: [
       required: false,
       type: :pos_integer,
-      default: 5_000,
+      default: Application.compile_env(:finitomata, :shutdown, 5_000),
       doc: "The shutdown interval for the `GenServer` behind the FSM."
     ],
     persistency: [
       required: false,
       type: {:or, [{:in, [nil]}, {:custom, Finitomata, :behaviour, [Finitomata.Persistency]}]},
-      default: nil,
+      default: Application.compile_env(:finitomata, :persistency, nil),
       doc:
         "The implementation of `Finitomata.Persistency` behaviour to backup FSM with a persistent storage."
     ],
@@ -102,9 +102,15 @@ defmodule Finitomata do
            {:custom, Finitomata, :behaviour, [[handle_info: 2]]},
            {:custom, Finitomata, :behaviour, [Finitomata.Listener]}
          ]},
-      default: nil,
+      default: Application.compile_env(:finitomata, :listener, nil),
       doc:
         "The implementation of `Finitomata.Listener` behaviour _or_ a `GenServer.name()` to receive notification after transitions."
+    ],
+    mox_envs: [
+      required: false,
+      type: {:or, [:atom, {:list, :atom}]},
+      default: Application.compile_env(:finitomata, :mox_envs, :test),
+      doc: "The list of environments to implement `mox` listener for"
     ]
   ]
 
@@ -605,7 +611,7 @@ defmodule Finitomata do
   @doc false
   defp ast(options, schema) do
     quote location: :keep, generated: true do
-      NimbleOptions.validate!(unquote(options), unquote(Macro.escape(schema)))
+      options = NimbleOptions.validate!(unquote(options), unquote(Macro.escape(schema)))
 
       require Logger
 
@@ -617,12 +623,7 @@ defmodule Finitomata do
 
       reporter = if Code.ensure_loaded?(Mix), do: Mix.shell(), else: Logger
 
-      syntax =
-        Keyword.get(
-          unquote(options),
-          :syntax,
-          Application.compile_env(:finitomata, :syntax, :flowchart)
-        )
+      syntax = Keyword.fetch!(options, :syntax)
 
       if syntax in [Finitomata.Mermaid, Finitomata.PlantUML] do
         reporter.info([
@@ -642,33 +643,10 @@ defmodule Finitomata do
           module when is_atom(module) -> module
         end
 
-      shutdown =
-        Keyword.get(
-          unquote(options),
-          :shutdown,
-          Application.compile_env(:finitomata, :shutdown, 5_000)
-        )
-
-      auto_terminate =
-        Keyword.get(
-          unquote(options),
-          :auto_terminate,
-          Application.compile_env(:finitomata, :auto_terminate, false)
-        )
-
-      persistency =
-        Keyword.get(
-          unquote(options),
-          :persistency,
-          Application.compile_env(:finitomata, :persistency, nil)
-        )
-
-      listener =
-        Keyword.get(
-          unquote(options),
-          :listener,
-          Application.compile_env(:finitomata, :listener, nil)
-        )
+      shutdown = Keyword.fetch!(options, :shutdown)
+      auto_terminate = Keyword.fetch!(options, :auto_terminate)
+      persistency = Keyword.fetch!(options, :persistency)
+      listener = Keyword.fetch!(options, :listener)
 
       def_mock = fn ->
         with {:error, error} <- Code.ensure_compiled(Mox) do
@@ -691,10 +669,12 @@ defmodule Finitomata do
         [__MODULE__, Mox] |> Module.concat() |> tap(&Mox.defmock(&1, for: Finitomata.Listener))
       end
 
+      mox_envs = options |> Keyword.fetch!(:mox_envs) |> List.wrap()
+
       listener =
         case listener do
-          :mox -> if Mix.env() == :test, do: def_mock.()
-          {:mox, listener} -> if Mix.env() == :test, do: def_mock.(), else: listener
+          :mox -> if Mix.env() in mox_envs, do: def_mock.()
+          {:mox, listener} -> if Mix.env() in mox_envs, do: def_mock.(), else: listener
           listener -> listener
         end
 
@@ -703,7 +683,7 @@ defmodule Finitomata do
       impls = ~w|on_transition on_failure on_enter on_exit on_terminate on_timer|a
 
       impl_for =
-        case Keyword.get(unquote(options), :impl_for, :all) do
+        case Keyword.fetch!(options, :impl_for) do
           :all -> impls
           :none -> []
           transition when is_atom(transition) -> [transition]
@@ -716,8 +696,7 @@ defmodule Finitomata do
             "allowed `impl_for:` values are: `:all`, `:none`, or any combination of `#{inspect(impls)}`"
       end
 
-      dsl = unquote(options[:fsm])
-
+      dsl = options[:fsm]
       env = __ENV__
 
       fsm =
@@ -789,11 +768,8 @@ defmodule Finitomata do
         end)
 
       ensure_entry =
-        unquote(options)
-        |> Keyword.get(
-          :ensure_entry,
-          Application.compile_env(:finitomata, :ensure_entry, [])
-        )
+        options
+        |> Keyword.fetch!(:ensure_entry)
         |> case do
           list when is_list(list) -> list
           true -> [Transition.entry(fsm)]
@@ -801,8 +777,8 @@ defmodule Finitomata do
         end
 
       timer =
-        unquote(options)
-        |> Keyword.get(:timer)
+        options
+        |> Keyword.fetch!(:timer)
         |> case do
           value when is_integer(value) and value >= 0 -> value
           true -> Application.compile_env(:finitomata, :timer, 5_000)

@@ -3,6 +3,8 @@ defmodule Finitomata.Test.WithMocks.Test do
   import Finitomata.ExUnit
   import Mox
 
+  @moduletag :finitomata
+
   describe "↝‹:* ↦ :idle ↦ :processed ↦ :*›" do
     setup_finitomata do
       expect(Finitomata.Test.WithMocks.ExtBehaviour.Mox, :void, fn term -> term end)

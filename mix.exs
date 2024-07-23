@@ -35,6 +35,7 @@ defmodule Finitomata.MixProject do
 
   def application do
     [
+      mod: {Finitomata.Application, []},
       extra_applications: [:logger]
     ]
   end
@@ -46,9 +47,9 @@ defmodule Finitomata.MixProject do
       {:gen_stage, "~> 1.0"},
       {:estructura, "~> 1.4"},
       # dev / test
-      {:enfiladex, "~> 0.1", only: [:dev, :test]},
-      {:nimble_ownership, "~> 0.3", only: [:dev, :test, :ci], override: true},
-      {:mox, github: "dashbitco/mox", only: [:dev, :test, :ci]},
+      {:enfiladex, "~> 0.1", only: [:dev, :test, :finitomata]},
+      {:nimble_ownership, "~> 0.3", only: [:dev, :test, :ci, :finitomata], override: true},
+      {:mox, github: "dashbitco/mox", only: [:dev, :test, :ci, :finitomata]},
       {:stream_data, "~> 1.0"},
       {:observer_cli, "~> 1.5", only: [:dev]},
       {:credo, "~> 1.0", only: [:dev, :ci]},
@@ -121,6 +122,7 @@ defmodule Finitomata.MixProject do
   defp compilers(_), do: Mix.compilers() ++ [:finitomata]
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(:finitomata), do: ["lib", "test/support"]
   defp elixirc_paths(:ci), do: ["lib"]
   defp elixirc_paths(:dev), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]

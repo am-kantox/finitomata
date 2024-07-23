@@ -3,6 +3,8 @@ defmodule Finitomata.Test.Determined.Test do
   import Finitomata.ExUnit
   import Mox
 
+  @moduletag :finitomata
+
   describe "↝‹:* ↦ :idle ↦ :started ↦ :step1 ↦ :step2 ↦ :step3 ↦ :done ↦ :*›" do
     setup_finitomata do
       # *************************************

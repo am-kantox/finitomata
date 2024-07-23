@@ -3,6 +3,8 @@ defmodule Finitomata.Test.Hard.Test do
   import Finitomata.ExUnit
   import Mox
 
+  @moduletag :finitomata
+
   describe "↝‹:* ↦ :idle ↦ :ready ↦ :done ↦ :ended ↦ :*›" do
     setup_finitomata do
       # *************************************

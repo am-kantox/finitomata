@@ -3,6 +3,8 @@ defmodule Finitomata.Test.Transition.Test do
   import Finitomata.ExUnit
   import Mox
 
+  @moduletag :finitomata
+
   describe "↝‹:* ↦ :idle ↦ :started ↦ :accepted ↦ :accepted ↦ :rejected ↦ :started ↦ :rejected ↦ :done ↦ :ended ↦ :*›" do
     setup_finitomata do
       # *************************************

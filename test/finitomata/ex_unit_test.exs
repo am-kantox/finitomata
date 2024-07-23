@@ -41,6 +41,8 @@ defmodule Finitomata.ExUnit.Test do
   end
 
   describe "custom assertions" do
+    @describetag :finitomata
+
     setup_finitomata do
       parent = self()
 

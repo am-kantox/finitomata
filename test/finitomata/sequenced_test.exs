@@ -3,6 +3,8 @@ defmodule Finitomata.Test.Sequenced.Test do
   import Finitomata.ExUnit
   import Mox
 
+  @moduletag :finitomata
+
   describe "↝‹:* ↦ :idle ↦ :started ↦ :accepted ↦ :rejected ↦ :done ↦ :ended ↦ :*›" do
     setup_finitomata do
       # *************************************
