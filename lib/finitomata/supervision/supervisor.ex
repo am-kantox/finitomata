@@ -20,11 +20,12 @@ defmodule Finitomata.Supervisor do
     Supervisor.init(children, strategy: :rest_for_one)
   end
 
-  def supervisor_name(id \\ nil), do: fq_module(id, Supervisor, true)
-  def registry_name(id \\ nil), do: fq_module(id, Registry, true)
-  def manager_name(id \\ nil), do: fq_module(id, Manager, true)
   def infinitomata_name(id \\ nil), do: fq_module(id, Infinitomata, true)
-  def throttler_name(id \\ nil), do: fq_module(id, Throttler, true)
+
+  def supervisor_name(id \\ nil), do: id |> fq_module(Supervisor, true) |> uninfinitomata()
+  def registry_name(id \\ nil), do: id |> fq_module(Registry, true) |> uninfinitomata()
+  def manager_name(id \\ nil), do: id |> fq_module(Manager, true) |> uninfinitomata()
+  def throttler_name(id \\ nil), do: id |> fq_module(Throttler, true) |> uninfinitomata()
 
   @spec fq_module(id :: any(), who :: any(), atomize? :: boolean()) :: module() | [any()]
   defp fq_module(id, who, false), do: [Finitomata, id, who]
@@ -36,6 +37,9 @@ defmodule Finitomata.Supervisor do
     |> Enum.map(&inspect/1)
     |> smart_concat()
   end
+
+  defp uninfinitomata(mod),
+    do: mod |> Module.split() |> Enum.reject(&(&1 == "Infinitomata")) |> Module.concat()
 
   defp smart_concat([fqn]), do: Module.concat([fqn])
 
