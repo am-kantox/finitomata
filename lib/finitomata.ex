@@ -404,6 +404,13 @@ defmodule Finitomata do
   end
 
   @doc """
+  Explicitly calls `on_timer/2` callback.
+  """
+  @spec timer_tick(id(), fsm_name()) :: :ok
+  def timer_tick(id \\ nil, target),
+    do: id |> fqn(target) |> GenServer.whereis() |> send(:on_timer)
+
+  @doc """
   Initiates the transition.
 
   The arguments are
@@ -1052,7 +1059,6 @@ defmodule Finitomata do
 
       @doc false
       @impl GenServer
-
       def handle_info(whatever, state)
           when not is_integer(state.timer) or whatever != :on_timer do
         Logger.error(
@@ -1179,9 +1185,9 @@ defmodule Finitomata do
         end
       end
 
+      @impl GenServer
+      @doc false
       if @__config__[:timer] do
-        @impl GenServer
-        @doc false
         def handle_info(:on_timer, state) do
           state.current
           |> safe_on_timer(state)
@@ -1213,6 +1219,14 @@ defmodule Finitomata do
             _ ->
               :ok
           end)
+        end
+      else
+        def handle_info(:on_timer, state) do
+          Logger.warning(
+            "[⚑ ↹] on_timer message received, but no `on_timer/2` callback is declared"
+          )
+
+          {:noreply, state}
         end
       end
 
