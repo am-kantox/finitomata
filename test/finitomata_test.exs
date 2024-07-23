@@ -111,6 +111,10 @@ defmodule Finitomata.Test do
     assert_receive :on_timer, 500
     assert_receive :on_timer, 500
 
+    refute_receive :on_timer, 50
+    Finitomata.timer_tick(:timer)
+    assert_receive :on_timer, 50
+
     assert %{pid: ^pid, processing: true} = Finitomata.state(:timer, :payload)
   end
 

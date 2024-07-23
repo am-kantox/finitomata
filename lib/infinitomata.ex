@@ -150,6 +150,18 @@ defmodule Infinitomata do
   end
 
   @doc """
+  Explicitly calls `on_timer/2` callback.
+
+  See `Finitomata.timer_tick/2`.
+  """
+  @doc since: "0.19.0"
+  @spec timer_tick(Finitomata.id(), Finitomata.fsm_name()) :: :ok
+  def timer_tick(id \\ nil, target) do
+    id = FinSup.infinitomata_name(id)
+    distributed_call(:timer_tick, id, target, [])
+  end
+
+  @doc """
   Initiates the transition in the cluster.
 
   See `Finitomata.transition/4`.
