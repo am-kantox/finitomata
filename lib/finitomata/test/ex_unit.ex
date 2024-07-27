@@ -686,23 +686,38 @@ defmodule Finitomata.ExUnit do
       |> Enum.with_index()
       |> Enum.map(fn {{to_state, ast}, idx} ->
         transition_ast =
-          if idx == 0 and is_nil(matches) do
-            quote do: Finitomata.transition(unquote(id), unquote(name), unquote(event_payload))
+          cond do
+            idx == 0 and is_nil(matches) ->
+              quote do: Finitomata.transition(unquote(id), unquote(name), unquote(event_payload))
+
+            matches == :__timer_event__ ->
+              quote do: Finitomata.timer_tick(unquote(id), unquote(name))
+
+            true ->
+              []
           end
 
         action_ast =
-          if is_nil(matches) do
-            quote generated: true, location: :keep do
-              to_state = unquote(to_state)
-              assert_receive({:on_transition, ^fsm_name, ^to_state, payload}, 1_000)
-              unquote(ast)
-            end
-          else
-            quote generated: true, location: :keep do
-              to_state = unquote(to_state)
-              payload = Keyword.get(unquote(matches), to_state)
-              unquote(ast)
-            end
+          case matches do
+            nil ->
+              quote generated: true, location: :keep do
+                to_state = unquote(to_state)
+                assert_receive({:on_transition, ^fsm_name, ^to_state, payload}, 1_000)
+                unquote(ast)
+              end
+
+            :__timer_event__ ->
+              quote generated: true, location: :keep do
+                payload = :sys.get_state(fsm_name).payload
+                unquote(ast)
+              end
+
+            _ ->
+              quote generated: true, location: :keep do
+                to_state = unquote(to_state)
+                payload = Keyword.get(unquote(matches), to_state)
+                unquote(ast)
+              end
           end
 
         quote generated: true, location: :keep do
@@ -796,8 +811,8 @@ defmodule Finitomata.ExUnit do
                   "in order to use `test_path/3` one should declare _FSM_ in `setup_finitomata/1` callback"
           end
 
-        test_entry_transitions(fsm.id, fsm.implementation, fsm.name, matches, do: unquote(entry))
-        test_path_transitions(fsm.id, fsm.implementation, fsm.name, do: unquote(block))
+        test_path_transitions(fsm.id, fsm.implementation, fsm.name, matches, do: unquote(entry))
+        test_path_transitions(fsm.id, fsm.implementation, fsm.name, nil, do: unquote(block))
       end
     end
   end
@@ -830,34 +845,35 @@ defmodule Finitomata.ExUnit do
   end
 
   @doc false
-  defmacro test_entry_transitions(id, impl, name, matches, do: block) do
-    block
-    |> unblock()
-    |> Enum.flat_map(fn
-      {:->, _meta, [[event_payload], state_assertions]} ->
-        state_assertions_ast =
-          parse_assert_state_block(state_assertions)
-
-        [
-          {event_payload,
-           do_assert_transition(id, impl, name, event_payload, __CALLER__, matches,
-             do: state_assertions_ast
-           )}
-        ]
-    end)
-  end
-
-  @doc false
-  defmacro test_path_transitions(id, impl, name, do: block) do
+  defmacro test_path_transitions(id, impl, name, matches \\ nil, do: block) do
     block
     |> unblock()
     |> Enum.flat_map(fn
       {:->, _meta, [[event_payload], state_assertions]} ->
         state_assertions_ast = parse_assert_state_block(state_assertions)
 
+        matches =
+          case event_payload do
+            :* ->
+              matches
+
+            :_ ->
+              :__timer_event__
+
+            _ ->
+              _ =
+                matches &&
+                  Logger.warning(
+                    "Unexpected matches with transition event [" <>
+                      inspect(event_payload) <> "]: " <> inspect(matches)
+                  )
+
+              nil
+          end
+
         [
           {event_payload,
-           do_assert_transition(id, impl, name, event_payload, __CALLER__, nil,
+           do_assert_transition(id, impl, name, event_payload, __CALLER__, matches,
              do: state_assertions_ast
            )}
         ]

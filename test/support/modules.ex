@@ -171,6 +171,28 @@ defmodule Finitomata.Test.Timer do
   end
 end
 
+defmodule Finitomata.Test.TimerExUnit do
+  @moduledoc false
+
+  @fsm """
+  idle --> |process| processing
+  processing --> |finish| finished
+  """
+
+  use Finitomata, fsm: @fsm, timer: 1_000, listener: :mox
+
+  @impl Finitomata
+  def on_timer(:idle, state) do
+    send(state.payload.pid, :on_transition)
+    {:transition, :process, state.payload}
+  end
+
+  def on_timer(:processing, state) do
+    send(state.payload.pid, :on_timer)
+    {:ok, Map.put(state.payload, :processing, true)}
+  end
+end
+
 defmodule Finitomata.Test.Auto do
   @moduledoc false
 
