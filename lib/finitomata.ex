@@ -59,8 +59,8 @@ defmodule Finitomata do
     ],
     timer: [
       required: false,
-      type: :pos_integer,
-      default: Application.compile_env(:finitomata, :timer, 5_000),
+      type: {:or, [:boolean, :pos_integer]},
+      default: Application.compile_env(:finitomata, :timer, false),
       doc: "The interval to call `on_timer/2` recurrent event."
     ],
     auto_terminate: [
@@ -203,7 +203,7 @@ defmodule Finitomata do
             listener: nil | module(),
             current: Transition.state(),
             payload: payload(),
-            timer: non_neg_integer(),
+            timer: false | non_neg_integer(),
             history: [Transition.state()],
             last_error: last_error()
           }
