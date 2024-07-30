@@ -1,0 +1,28 @@
+defmodule <%= inspect(@module) %> do
+  @moduledoc """
+  `Finitomata`-based implementation of …
+  """
+
+  @fsm """
+  <%= String.trim(@fsm) %>
+  """
+
+  <%= @use_clause %>
+
+  <%= for %Finitomata.Transition{from: from, to: to, event: event} <- @transitions, from != :* do %>
+  <%= if to != :* or not @auto_terminate? do %>
+  @impl Finitomata
+  def on_transition(:<%= from %>, :<%= event %>, _event_payload, state) do
+    {:ok, :<%= to %>, state}
+  end
+  <% end %>
+  <% end %>
+
+  <%= if @timer? do %>
+  @impl Finitomata
+  def on_timer(fsm_state, state) do
+    {:ok, state}
+  end
+  <% end %>
+end
+

@@ -46,6 +46,7 @@ defmodule Finitomata.MixProject do
       {:nimble_options, "~> 0.3 or ~> 1.0"},
       {:gen_stage, "~> 1.0"},
       {:estructura, "~> 1.4"},
+      {:owl, "~> 0.11"},
       # dev / test
       {:enfiladex, "~> 0.1", only: [:dev, :test, :finitomata]},
       {:nimble_ownership, "~> 0.3", only: [:dev, :test, :ci, :finitomata], override: true},
