@@ -123,8 +123,8 @@ defmodule Mix.Tasks.Finitomata.Generate do
 
           "idle --> |start| started\nstarted --> |run| running\nrunning --> |stop| stopped"
 
-        _ ->
-          Owl.IO.open_in_editor("idle --> |start| started\n")
+        {:ok, editor} ->
+          open_in_editor("idle --> |start| started\n", editor)
       end
 
     case syntax.parse(fsm) do
@@ -163,6 +163,31 @@ defmodule Mix.Tasks.Finitomata.Generate do
           [:yellow, pos, :reset]
         ])
     end
+  end
+
+  # gracefully stolen from https://github.com/fuelen/owl/blob/v0.11.0/lib/owl/io.ex#L230
+  defp open_in_editor(data, elixir_editor) do
+    dir = System.tmp_dir!()
+
+    random_name =
+      9
+      |> :crypto.strong_rand_bytes()
+      |> Base.url_encode64()
+      |> binary_part(0, 9)
+
+    filename = "fini-#{random_name}"
+    tmp_file = Path.join(dir, filename)
+    File.write!(tmp_file, data)
+
+    elixir_editor =
+      if String.contains?(elixir_editor, "__FILE__") do
+        String.replace(elixir_editor, "__FILE__", tmp_file)
+      else
+        elixir_editor <> " " <> tmp_file
+      end
+
+    {_, 0} = System.shell(elixir_editor)
+    File.read!(tmp_file)
   end
 
   @doc false
