@@ -20,8 +20,36 @@ defmodule <%= inspect(@module) %> do
 
   <%= if @timer? do %>
   @impl Finitomata
-  def on_timer(fsm_state, state) do
+  def on_timer(_fsm_state, state) do
     {:ok, state}
+  end
+  <% end %>
+
+  <%= if :on_enter in @to_implement do %>
+  @impl Finitomata
+  def on_enter(_fsm_state, _state) do
+    :ok
+  end
+  <% end %>
+
+  <%= if :on_exit in @to_implement do %>
+  @impl Finitomata
+  def on_exit(_fsm_state, _state) do
+    :ok
+  end
+  <% end %>
+
+  <%= if :on_failure in @to_implement do %>
+  @impl Finitomata
+  def on_failure(_event, _event_payload, _state) do
+    :ok
+  end
+  <% end %>
+
+  <%= if :on_terminate in @to_implement do %>
+  @impl Finitomata
+  def on_terminate(_state) do
+    :ok
   end
   <% end %>
 end

@@ -21,7 +21,9 @@ defmodule Mix.Tasks.Finitomata.Generate do
           syntax: :string,
           timer: :integer,
           auto_terminate: :string,
-          listener: :string
+          listener: :string,
+          impl_for: :string,
+          generate_test: :boolean
         ]
       )
 
@@ -60,7 +62,15 @@ defmodule Mix.Tasks.Finitomata.Generate do
       |> Keyword.fetch(:auto_terminate)
       |> case do
         :error -> nil
-        {:ok, value} -> "auto_terminate: " <> parse_true_or_atom_or_list(value)
+        {:ok, value} -> "auto_terminate: " <> parse_auto_terminate(value)
+      end
+
+    {to_implement, impl_for_clause} =
+      opts
+      |> Keyword.fetch(:impl_for)
+      |> case do
+        :error -> {[], nil}
+        {:ok, value} -> parse_impl_for(value)
       end
 
     listener_clause =
@@ -71,6 +81,8 @@ defmodule Mix.Tasks.Finitomata.Generate do
         {:ok, value} -> "listener: " <> inspect(value)
       end
 
+    test? = Keyword.get(opts, :generate_test, false)
+
     use_clause =
       [
         "use Finitomata",
@@ -78,7 +90,8 @@ defmodule Mix.Tasks.Finitomata.Generate do
         syntax_clause,
         timer_clause,
         auto_terminate_clause,
-        listener_clause
+        listener_clause,
+        impl_for_clause
       ]
       |> Enum.reject(&is_nil/1)
       |> Enum.join(", ")
@@ -137,7 +150,8 @@ defmodule Mix.Tasks.Finitomata.Generate do
           transitions: transitions,
           use_clause: use_clause,
           timer?: not is_nil(timer_clause),
-          auto_terminate?: not is_nil(auto_terminate_clause)
+          auto_terminate?: not is_nil(auto_terminate_clause),
+          to_implement: to_implement
         )
 
         File.write!(target_file, Code.format_file!(target_file))
@@ -146,6 +160,8 @@ defmodule Mix.Tasks.Finitomata.Generate do
           [:bright, :blue, "* #{inspect(module)}", :reset],
           " has been created."
         ])
+
+        if test?, do: Mix.Task.run("finitomata.generate.test", ["--module", inspect(module)])
 
       {:error, message, _, _, {line, col}, pos} ->
         Mix.shell().info([
@@ -191,17 +207,44 @@ defmodule Mix.Tasks.Finitomata.Generate do
   end
 
   @doc false
-  defp parse_true_or_atom_or_list(true), do: "true"
-  defp parse_true_or_atom_or_list("true"), do: "true"
+  defp parse_auto_terminate("true"), do: "true"
 
-  defp parse_true_or_atom_or_list(specified) do
-    inner =
+  defp parse_auto_terminate(specified) do
+    specified
+    |> String.trim_leading("[")
+    |> String.trim_trailing("]")
+    |> String.split(~r/[,:]+/)
+    |> Enum.map(&String.to_atom/1)
+    |> inspect()
+  end
+
+  @doc false
+  defp parse_impl_for(specified) do
+    impls = ~w|on_failure on_enter on_exit on_terminate|a
+
+    states =
       specified
       |> String.trim_leading("[")
       |> String.trim_trailing("]")
       |> String.split(~r/[,:]+/)
-      |> Enum.map_join(", ", &(":" <> &1))
+      |> Enum.map(&String.to_atom/1)
 
-    "[" <> inner <> "]"
+    to_implement =
+      case states do
+        [:all] -> []
+        [:none] -> impls
+        list when is_list(list) -> impls -- list
+      end
+
+    result =
+      case states do
+        [:all] -> :all
+        [:none] -> :none
+        [transition] when is_atom(transition) -> transition
+        list when is_list(list) -> list
+      end
+      |> inspect()
+
+    {to_implement, "impl_for: " <> result}
   end
 end
