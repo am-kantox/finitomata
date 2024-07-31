@@ -2,6 +2,20 @@ defmodule Mix.Tasks.Finitomata.Generate.Test do
   @shortdoc "Generates the test scaffold for the `Finitomata` instance"
   @moduledoc """
   Mix task to generate the `Finitomata.ExUnit` test scaffold.
+
+  ### Allowed arguments
+
+  - **`--module: :string`** __[mandatory]__ the name of the module the test to be generated for
+  - **`--file: :string`** __[optional, default: derived from `module` name]__ the name of the file
+    to store the test module definition in
+  - **`--dir: :string`** __[optional, default: `test/finitomata`]__ the name of the directory
+    to put the file in
+
+  ### Example
+
+  ```sh
+  mix finitomata.generate.test --module MyApp.MyFSM
+  ```
   """
 
   use Mix.Task

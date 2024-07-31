@@ -2,6 +2,32 @@ defmodule Mix.Tasks.Finitomata.Generate do
   @shortdoc "Generates the FSM scaffold for the `Finitomata` instance"
   @moduledoc """
   Mix task to generate the `Finitomata` instance scaffold.
+
+  By running `mix finitomata.generate --module MyFSM` one would be prompted
+  to enter the _FSM_ declartion if `ELIXIR_EDITOR` environment variable is set,
+  in the same way as `IEx.Helpers.open/0` does. THen the scaffold implementation
+  (and optionally the test for it) will be generated.
+
+  ### Allowed arguments
+
+  - **`--module: :string`** __[mandatory]__ the name of the module to generate, it will be prepended
+    with `OtpApp.Finitomata.`
+  - **`--syntax: :string`** __[optional, default: `:flowchart`]__ the syntax to be used, might be
+    `:flowchart`, `:state_diagram`, or a module name for custom implementation
+  - **`--timer: :integer`** __[optional, default: `false`]__ whether to use recurrent calls in
+    this _FSM_ implementation
+  - **`--auto-terminate: :boolean`** __[optional, default: `false`]__ whether the ending states should
+    lead to auto-termination
+  - **`--listener: :string`** __[optional, default: `nil`]__ the listener implementation
+  - **`--impl-for: :string`** __[optional, default: `:all`]__ what callbacks should be auto-implemented 
+  - **`--generate-test: :boolean`** __[optional, default `false`]__ whether the test should be
+    generated as well
+
+  ### Example
+
+  ```sh
+  mix finitomata.generate --module MyFSM --timer 1000 --auto-terminate true --generate-test true
+  ```
   """
 
   use Mix.Task
