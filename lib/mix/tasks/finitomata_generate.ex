@@ -99,15 +99,26 @@ defmodule Mix.Tasks.Finitomata.Generate do
         {:ok, value} -> parse_impl_for(value)
       end
 
+    test? = Keyword.get(opts, :generate_test, false)
+
     listener_clause =
       opts
       |> Keyword.fetch(:listener)
       |> case do
-        :error -> nil
-        {:ok, value} -> "listener: " <> inspect(value)
-      end
+        :error ->
+          if test?, do: "listener: :mox", else: nil
 
-    test? = Keyword.get(opts, :generate_test, false)
+        {:ok, "mox"} ->
+          "listener: :mox"
+
+        {:ok, ":mox"} ->
+          "listener: :mox"
+
+        {:ok, value} ->
+          if test?,
+            do: "listener: {:mox, " <> inspect(value) <> "}",
+            else: "listener: " <> inspect(value)
+      end
 
     use_clause =
       [
@@ -163,7 +174,7 @@ defmodule Mix.Tasks.Finitomata.Generate do
           "idle --> |start| started\nstarted --> |run| running\nrunning --> |stop| stopped"
 
         {:ok, editor} ->
-          open_in_editor("idle --> |start| started\n", editor)
+          open_in_editor("idle --> |start| started\nstarted --> |finish| finished\n", editor)
       end
 
     case syntax.parse(fsm) do
@@ -187,7 +198,16 @@ defmodule Mix.Tasks.Finitomata.Generate do
           " has been created."
         ])
 
-        if test?, do: Mix.Task.run("finitomata.generate.test", ["--module", inspect(module)])
+        if test? do
+          :ok = Mix.Task.reenable("compile")
+
+          with {:noop, []} <- Mix.Task.run("compile", [target_file]) do
+            {output, _} = System.cmd("mix", ["compile", target_file])
+            IO.puts(output)
+          end
+
+          Mix.Task.run("finitomata.generate.test", ["--module", inspect(module)])
+        end
 
       {:error, message, _, _, {line, col}, pos} ->
         Mix.shell().info([

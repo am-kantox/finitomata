@@ -385,7 +385,7 @@ defmodule Finitomata do
   The FSM is started supervised. If the global name/id is given, it should be passed
     to all calls like `transition/4`
   """
-  @spec start_fsm(id(), any() | module(), module() | any(), any()) ::
+  @spec start_fsm(id(), fsm_name() | module(), module() | fsm_name(), any()) ::
           DynamicSupervisor.on_start_child()
   def start_fsm(id \\ nil, name, impl, payload)
 
@@ -675,6 +675,7 @@ defmodule Finitomata do
         case listener do
           :mox -> if Mix.env() in mox_envs, do: def_mock.()
           {:mox, listener} -> if Mix.env() in mox_envs, do: def_mock.(), else: listener
+          {listener, :mox} -> if Mix.env() in mox_envs, do: def_mock.(), else: listener
           listener -> listener
         end
 
@@ -1306,7 +1307,6 @@ defmodule Finitomata do
             ) :: Finitomata.transition_resolution()
       case @__config__[:persistency] do
         nil ->
-          # TODO Make it a macro
           defp maybe_store(result, _, _, _, _, _), do: result
 
         module when is_atom(module) ->

@@ -9,6 +9,24 @@ defmodule <%= inspect(@module) %> do
 
   <%= @use_clause %>
 
+  # State
+
+  @type t :: %{
+    __struct__: __MODULE__,
+    name: Finitomata.fsm_name()
+  }
+
+  defstruct name: nil
+
+  # Interface
+
+  @spec start_fsm(Finitomata.id(), Finitomata.fsm_name()) ::
+          DynamicSupervisor.on_start_child()
+  def start_fsm(id \\ nil, name),
+    do: Finitomata.start_fsm(id, name, __MODULE__, %__MODULE__{name: name})
+
+  # Implementation
+
   <%= for %Finitomata.Transition{from: from, to: to, event: event} <- @transitions, from != :* do %>
   <%= if to != :* or not @auto_terminate? do %>
   @impl Finitomata
