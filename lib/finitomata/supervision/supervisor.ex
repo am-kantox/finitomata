@@ -7,6 +7,9 @@ defmodule Finitomata.Supervisor do
     applications and `Infinitomata` for distributed ones.
   """
 
+  @typedoc "The module, implementing this behaviour"
+  @type t :: module()
+
   @doc "Returns whether the _FSM_ instance under `id` “branch” and with `fsm_name` name is alive"
   @callback alive?(id :: Finitomata.id(), fsm_name :: Finitomata.fsm_name()) :: boolean()
   @doc "Starts the new _FSM_ instance under `id` “branch,” the semantics is similar to `DynamicSupervisor.start_child/2`"

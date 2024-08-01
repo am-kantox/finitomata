@@ -307,57 +307,6 @@ defmodule Finitomata do
     end
   end
 
-  @typedoc false
-  @type t :: %{
-          __struct__: __MODULE__,
-          type: Finitomata | Infinitomata,
-          id: id(),
-          implementation: module(),
-          last_event: nil | {fsm_name(), event_payload()},
-          cached_pid: nil | pid()
-        }
-
-  defstruct type: Finitomata,
-            id: nil,
-            implementation: nil,
-            last_event: nil,
-            cached_pid: nil
-
-  @behaviour Access
-
-  @doc false
-  @impl Access
-  def fetch(%{__struct__: __MODULE__, type: type, id: id}, fsm_name) do
-    case type.state(id, fsm_name, :full) do
-      %State{} = state -> {:ok, state}
-      _ -> :error
-    end
-  end
-
-  @doc false
-  @impl Access
-  def pop(%{__struct__: __MODULE__} = data, _key),
-    do: {nil, data}
-
-  @doc false
-  @impl Access
-  def get_and_update(%{__struct__: __MODULE__, type: type, id: id} = data, fsm_name, function) do
-    if not type.alive?(id, fsm_name) do
-      {:ok, _pid} = type.start_fsm(id, fsm_name, data.implementation, %{})
-    end
-
-    state = type.state(id, fsm_name, :full)
-
-    case function.(state) do
-      :pop ->
-        {state, data}
-
-      {_state, event_payload} ->
-        :ok = type.transition(id, fsm_name, event_payload)
-        {state, %{data | last_event: {fsm_name, event_payload}}}
-    end
-  end
-
   @doc """
   This callback will be called from each transition processor.
   """
@@ -465,30 +414,6 @@ defmodule Finitomata do
       Finitomata.Supervisor.manager_name(id),
       {impl, name: fqn(id, name), payload: payload}
     )
-  end
-
-  @doc false
-  def start_link_return_struct(id \\ nil, implementation) do
-    case start_link(id) do
-      {:ok, pid} ->
-        struct!(Finitomata,
-          type: Finitomata,
-          id: id,
-          implementation: implementation,
-          cached_pid: pid
-        )
-
-      {:error, {:already_started, pid}} ->
-        struct!(Finitomata,
-          type: Finitomata,
-          id: id,
-          implementation: implementation,
-          cached_pid: pid
-        )
-
-      _ ->
-        nil
-    end
   end
 
   @impl Finitomata.Supervisor
