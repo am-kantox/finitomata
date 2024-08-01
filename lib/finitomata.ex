@@ -173,6 +173,12 @@ defmodule Finitomata do
   @typedoc "The name of the FSM (might be any term, but it must be unique)"
   @type fsm_name :: any()
 
+  @typedoc "The implementation of the FSM (basically, the module having `use Finitomata` clause)"
+  @type implementation :: module()
+
+  @typedoc "The payload that is carried by `Finitomata` instance, returned by `Finitomata.state/2`"
+  @type payload :: any()
+
   @typedoc "The payload that can be passed to each call to `transition/3`"
   @type event_payload :: any()
 
@@ -301,6 +307,57 @@ defmodule Finitomata do
     end
   end
 
+  @typedoc false
+  @type t :: %{
+          __struct__: __MODULE__,
+          type: Finitomata | Infinitomata,
+          id: id(),
+          implementation: module(),
+          last_event: nil | {fsm_name(), event_payload()},
+          cached_pid: nil | pid()
+        }
+
+  defstruct type: Finitomata,
+            id: nil,
+            implementation: nil,
+            last_event: nil,
+            cached_pid: nil
+
+  @behaviour Access
+
+  @doc false
+  @impl Access
+  def fetch(%{__struct__: __MODULE__, type: type, id: id}, fsm_name) do
+    case type.state(id, fsm_name, :full) do
+      %State{} = state -> {:ok, state}
+      _ -> :error
+    end
+  end
+
+  @doc false
+  @impl Access
+  def pop(%{__struct__: __MODULE__} = data, _key),
+    do: {nil, data}
+
+  @doc false
+  @impl Access
+  def get_and_update(%{__struct__: __MODULE__, type: type, id: id} = data, fsm_name, function) do
+    if not type.alive?(id, fsm_name) do
+      {:ok, _pid} = type.start_fsm(id, fsm_name, data.implementation, %{})
+    end
+
+    state = type.state(id, fsm_name, :full)
+
+    case function.(state) do
+      :pop ->
+        {state, data}
+
+      {_state, event_payload} ->
+        :ok = type.transition(id, fsm_name, event_payload)
+        {state, %{data | last_event: {fsm_name, event_payload}}}
+    end
+  end
+
   @doc """
   This callback will be called from each transition processor.
   """
@@ -369,6 +426,8 @@ defmodule Finitomata do
                       on_terminate: 1,
                       on_timer: 2
 
+  @behaviour Finitomata.Supervisor
+
   @doc """
   Starts the FSM instance.
 
@@ -385,8 +444,7 @@ defmodule Finitomata do
   The FSM is started supervised. If the global name/id is given, it should be passed
     to all calls like `transition/4`
   """
-  @spec start_fsm(id(), fsm_name() | module(), module() | fsm_name(), any()) ::
-          DynamicSupervisor.on_start_child()
+  @impl Finitomata.Supervisor
   def start_fsm(id \\ nil, name, impl, payload)
 
   def start_fsm(id, impl, name, payload) when is_atom(impl) and not is_atom(name),
@@ -409,10 +467,31 @@ defmodule Finitomata do
     )
   end
 
-  @doc """
-  Explicitly calls `on_timer/2` callback.
-  """
-  @spec timer_tick(id(), fsm_name()) :: :ok
+  @doc false
+  def start_link_return_struct(id \\ nil, implementation) do
+    case start_link(id) do
+      {:ok, pid} ->
+        struct!(Finitomata,
+          type: Finitomata,
+          id: id,
+          implementation: implementation,
+          cached_pid: pid
+        )
+
+      {:error, {:already_started, pid}} ->
+        struct!(Finitomata,
+          type: Finitomata,
+          id: id,
+          implementation: implementation,
+          cached_pid: pid
+        )
+
+      _ ->
+        nil
+    end
+  end
+
+  @impl Finitomata.Supervisor
   def timer_tick(id \\ nil, target),
     do: id |> fqn(target) |> GenServer.whereis() |> send(:on_timer)
 
@@ -427,13 +506,7 @@ defmodule Finitomata do
     `on_transition/4` call, payload is `nil` by default
   - `delay` (optional) the interval in milliseconds to apply transition after
   """
-  @spec transition(
-          id(),
-          fsm_name(),
-          Transition.event() | {Transition.event(), State.payload()},
-          non_neg_integer()
-        ) ::
-          :ok
+  @impl Finitomata.Supervisor
   def transition(id \\ nil, target, event_payload, delay \\ 0)
 
   def transition(target, {event, payload}, delay, 0) when is_integer(delay),
@@ -479,8 +552,7 @@ defmodule Finitomata do
   - the name of the FSM
   - defines whether the cached state might be returned or should be reloaded
   """
-  @spec state(id(), fsm_name(), reload? :: :cached | :payload | :full) ::
-          nil | State.t() | State.payload()
+  @impl Finitomata.Supervisor
   def state(id \\ nil, target, reload? \\ :full)
 
   def state(target, reload?, :full) when reload? in ~w|cached payload full|a,
@@ -550,7 +622,7 @@ defmodule Finitomata do
   @doc """
   Returns `true` if the _FSM_ specified is alive, `false` otherwise.
   """
-  @spec alive?(any(), fsm_name()) :: boolean()
+  @impl Finitomata.Supervisor
   def alive?(id \\ nil, target), do: id |> fqn(target) |> GenServer.whereis() |> is_pid()
 
   @doc """
@@ -567,7 +639,7 @@ defmodule Finitomata do
   def match_state?(_, _), do: false
 
   @doc false
-  @spec child_spec(any()) :: Supervisor.child_spec()
+  @impl Finitomata.Supervisor
   def child_spec(id \\ nil)
 
   def child_spec(nil),
@@ -1434,10 +1506,7 @@ defmodule Finitomata do
     do: {:via, Registry, {Finitomata.Supervisor.registry_name(id), name}}
 
   @doc since: "0.23.3"
-  @doc "The full state with all the children, might be a heavy list"
-  @spec all(id()) :: %{
-          optional(fsm_name()) => %{pid: pid(), module: module()}
-        }
+  @impl Finitomata.Supervisor
   def all(id \\ nil) do
     pid_to_module =
       id

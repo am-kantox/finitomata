@@ -31,32 +31,39 @@ defmodule Infinitomata do
   alias Finitomata.Distributed.Supervisor, as: InfSup
   alias Finitomata.Supervisor, as: FinSup
 
+  @behaviour Finitomata.Supervisor
+
   @doc since: "0.16.0"
   def start_link(id \\ nil, nodes \\ Node.list()) do
     InfSup.start_link(id, nodes)
   end
 
   @doc since: "0.16.0"
+  @impl Finitomata.Supervisor
   def child_spec(id \\ nil) do
     Supervisor.child_spec({InfSup, id}, id: {InfSup, id})
   end
 
-  defp distributed_call(fun, id, target, args) do
+  defp distributed_call(fun, id, target, args \\ []) do
+    do_distributed_call(fun, FinSup.infinitomata_name(id), target, args)
+  end
+
+  defp do_distributed_call(fun, id, target, args) do
     case InfSup.get(id, target) do
       %{node: node} ->
         with {:badrpc, error} <-
-               :rpc.call(node, Finitomata, fun, [id, target | List.wrap(args)]) do
+               :rpc.call(node, Finitomata, fun, [id, target | args]) do
           Logger.error(
             "[♻️] Distributed: " <> inspect(id: id, node: node, target: target, error: error)
           )
 
           :ok = synch(id)
-          distributed_call(fun, id, target, args)
+          do_distributed_call(fun, id, target, args)
         end
 
       nil ->
         Process.sleep(1)
-        distributed_call(fun, id, target, args)
+        do_distributed_call(fun, id, target, args)
 
       _ ->
         {:error, :not_started}
@@ -72,7 +79,7 @@ defmodule Infinitomata do
   end
 
   @doc since: "0.16.0"
-  @doc "The full state with all the children acrosss the cluster, might be a heavy map"
+  @impl Finitomata.Supervisor
   @spec all(Finitomata.id()) :: %{
           optional(Finitomata.fsm_name()) => %{pid: pid(), node: node(), reference: reference()}
         }
@@ -97,12 +104,8 @@ defmodule Infinitomata do
     InfSup.synch(id, FinSup.infinitomata_name(id))
   end
 
-  @doc """
-  Starts the FSM somewhere in the cluster.
-
-  See `Finitomata.start_fsm/4`.
-  """
   @doc since: "0.15.0"
+  @impl Finitomata.Supervisor
   @spec start_fsm(Finitomata.id(), Finitomata.fsm_name(), module(), any()) ::
           DynamicSupervisor.on_start_child()
   def start_fsm(id \\ nil, target, implementation, payload) do
@@ -149,24 +152,15 @@ defmodule Infinitomata do
     end
   end
 
-  @doc """
-  Explicitly calls `on_timer/2` callback.
-
-  See `Finitomata.timer_tick/2`.
-  """
   @doc since: "0.19.0"
+  @impl Finitomata.Supervisor
   @spec timer_tick(Finitomata.id(), Finitomata.fsm_name()) :: :ok
   def timer_tick(id \\ nil, target) do
-    id = FinSup.infinitomata_name(id)
-    distributed_call(:timer_tick, id, target, [])
+    distributed_call(:timer_tick, id, target)
   end
 
-  @doc """
-  Initiates the transition in the cluster.
-
-  See `Finitomata.transition/4`.
-  """
   @doc since: "0.15.0"
+  @impl Finitomata.Supervisor
   @spec transition(
           Finitomata.id(),
           Finitomata.fsm_name(),
@@ -175,18 +169,18 @@ defmodule Infinitomata do
         ) ::
           :ok
   def transition(id \\ nil, target, event_payload, delay \\ 0) do
-    id = FinSup.infinitomata_name(id)
     distributed_call(:transition, id, target, [event_payload, delay])
   end
 
-  @doc """
-  The state of the FSM in the cluster.
-
-  See `Finitomata.state/3`.
-  """
   @doc since: "0.15.0"
+  @impl Finitomata.Supervisor
   def state(id \\ nil, target, reload? \\ :full) do
-    id = FinSup.infinitomata_name(id)
-    distributed_call(:state, id, target, reload?)
+    distributed_call(:state, id, target, [reload?])
+  end
+
+  @doc since: "0.26.0"
+  @impl Finitomata.Supervisor
+  def alive?(id \\ nil, target) do
+    distributed_call(:alive?, id, target)
   end
 end
