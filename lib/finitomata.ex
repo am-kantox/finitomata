@@ -209,7 +209,7 @@ defmodule Finitomata do
             listener: nil | module(),
             current: Transition.state(),
             payload: payload(),
-            timer: false | non_neg_integer(),
+            timer: false | {reference(), pos_integer()},
             history: [Transition.state()],
             last_error: last_error()
           }
@@ -480,28 +480,36 @@ defmodule Finitomata do
   @impl Finitomata.Supervisor
   def state(id \\ nil, target, reload? \\ :full)
 
-  def state(target, reload?, :full) when reload? in ~w|cached payload full|a,
-    do: state(nil, target, reload?)
+  def state(target, reload?, :full)
+      when is_function(reload?, 1) or reload? in ~w|cached payload state full|a,
+      do: state(nil, target, reload?)
 
   def state(id, target, reload?),
     do: id |> fqn(target) |> do_state(reload?)
 
-  @spec do_state(fqn :: GenServer.name(), reload? :: :cached | :payload | :full) ::
-          nil | State.t() | State.payload()
+  @spec do_state(
+          fqn :: GenServer.name(),
+          reload? :: :cached | :payload | :state | :full | (State.t() -> any())
+        ) ::
+          nil | State.t() | State.payload() | any()
   defp do_state(fqn, :cached), do: :persistent_term.get({Finitomata, fqn}, nil)
   defp do_state(fqn, :payload), do: do_state(fqn, :cached) || do_state(fqn, :full).payload
+  defp do_state(fqn, :state), do: do_state(fqn, :full).current
 
-  defp do_state(fqn, :full) do
-    fqn
-    |> GenServer.whereis()
-    |> case do
-      nil ->
+  defp do_state(fqn, full_or_fun) when full_or_fun == :full or is_function(full_or_fun, 1) do
+    pid = GenServer.whereis(fqn)
+
+    case {pid, full_or_fun} do
+      {nil, _} ->
         nil
 
-      pid when is_pid(pid) ->
-        {:ok, state} = :gen.call(pid, :"$gen_call", :state, 1_000)
-        :persistent_term.put({Finitomata, fqn}, state.payload)
-        state
+      {pid, :full} when is_pid(pid) ->
+        pid
+        |> GenServer.call(:state, 1_000)
+        |> tap(&:persistent_term.put({Finitomata, fqn}, &1.payload))
+
+      {pid, fun} when is_pid(pid) and is_function(fun, 1) ->
+        GenServer.call(pid, {:state, fun}, 1_000)
     end
   catch
     :exit, :normal -> nil
@@ -948,20 +956,19 @@ defmodule Finitomata do
             :ignore -> {lifecycle, payload}
           end
 
+        timer = safe_init_timer({nil, @__config__[:timer]})
+
         state =
           %State{
             name: name,
             lifecycle: lifecycle,
             persistency: Map.get(init_arg, :persistency, nil),
-            timer: @__config__[:timer],
+            timer: timer,
             payload: payload
           }
           |> put_current_state_if_loaded(lifecycle, payload)
 
         :persistent_term.put({Finitomata, state.name}, state.payload)
-
-        if is_integer(@__config__[:timer]) and @__config__[:timer] > 0,
-          do: Process.send_after(self(), :on_timer, @__config__[:timer])
 
         if lifecycle == :loaded,
           do: {:ok, state},
@@ -977,6 +984,15 @@ defmodule Finitomata do
       @doc false
       @impl GenServer
       def handle_call(:state, _from, state), do: {:reply, state, state}
+
+      @doc false
+      @impl GenServer
+      def handle_call({:state, fun}, _from, state) when is_function(fun, 1),
+        do: {:reply, fun.(state), state}
+
+      @doc false
+      @impl GenServer
+      def handle_call(:current_state, _from, state), do: {:reply, state.current, state}
 
       @doc false
       @impl GenServer
@@ -1011,6 +1027,21 @@ defmodule Finitomata do
 
       @doc false
       @impl GenServer
+      def handle_cast({:reset_timer, tick?, new_value}, state) do
+        timer =
+          if tick? do
+            safe_cancel_timer(state.timer)
+            Process.send(self(), :on_timer, [])
+            state.timer
+          else
+            safe_init_timer(state.timer)
+          end
+
+        {:noreply, %State{state | timer: timer}}
+      end
+
+      @doc false
+      @impl GenServer
       def handle_cast(whatever, state) do
         Logger.error(
           "Unexpected `GenServer.cast/2` with a message ‹#{inspect(whatever)}›. " <>
@@ -1034,7 +1065,8 @@ defmodule Finitomata do
       @doc false
       @impl GenServer
       def handle_info(whatever, state)
-          when not is_integer(state.timer) or whatever != :on_timer do
+          when not is_tuple(state.timer) or not is_integer(elem(state.timer, 1)) or
+                 whatever != :on_timer do
         Logger.error(
           "Unexpected message ‹#{inspect(whatever)}› received by #{inspect(State.human_readable_name(state))}. " <>
             "`Finitomata` does not accept direct messages. Please use `on_transition/4` callback instead."
@@ -1101,6 +1133,7 @@ defmodule Finitomata do
              {:on_exit, :ok} <- {:on_exit, safe_on_exit(state.current, state)},
              {:ok, new_current, new_payload} <-
                safe_on_transition(state.name, state.current, event, payload, state.payload),
+             new_timer <- safe_cancel_timer(state.timer),
              {:allowed, true} <-
                {:allowed, Transition.allowed?(@__config__[:fsm], state.current, new_current)},
              new_history = history(state.current, state.history),
@@ -1108,7 +1141,8 @@ defmodule Finitomata do
                state
                | payload: new_payload,
                  current: new_current,
-                 history: new_history
+                 history: new_history,
+                 timer: safe_init_timer(new_timer)
              },
              {:on_enter, :ok} <- {:on_enter, safe_on_enter(new_current, state)} do
           :persistent_term.put({Finitomata, state.name}, state.payload)
@@ -1179,19 +1213,20 @@ defmodule Finitomata do
             {:transition, event, state_payload} ->
               transit({event, nil}, %State{state | payload: state_payload})
 
-            {:reschedule, value} when is_integer(value) and value >= 0 ->
-              {:noreply, %State{state | timer: value}}
+            {:reschedule, value} ->
+              timer = with {ref, _old_value} <- state.timer, do: {ref, value}
+              {:noreply, %State{state | timer: timer}}
 
             weird ->
               Logger.warning("[⚑ ↹] on_timer returned a garbage " <> inspect(weird))
               {:noreply, state}
           end
-          |> tap(fn
-            {:noreply, %State{timer: timer}} when is_integer(timer) and timer > 0 ->
-              Process.send_after(self(), :on_timer, timer)
+          |> then(fn
+            {:noreply, %State{timer: timer} = state} ->
+              {:noreply, %State{state | timer: safe_init_timer(timer)}}
 
-            _ ->
-              :ok
+            other ->
+              other
           end)
         end
       else
@@ -1201,6 +1236,28 @@ defmodule Finitomata do
           )
 
           {:noreply, state}
+        end
+      end
+
+      @spec safe_cancel_timer(false | {reference(), pos_integer()}) ::
+              false | {nil, pos_integer()}
+
+      defp safe_cancel_timer({ref, timer}) when is_integer(timer) and timer > 0 do
+        if is_reference(ref), do: Process.cancel_timer(ref, async: true, info: false)
+        {nil, timer}
+      end
+
+      defp safe_cancel_timer(_false), do: false
+
+      @spec safe_init_timer(false | {nil | reference(), pos_integer()}) ::
+              false | {reference(), pos_integer()}
+      defp safe_init_timer(timer) do
+        case safe_cancel_timer(timer) do
+          {nil, timer} when is_integer(timer) and timer > 0 ->
+            {Process.send_after(self(), :on_timer, timer), timer}
+
+          _ ->
+            false
         end
       end
 

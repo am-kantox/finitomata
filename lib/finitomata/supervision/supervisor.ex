@@ -45,9 +45,9 @@ defmodule Finitomata.Supervisor do
   @callback state(
               id :: Finitomata.id(),
               fsm_name :: Finitomata.fsm_name(),
-              reload? :: :cached | :payload | :full
+              reload? :: :cached | :payload | :state | :full | (Finitomata.State.t() -> any())
             ) ::
-              nil | Finitomata.State.t() | Finitomata.State.payload()
+              nil | Finitomata.State.t() | Finitomata.State.payload() | any()
 
   use Supervisor
 
