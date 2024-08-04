@@ -32,7 +32,7 @@ defmodule Finitomata.Mermaid do
     |> concat(state)
     |> optional(blankspace)
     |> optional(semicolon)
-    |> ignore(choice([times(string("\n"), min: 1), eos()]))
+    |> ignore(choice([times(string("\n"), min: 1), times(string("\r\n"), min: 1), eos()]))
     |> tag(:transition)
 
   malformed =
