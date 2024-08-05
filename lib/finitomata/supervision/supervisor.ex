@@ -90,16 +90,30 @@ defmodule Finitomata.Supervisor do
   @spec throttler_name(Finitomata.id()) :: module()
   def throttler_name(id \\ nil), do: id |> fq_module(Throttler, true) |> uninfinitomata()
 
-  @spec fq_module(id :: any(), who :: any(), atomize? :: boolean()) :: module() | [any()]
-  defp fq_module(id, who, false), do: [Finitomata, id, who]
+  @doc false
+  @spec cache_name(Finitomata.id()) :: module()
+  def cache_name(id \\ nil), do: id |> fq_module(Cache, true) |> uninfinitomata()
 
-  defp fq_module(id, who, true) do
+  @spec fq_module(id :: any(), who :: any(), atomize? :: boolean()) :: module() | [any()]
+  defp fq_module(id, who, false) when is_atom(id) and is_atom(who), do: [Finitomata, id, who]
+
+  defp fq_module(id, who, false) when is_atom(id),
+    do: fq_module(id, Module.concat([inspect(who)]), false)
+
+  defp fq_module(id, who, false), do: fq_module(Module.concat([inspect(id)]), who, false)
+
+  defp fq_module(id, who, true) when is_atom(id) and is_atom(who) do
     id
     |> fq_module(who, false)
     |> Enum.reject(&is_nil/1)
     |> Enum.map(&inspect/1)
     |> smart_concat()
   end
+
+  defp fq_module(id, who, true) when is_atom(id),
+    do: fq_module(id, Module.concat([inspect(who)]), true)
+
+  defp fq_module(id, who, true), do: fq_module(Module.concat([inspect(id)]), who, true)
 
   defp uninfinitomata(mod),
     do: mod |> Module.split() |> Enum.reject(&(&1 == "Infinitomata")) |> Module.concat()

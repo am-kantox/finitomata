@@ -47,7 +47,8 @@ defmodule Finitomata.Accessible do
 
   schema = [
     type: [
-      required: true,
+      required: false,
+      default: Infinitomata,
       type: {:custom, Finitomata, :behaviour, [Finitomata.Supervisor]},
       doc:
         "The actual `Finitomata.Supervisor` implementation (typically, `Finitomata` or `Infinitomata`)"
