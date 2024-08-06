@@ -39,14 +39,12 @@ defmodule Finitomata.Cache do
               ttl: Application.compile_env(:finitomata, :cache_ttl, 5_000)
 
     @impl Finitomata
+    def on_transition(:idle, :init!, _nil, %Value{} = state) do
+      {:ok, :ready, state}
+    end
+
     def on_transition(:idle, :init!, _nil, state) do
-      {:ok, :ready,
-       struct!(__MODULE__,
-         getter: state.getter,
-         live?: state.live?,
-         value: :error,
-         ttl: state.ttl
-       )}
+      {:ok, :ready, struct!(__MODULE__, state)}
     end
 
     @impl Finitomata
