@@ -1,6 +1,6 @@
 import Config
 
-config :logger, :default_handler, level: :debug
+config :logger, :default_handler, level: :info
 config :logger, :default_formatter, colors: [info: :magenta]
 
 config :finitomata, :mox_envs, [:test, :finitomata]

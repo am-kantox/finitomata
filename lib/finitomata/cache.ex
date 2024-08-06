@@ -34,6 +34,7 @@ defmodule Finitomata.Cache do
       listener: :mox
 
     defstruct value: :error,
+              since: nil,
               getter: nil,
               live?: false,
               ttl: Application.compile_env(:finitomata, :cache_ttl, 5_000)
@@ -50,7 +51,14 @@ defmodule Finitomata.Cache do
     @impl Finitomata
     def on_transition(:ready, :set, {getter, live?, value}, %__MODULE__{} = state)
         when is_function(getter, 0) do
-      {:ok, :set, %__MODULE__{state | value: {:ok, value}, getter: getter, live?: live?}}
+      {:ok, :set,
+       %__MODULE__{
+         state
+         | since: DateTime.utc_now(),
+           value: {:ok, value},
+           getter: getter,
+           live?: live?
+       }}
     end
 
     def on_transition(:ready, :set, getter, %__MODULE__{} = state) when is_function(getter, 0) do
@@ -58,7 +66,7 @@ defmodule Finitomata.Cache do
     end
 
     def on_transition(:ready, :set, _, %__MODULE__{} = state) do
-      {:ok, :set, %__MODULE__{state | value: :error}}
+      {:ok, :set, %__MODULE__{state | since: DateTime.utc_now(), value: :error}}
     end
 
     @impl Finitomata
@@ -127,12 +135,24 @@ defmodule Finitomata.Cache do
 
   #{NimbleOptions.docs(@schema)}
   """
+  @spec start_link([unquote(NimbleOptions.option_typespec(@schema))]) :: Supervisor.on_start()
   def start_link(opts \\ []) do
     opts = NimbleOptions.validate!(opts, @schema)
     id = Keyword.fetch!(opts, :id)
     type = Keyword.fetch!(opts, :type)
     Config.init(id, opts)
     type.start_link(id)
+  end
+
+  @spec child_spec([unquote(NimbleOptions.option_typespec(@schema))]) :: Supervisor.child_spec()
+  def child_spec(opts \\ []) do
+    opts = NimbleOptions.validate!(opts, @schema)
+    id = Keyword.fetch!(opts, :id)
+
+    %{
+      id: {__MODULE__, id},
+      start: {__MODULE__, :start_link, [opts]}
+    }
   end
 
   @spec opts(id :: Finitomata.id()) :: [unquote(NimbleOptions.option_typespec(@schema))]
@@ -153,7 +173,7 @@ defmodule Finitomata.Cache do
             | {:reset, boolean()}
             | {:ttl, pos_integer()}
           ]
-        ) :: {:ok, value} | :error
+        ) :: {DateTime.t(), value} | {:instant, value} | :error
         when value: any()
   def get(id, key, opts \\ []) do
     opts = id |> opts() |> Keyword.merge(opts)
@@ -172,7 +192,7 @@ defmodule Finitomata.Cache do
     |> case do
       {:ok, _pid} ->
         if is_function(getter, 0) do
-          {:ok, tap(getter.(), &type.transition(id, key, {:set, {getter, live?, &1}}))}
+          {:created, tap(getter.(), &type.transition(id, key, {:set, {getter, live?, &1}}))}
         else
           Logger.warning("Initial call to `Finitomata.Cache.get/3` must contain a getter")
           type.transition(id, key, :stop)
@@ -181,22 +201,22 @@ defmodule Finitomata.Cache do
 
       {:error, {:already_started, _pid}} ->
         case {reset, getter, type.state(id, key, :payload)} do
-          {false, nil, %Value{value: {:ok, value}}} ->
-            {:ok, value}
+          {false, nil, %Value{since: since, value: {:ok, value}}} ->
+            {since, value}
 
-          {false, getter, %Value{value: {:ok, value}}} ->
+          {false, getter, %Value{since: since, value: {:ok, value}}} ->
             Logger.warning(
               "Setting a `getter` without `reset` does not make any sense, got: " <>
                 inspect(getter)
             )
 
-            {:ok, value}
-
-          {_, nil, %Value{getter: getter}} when is_function(getter, 0) ->
-            {:ok, tap(getter.(), &type.transition(id, key, {:set, {getter, live?, &1}}))}
+            {since, value}
 
           {_, getter, %Value{}} when is_function(getter, 0) ->
-            {:ok, tap(getter.(), &type.transition(id, key, {:set, {getter, live?, &1}}))}
+            {:instant, tap(getter.(), &type.transition(id, key, {:set, {getter, live?, &1}}))}
+
+          {_, nil, %Value{getter: getter}} when is_function(getter, 0) ->
+            {:instant, tap(getter.(), &type.transition(id, key, {:set, {getter, live?, &1}}))}
 
           _ ->
             Logger.warning("`getter` must be either a function of arity `0` or `nil`")
