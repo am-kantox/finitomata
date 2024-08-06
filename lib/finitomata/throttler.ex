@@ -84,16 +84,17 @@ defmodule Finitomata.Throttler do
 
     flags = Supervisor.init(children, strategy: :one_for_one)
 
-    Task.start_link(fn ->
-      opts =
-        opts
-        |> Keyword.take(~w|max_demand interval|a)
-        |> Keyword.put_new(:to, producer(name))
+    {:ok, _pid} =
+      Task.start_link(fn ->
+        opts =
+          opts
+          |> Keyword.take(~w|max_demand interval|a)
+          |> Keyword.put_new(:to, producer(name))
 
-      name
-      |> consumer()
-      |> GenStage.sync_subscribe(opts)
-    end)
+        name
+        |> consumer()
+        |> GenStage.sync_subscribe(opts)
+      end)
 
     flags
   end

@@ -125,7 +125,6 @@ defmodule Mix.Tasks.Compile.Finitomata do
     fsm
     |> Transition.ambiguous()
     |> Enum.reduce(initial, fn {from, {event, tos}}, acc ->
-      {declared, {from, {event, tos}}, acc}
       add_diagnostic(declared, {from, {event, tos}}, acc)
     end)
   end

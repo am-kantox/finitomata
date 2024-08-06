@@ -141,9 +141,10 @@ defmodule Finitomata.Accessible do
   @doc false
   @impl Access
   def get_and_update(%{__struct__: __MODULE__, type: type, id: id} = data, fsm_name, function) do
-    if not type.alive?(id, fsm_name) do
-      {:ok, _pid} = type.start_fsm(id, fsm_name, data.implementation, %{})
-    end
+    _ =
+      if not type.alive?(id, fsm_name) do
+        {:ok, _pid} = type.start_fsm(id, fsm_name, data.implementation, %{})
+      end
 
     state = type.state(id, fsm_name, :full)
 

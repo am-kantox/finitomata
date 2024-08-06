@@ -14,9 +14,10 @@ defmodule Finitomata.Distributed.GroupMonitor do
 
   @impl GenServer
   def init(id) do
-    id
-    |> Sup.group()
-    |> :pg.monitor()
+    {_reference, _pids} =
+      id
+      |> Sup.group()
+      |> :pg.monitor()
 
     {:ok, 0}
   end

@@ -7,7 +7,7 @@ defmodule Finitomata.ClusterInfo.Naive do
 
   @impl Finitomata.ClusterInfo
   def whois(id) do
-    :rand.seed(:exsss, term_to_seed(id))
+    {%{next: _next_fun, type: :exsss}, _} = :rand.seed(:exsss, term_to_seed(id))
     Enum.random(nodes())
   end
 

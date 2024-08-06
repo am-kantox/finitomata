@@ -65,7 +65,7 @@ defmodule Finitomata.MixProject do
       "quality.ci": [
         "format --check-formatted",
         "credo --strict",
-        "dialyzer"
+        "dialyzer --unmatched_returns"
       ]
     ]
   end

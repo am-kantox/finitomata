@@ -32,34 +32,49 @@ defmodule Finitomata.Cache do
     ready --> |stop| done
     """
 
-    use Finitomata, fsm: @fsm, auto_terminate: true, timer: 1, impl_for: [:on_transition]
+    use Finitomata,
+      fsm: @fsm,
+      auto_terminate: true,
+      timer: 1,
+      impl_for: [:on_transition],
+      listener: :mox
 
-    defstruct [:value, :getter, :live?, :ttl]
+    defstruct value: :error,
+              getter: nil,
+              live?: false,
+              ttl: Application.compile_env(:finitomata, :cache_ttl, 5_000)
 
     @impl Finitomata
-    def on_transition(:idle, :init, ttl, state) when is_integer(ttl) and ttl > 0 do
-      {:ok, :ready, %__MODULE__{state | value: :error, ttl: ttl}}
+    def on_transition(:idle, :init!, _nil, state) do
+      {:ok, :ready,
+       struct!(__MODULE__,
+         getter: state.getter,
+         live?: state.live?,
+         value: :error,
+         ttl: state.ttl
+       )}
     end
 
     @impl Finitomata
-    def on_transition(:ready, :set, {getter, value}, state) when is_function(getter, 0) do
+    def on_transition(:ready, :set, {getter, value}, %__MODULE__{} = state)
+        when is_function(getter, 0) do
       {:ok, :set, %__MODULE__{state | value: {:ok, value}, getter: getter}}
     end
 
-    def on_transition(:ready, :set, getter, state) when is_function(getter, 0) do
+    def on_transition(:ready, :set, getter, %__MODULE__{} = state) when is_function(getter, 0) do
       on_transition(:ready, :set, {getter, getter.()}, state)
     end
 
-    def on_transition(:ready, :set, _, state) do
+    def on_transition(:ready, :set, _, %__MODULE__{} = state) do
       {:ok, :set, %__MODULE__{state | value: :error}}
     end
 
     @impl Finitomata
-    def on_timer(:ready, %{timer: {_, 1}, payload: %{ttl: ttl}}) do
+    def on_timer(:ready, %{timer: {_, 1}, payload: %__MODULE__{ttl: ttl}}) do
       {:reschedule, ttl}
     end
 
-    def on_timer(:ready, %{payload: %{getter: getter, live?: true} = payload} = state) do
+    def on_timer(:ready, %{payload: %__MODULE__{getter: getter, live?: true} = payload} = state) do
       Logger.debug(
         "Cache value for " <>
           inspect(Finitomata.State.human_readable_name(state, false)) <> " is to be renewed"
@@ -68,7 +83,7 @@ defmodule Finitomata.Cache do
       {:transition, {:set, getter}, payload}
     end
 
-    def on_timer(:ready, %{payload: %{live?: false} = payload} = state) do
+    def on_timer(:ready, %{payload: %__MODULE__{live?: false} = payload} = state) do
       Logger.debug(
         "Cache value for " <>
           inspect(Finitomata.State.human_readable_name(state, false)) <> " is to be unset"
@@ -77,7 +92,7 @@ defmodule Finitomata.Cache do
       {:transition, {:set, :error}, payload}
     end
 
-    def on_timer(_, state), do: {:ok, state.payload}
+    def on_timer(_, %{payload: payload}), do: {:ok, payload}
   end
 
   require Logger
@@ -203,10 +218,10 @@ defmodule Finitomata.Cache do
 
       {:error, {:already_started, _pid}} ->
         case {reset, getter, type.state(id, key, :payload)} do
-          {false, nil, %{value: {:ok, value}}} ->
+          {false, nil, %Value{value: {:ok, value}}} ->
             {:ok, value}
 
-          {false, getter, %{value: {:ok, value}}} ->
+          {false, getter, %Value{value: {:ok, value}}} ->
             Logger.warning(
               "Setting a `getter` without `reset` does not make any sense, got: " <>
                 inspect(getter)
@@ -214,10 +229,10 @@ defmodule Finitomata.Cache do
 
             {:ok, value}
 
-          {_, nil, %{getter: getter}} when is_function(getter, 0) ->
+          {_, nil, %Value{getter: getter}} when is_function(getter, 0) ->
             {:ok, tap(getter.(), &type.transition(id, key, {:set, {getter, &1}}))}
 
-          {_, getter, %{}} when is_function(getter, 0) ->
+          {_, getter, %Value{}} when is_function(getter, 0) ->
             {:ok, tap(getter.(), &type.transition(id, key, {:set, {getter, &1}}))}
 
           _ ->

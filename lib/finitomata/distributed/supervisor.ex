@@ -19,8 +19,7 @@ defmodule Finitomata.Distributed.Supervisor do
           end
         end)
 
-        Task.start(fn -> synch(id) end)
-
+        {:ok, _task_pid} = Task.start(fn -> synch(id) end)
         {:ok, pid}
 
       {:error, {:already_started, pid}} ->
