@@ -11,18 +11,20 @@ defmodule Finitomata.Cache.Value.Test do
     setup_finitomata do
       ttl = 1_000
       getter = &DateTime.utc_now/0
+      live? = true
 
       [
         fsm: [
           implementation: Value,
-          payload: %{live?: true, ttl: ttl, getter: getter},
+          payload: %{live?: live?, ttl: ttl, getter: getter},
           options: [transition_count: 10]
         ],
-        context: [ttl: ttl, value: getter.(), getter: getter]
+        context: [ttl: ttl, value: getter.(), getter: getter, live?: live?]
       ]
     end
 
-    test_path "path #0", %{finitomata: %{}, ttl: ttl, getter: getter, value: value} = _ctx do
+    test_path "path #0",
+              %{finitomata: %{}, ttl: ttl, getter: getter, value: value, live?: live?} = _ctx do
       :* ->
         assert_state(:idle)
 
@@ -30,7 +32,7 @@ defmodule Finitomata.Cache.Value.Test do
           assert_payload %Value{ttl: ^ttl, value: :error}
         end
 
-      {:set, {getter, value}} ->
+      {:set, {getter, live?, value}} ->
         assert_state :set do
           assert_payload %Value{value: {:ok, ^value}}
         end

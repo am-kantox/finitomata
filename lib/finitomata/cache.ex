@@ -4,22 +4,16 @@ defmodule Finitomata.Cache do
     The self-curing cache based on `Finitomata` implementation
   """
 
-  defmodule State do
+  defmodule Config do
     @moduledoc false
-    use GenServer
 
-    def start_link(opts \\ []) do
-      GenServer.start_link(__MODULE__, opts)
+    @spec init(id :: Finitomata.id(), opts :: keyword()) :: :ok
+    def init(id, opts \\ []) do
+      :persistent_term.put({__MODULE__, id}, opts)
     end
 
-    @spec config(pid :: pid()) :: keyword()
-    def config(pid), do: GenServer.call(pid, :state)
-
-    @impl GenServer
-    def init(opts), do: {:ok, opts}
-
-    @impl GenServer
-    def handle_call(:state, _from, opts), do: {:reply, opts, opts}
+    @spec get(id :: Finitomata.id()) :: keyword()
+    def get(id), do: :persistent_term.get({__MODULE__, id}, [])
   end
 
   defmodule Value do
@@ -56,13 +50,13 @@ defmodule Finitomata.Cache do
     end
 
     @impl Finitomata
-    def on_transition(:ready, :set, {getter, value}, %__MODULE__{} = state)
+    def on_transition(:ready, :set, {getter, live?, value}, %__MODULE__{} = state)
         when is_function(getter, 0) do
-      {:ok, :set, %__MODULE__{state | value: {:ok, value}, getter: getter}}
+      {:ok, :set, %__MODULE__{state | value: {:ok, value}, getter: getter, live?: live?}}
     end
 
     def on_transition(:ready, :set, getter, %__MODULE__{} = state) when is_function(getter, 0) do
-      on_transition(:ready, :set, {getter, getter.()}, state)
+      on_transition(:ready, :set, {getter, state.live?, getter.()}, state)
     end
 
     def on_transition(:ready, :set, _, %__MODULE__{} = state) do
@@ -128,8 +122,6 @@ defmodule Finitomata.Cache do
 
   @schema NimbleOptions.new!(schema)
 
-  use Supervisor
-
   @doc """
   Supervision tree embedder.
 
@@ -139,42 +131,15 @@ defmodule Finitomata.Cache do
   """
   def start_link(opts \\ []) do
     opts = NimbleOptions.validate!(opts, @schema)
-    Supervisor.start_link(__MODULE__, opts, name: opts |> Keyword.fetch!(:id) |> name())
-  end
-
-  @impl Supervisor
-  @doc false
-  def init(opts) do
     id = Keyword.fetch!(opts, :id)
     type = Keyword.fetch!(opts, :type)
-
-    children = [
-      {State, opts},
-      {type, id}
-    ]
-
-    Supervisor.init(children, strategy: :one_for_one)
+    Config.init(id, opts)
+    type.start_link(id)
   end
 
   @spec opts(id :: Finitomata.id()) :: [unquote(NimbleOptions.option_typespec(@schema))]
   @doc false
-  # {{Finitomata.Distributed.Supervisor, Finitomata.Cache}, #PID<0.5210.0>,
-  #  :supervisor, [Finitomata.Distributed.Supervisor]},
-  # {Finitomata.Cache.State, #PID<0.5209.0>, :worker, [Finitomata.Cache.State]}
-  defp opts(id) do
-    id
-    |> name()
-    |> Supervisor.which_children()
-    |> Enum.find(&match?({Finitomata.Cache.State, _pid, :worker, _}, &1))
-    |> case do
-      {Finitomata.Cache.State, pid, :worker, _} -> State.config(pid)
-      _ -> []
-    end
-  end
-
-  @doc false
-  @spec name(id :: Finitomata.id()) :: module()
-  defp name(id), do: Finitomata.Supervisor.cache_name(id)
+  defp opts(id), do: Config.get(id)
 
   @doc """
   Retrieves the value either cached or via `getter/0` anonymous function and caches it.
@@ -209,7 +174,7 @@ defmodule Finitomata.Cache do
     |> case do
       {:ok, _pid} ->
         if is_function(getter, 0) do
-          {:ok, tap(getter.(), &type.transition(id, key, {:set, {getter, &1}}))}
+          {:ok, tap(getter.(), &type.transition(id, key, {:set, {getter, live?, &1}}))}
         else
           Logger.warning("Initial call to `Finitomata.Cache.get/3` must contain a getter")
           type.transition(id, key, :stop)
@@ -230,10 +195,10 @@ defmodule Finitomata.Cache do
             {:ok, value}
 
           {_, nil, %Value{getter: getter}} when is_function(getter, 0) ->
-            {:ok, tap(getter.(), &type.transition(id, key, {:set, {getter, &1}}))}
+            {:ok, tap(getter.(), &type.transition(id, key, {:set, {getter, live?, &1}}))}
 
           {_, getter, %Value{}} when is_function(getter, 0) ->
-            {:ok, tap(getter.(), &type.transition(id, key, {:set, {getter, &1}}))}
+            {:ok, tap(getter.(), &type.transition(id, key, {:set, {getter, live?, &1}}))}
 
           _ ->
             Logger.warning("`getter` must be either a function of arity `0` or `nil`")

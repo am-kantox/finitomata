@@ -90,10 +90,6 @@ defmodule Finitomata.Supervisor do
   @spec throttler_name(Finitomata.id()) :: module()
   def throttler_name(id \\ nil), do: id |> fq_module(Throttler, true) |> uninfinitomata()
 
-  @doc false
-  @spec cache_name(Finitomata.id()) :: module()
-  def cache_name(id \\ nil), do: id |> fq_module(Cache, true) |> uninfinitomata()
-
   @spec fq_module(id :: any(), who :: any(), atomize? :: boolean()) :: module() | [any()]
   defp fq_module(id, who, false) when is_atom(id) and is_atom(who), do: [Finitomata, id, who]
 
