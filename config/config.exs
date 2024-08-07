@@ -3,6 +3,7 @@ import Config
 level =
   case Mix.env() do
     :test -> :debug
+    :finitomata -> :debug
     :prod -> :warning
     :dev -> :error
   end
