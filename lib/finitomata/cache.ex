@@ -183,6 +183,77 @@ defmodule Finitomata.Cache do
     live? = Keyword.fetch!(opts, :live?)
     type = Keyword.fetch!(opts, :type)
 
+    maybe_start =
+      if not type.alive?(id, key) do
+        type.start_fsm(
+          id,
+          key,
+          Value,
+          struct!(Value, getter: getter, live?: live?, ttl: ttl)
+        )
+      end
+
+    case maybe_start do
+      {:ok, _pid} ->
+        if is_function(getter, 0) do
+          {:created, tap(getter.(), &type.transition(id, key, {:set, {getter, live?, &1}}))}
+        else
+          Logger.error("Initial call to `Finitomata.Cache.get/3` must contain a getter")
+          type.transition(id, key, :stop)
+          :error
+        end
+
+      {:error, error} when not is_tuple(error) ->
+        Logger.warning("Could not start FSM. Error: " <> inspect(error))
+        :error
+
+      # nil | {:error, {:already_started, _pid}}
+      _ ->
+        case {reset, getter, type.state(id, key, :payload)} do
+          {false, nil, %Value{since: since, value: {:ok, value}}} ->
+            {since, value}
+
+          {false, getter, %Value{since: since, value: {:ok, value}}} ->
+            Logger.warning(
+              "Setting a `getter` without `reset` does not make any sense, got: " <>
+                inspect(getter)
+            )
+
+            {since, value}
+
+          {_, getter, %Value{}} when is_function(getter, 0) ->
+            {:instant, tap(getter.(), &type.transition(id, key, {:set, {getter, live?, &1}}))}
+
+          {_, nil, %Value{getter: getter}} when is_function(getter, 0) ->
+            {:instant, tap(getter.(), &type.transition(id, key, {:set, {getter, live?, &1}}))}
+
+          _ ->
+            Logger.warning("`getter` must be either a function of arity `0` or `nil`")
+            :error
+        end
+    end
+  end
+
+  @doc false
+  @spec get_naive(
+          id :: Finitomata.id(),
+          key :: any(),
+          opts :: [
+            {:getter, (-> value)}
+            | {:live?, boolean()}
+            | {:reset, boolean()}
+            | {:ttl, pos_integer()}
+          ]
+        ) :: {DateTime.t(), value} | {:instant, value} | :error
+        when value: any()
+  def get_naive(id, key, opts \\ []) do
+    opts = id |> opts() |> Keyword.merge(opts)
+    {reset, opts} = Keyword.pop(opts, :reset, false)
+    {getter, opts} = Keyword.pop(opts, :getter, nil)
+    ttl = Keyword.fetch!(opts, :ttl)
+    live? = Keyword.fetch!(opts, :live?)
+    type = Keyword.fetch!(opts, :type)
+
     id
     |> type.start_fsm(
       key,

@@ -24,6 +24,8 @@ defmodule Infinitomata do
   """
   @moduledoc since: "0.15.0"
 
+  @max_attempts Application.compile_env(:finitomata, :infinitomata_attempts, 1_000)
+
   require Logger
 
   alias Finitomata.{ClusterInfo, State, Transition}
@@ -45,10 +47,16 @@ defmodule Infinitomata do
   end
 
   defp distributed_call(fun, id, target, args \\ []) do
-    do_distributed_call(fun, FinSup.infinitomata_name(id), target, args)
+    do_distributed_call(node(), fun, FinSup.infinitomata_name(id), target, args, @max_attempts)
   end
 
-  defp do_distributed_call(fun, id, target, args) do
+  defp do_distributed_call(:nonode@nohost, fun, id, target, args, _attempts) do
+    apply(Finitomata, fun, [id, target | args])
+  end
+
+  defp do_distributed_call(_this, _fun, _id, _target, _args, 0), do: {:error, :exhausted}
+
+  defp do_distributed_call(this, fun, id, target, args, attempts) do
     case InfSup.get(id, target) do
       %{node: node} ->
         with {:badrpc, error} <-
@@ -58,12 +66,12 @@ defmodule Infinitomata do
           )
 
           :ok = synch(id)
-          do_distributed_call(fun, id, target, args)
+          do_distributed_call(this, fun, id, target, args, attempts - 1)
         end
 
       nil ->
         Process.sleep(1)
-        do_distributed_call(fun, id, target, args)
+        do_distributed_call(this, fun, id, target, args, attempts - 1)
 
       _ ->
         {:error, :not_started}
