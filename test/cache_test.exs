@@ -8,7 +8,15 @@ defmodule Finitomata.Cache.Test do
   @count 25
 
   setup do
-    start_supervised!({Finitomata.Cache, id: CacheLive, type: Finitomata, live?: true, ttl: 100})
+    start_supervised!(
+      {Finitomata.Cache,
+       id: CacheLive,
+       type: Finitomata,
+       live?: true,
+       ttl: 100,
+       getter: &(&1 |> String.split("_") |> List.last() |> String.to_integer())}
+    )
+
     start_supervised!({Finitomata.Cache, id: CacheDead, type: Finitomata, live?: false, ttl: 100})
 
     parent = self()
@@ -32,10 +40,10 @@ defmodule Finitomata.Cache.Test do
   test "Caches as expected" do
     Enum.each(1..@count, fn i ->
       assert {:created, ^i} =
-               Finitomata.Cache.get(CacheLive, "var_live_#{i}", getter: fn -> i end)
+               Finitomata.Cache.get(CacheLive, "var_live_#{i}")
 
       assert {:created, ^i} =
-               Finitomata.Cache.get(CacheDead, "var_dead_#{i}", getter: fn -> i end)
+               Finitomata.Cache.get(CacheDead, "var_dead_#{i}", getter: fn _ -> i end)
     end)
 
     Process.sleep(1_000)

@@ -7,10 +7,12 @@ defmodule Finitomata.Cache.Value.Test do
 
   @moduletag :finitomata
 
+  def utc_now(_), do: DateTime.utc_now()
+
   describe "↝‹:* ↦ :idle ↦ :ready ↦ :set ↦ :ready ↦ :done ↦ :*›" do
     setup_finitomata do
       ttl = 1_000
-      getter = &DateTime.utc_now/0
+      getter = &Finitomata.Cache.Value.Test.utc_now/1
       live? = true
 
       [
@@ -19,7 +21,7 @@ defmodule Finitomata.Cache.Value.Test do
           payload: %{live?: live?, ttl: ttl, getter: getter},
           options: [transition_count: 10]
         ],
-        context: [ttl: ttl, value: getter.(), getter: getter, live?: live?]
+        context: [ttl: ttl, value: DateTime.utc_now(), getter: getter, live?: live?]
       ]
     end
 
@@ -68,7 +70,7 @@ defmodule Finitomata.Cache.Value.Test do
       [
         fsm: [
           implementation: Value,
-          payload: %Value{live?: true, ttl: 1_000, getter: &DateTime.utc_now/0},
+          payload: %Value{live?: true, ttl: 1_000},
           options: [transition_count: 5]
         ],
         context: []

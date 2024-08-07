@@ -5,16 +5,24 @@ Application.ensure_all_started(:cachex)
 Cachex.start(:cachex_cache)
 ConCache.start_link(name: :con_cache, ttl_check_interval: false)
 Finitomata.Cache.start_link(id: :infini_cache_naive, type: Infinitomata, ttl: 5_000, live?: true)
-Finitomata.Cache.start_link(id: :fini_cache_naive, type: Finitomata, ttl: 5_000, live?: true)
+
+Finitomata.Cache.start_link(
+  id: :fini_cache_naive,
+  type: Finitomata,
+  ttl: 5_000,
+  live?: true,
+  getter: &(&1 |> String.split("_") |> List.last() |> String.to_integer())
+)
+
 Finitomata.Cache.start_link(id: :infini_cache, type: Infinitomata, ttl: 5_000, live?: true)
 Finitomata.Cache.start_link(id: :fini_cache, type: Finitomata, ttl: 5_000, live?: true)
 
 Enum.each(1..count, fn i ->
   ConCache.put(:con_cache, "var_#{i}", i)
-  Finitomata.Cache.get_naive(:fini_cache_naive, "var_#{i}", getter: fn -> i end)
-  Finitomata.Cache.get_naive(:infini_cache_naive, "var_#{i}", getter: fn -> i end)
-  Finitomata.Cache.get(:fini_cache, "var_#{i}", getter: fn -> i end)
-  Finitomata.Cache.get(:infini_cache, "var_#{i}", getter: fn -> i end)
+  Finitomata.Cache.get_naive(:fini_cache_naive, "var_#{i}")
+  Finitomata.Cache.get_naive(:infini_cache_naive, "var_#{i}", getter: fn _ -> i end)
+  Finitomata.Cache.get(:fini_cache, "var_#{i}", getter: fn _ -> i end)
+  Finitomata.Cache.get(:infini_cache, "var_#{i}", getter: fn _ -> i end)
   Cachex.put(:cachex_cache, "var_#{i}", i)
 end)
 

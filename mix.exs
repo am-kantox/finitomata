@@ -101,7 +101,7 @@ defmodule Finitomata.MixProject do
       groups_for_modules: [
         FSM: [Finitomata, Infinitomata, Finitomata.Supervisor, Finitomata.Accessible],
         Test: [Finitomata.ExUnit],
-        Goods: [Finitomata.Throttler, Finitomata.Pool],
+        Goods: [Finitomata.Throttler, Finitomata.Pool, Finitomata.Cache],
         Internals: [
           Finitomata.Listener,
           Finitomata.ClusterInfo,
