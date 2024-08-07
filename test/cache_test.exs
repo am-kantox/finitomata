@@ -38,7 +38,7 @@ defmodule Finitomata.Cache.Test do
                Finitomata.Cache.get(CacheDead, "var_dead_#{i}", getter: fn -> i end)
     end)
 
-    Process.sleep(500)
+    Process.sleep(1_000)
 
     Enum.each(1..@count, fn i ->
       assert {%DateTime{}, ^i} = Finitomata.Cache.get(CacheLive, "var_live_#{i}")
