@@ -4,6 +4,7 @@ defmodule Finitomata.Cache.Value.Test do
   import Mox
 
   alias Finitomata.Cache.Value
+  alias Finitomata.Cache.Value.Test, as: This
 
   @moduletag :finitomata
 
@@ -12,7 +13,7 @@ defmodule Finitomata.Cache.Value.Test do
   describe "↝‹:* ↦ :idle ↦ :ready ↦ :set ↦ :ready ↦ :done ↦ :*›" do
     setup_finitomata do
       ttl = 1_000
-      getter = &Finitomata.Cache.Value.Test.utc_now/1
+      getter = &This.utc_now/1
       live? = true
 
       [

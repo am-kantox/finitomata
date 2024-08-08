@@ -4,6 +4,7 @@ level =
   case Mix.env() do
     :test -> :debug
     :finitomata -> :debug
+    :ci -> :debug
     :prod -> :warning
     :dev -> :error
   end
