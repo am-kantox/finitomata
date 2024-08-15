@@ -103,7 +103,14 @@ defmodule Infinitomata do
     id
     |> all()
     |> Map.keys()
-    |> Enum.random()
+    |> case do
+      [] ->
+        Process.sleep(200)
+        random(id)
+
+      [_ | _] = nodes ->
+        Enum.random(nodes)
+    end
   end
 
   @doc since: "0.19.0"
