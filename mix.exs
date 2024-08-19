@@ -99,7 +99,7 @@ defmodule Finitomata.MixProject do
       assets: "stuff/images",
       extras: ~w[README.md stuff/fsm.md stuff/compiler.md],
       groups_for_modules: [
-        FSM: [Finitomata, Infinitomata, Finitomata.Supervisor, Finitomata.Accessible],
+        FSM: [Finitomata, Infinitomata, Finitomata.Accessible],
         Test: [Finitomata.ExUnit],
         Goods: [Finitomata.Throttler, Finitomata.Pool, Finitomata.Cache],
         Internals: [
@@ -107,6 +107,7 @@ defmodule Finitomata.MixProject do
           Finitomata.ClusterInfo,
           Finitomata.Parser,
           Finitomata.Pool.Actor,
+          Finitomata.Supervisor,
           Finitomata.State,
           Finitomata.Transition,
           Finitomata.Transition.Path
