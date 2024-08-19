@@ -2,7 +2,7 @@ defmodule Finitomata.MixProject do
   use Mix.Project
 
   @app :finitomata
-  @version "0.25.0"
+  @version "0.26.0"
 
   def project do
     [
@@ -48,8 +48,8 @@ defmodule Finitomata.MixProject do
       {:estructura, "~> 1.4"},
       # dev / test
       {:enfiladex, "~> 0.1", only: [:dev, :test, :finitomata]},
-      {:nimble_ownership, "~> 0.3", only: [:dev, :test, :ci, :finitomata], override: true},
-      {:mox, github: "dashbitco/mox", only: [:dev, :test, :ci, :finitomata]},
+      {:nimble_ownership, "~> 1.0", only: [:dev, :test, :ci, :finitomata]},
+      {:mox, "~> 1.2", only: [:dev, :test, :ci, :finitomata]},
       {:stream_data, "~> 1.0"},
       {:observer_cli, "~> 1.5", only: [:dev]},
       {:credo, "~> 1.0", only: [:dev, :ci]},
