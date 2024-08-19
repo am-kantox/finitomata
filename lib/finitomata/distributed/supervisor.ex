@@ -61,8 +61,15 @@ defmodule Finitomata.Distributed.Supervisor do
 
     known_fsms_alive = fn _ ->
       merger =
-        fn _k, %{node: node, pid: pid}, %{node: node, pid: pid} ->
-          %{node: node, pid: pid, ref: make_ref()}
+        fn
+          _k, %{node: node, pid: pid}, %{node: node, pid: pid} ->
+            %{node: node, pid: pid, ref: make_ref()}
+
+          _k, %{node: node, pid: pid}, %{node: _node, pid: nil} ->
+            %{node: node, pid: pid, ref: make_ref()}
+
+          _k, %{node: _node, pid: nil}, %{node: node, pid: pid} ->
+            %{node: node, pid: pid, ref: make_ref()}
         end
 
       call_handler = fn result, id, node ->
