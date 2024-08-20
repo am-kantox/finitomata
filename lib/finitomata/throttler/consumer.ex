@@ -8,7 +8,7 @@ defmodule Finitomata.Throttler.Consumer do
   @max_demand Keyword.get(@throttler_options, :max_demand, 5)
   @interval Keyword.get(@throttler_options, :interval, 400)
 
-  def start_link(initial \\ :ok),
+  def start_link(initial \\ []),
     do: GenStage.start_link(__MODULE__, initial)
 
   @impl GenStage
@@ -16,7 +16,13 @@ defmodule Finitomata.Throttler.Consumer do
     max_demand = Keyword.get(opts, :max_demand, @max_demand)
     interval = Keyword.get(opts, :interval, @interval)
 
-    {:consumer, %{__throttler_options__: %{max_demand: max_demand, interval: interval}}}
+    case Keyword.fetch(opts, :consumer_options) do
+      :error ->
+        {:consumer, %{__throttler_options__: %{max_demand: max_demand, interval: interval}}}
+
+      {:ok, opts} ->
+        {:consumer, %{__throttler_options__: %{max_demand: max_demand, interval: interval}}, opts}
+    end
   end
 
   @impl GenStage

@@ -119,7 +119,7 @@ defmodule Finitomata.Throttler do
   def call(name, requests, timeout) when is_list(requests) do
     requests
     |> Enum.map(&Task.async(Finitomata.Throttler, :call, [name, &1, timeout]))
-    |> Task.await_many()
+    |> Task.await_many(timeout)
   end
 
   @utc_now_truncate_to if(Version.compare(System.version(), "1.15.0") == :lt,
