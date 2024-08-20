@@ -65,10 +65,10 @@ defmodule Finitomata.Distributed.Supervisor do
           _k, %{node: node, pid: pid}, %{node: node, pid: pid} ->
             %{node: node, pid: pid, ref: make_ref()}
 
-          _k, %{node: node, pid: pid}, %{node: _node, pid: nil} ->
+          _k, %{node: _node, pid: nil}, %{node: node, pid: pid} ->
             %{node: node, pid: pid, ref: make_ref()}
 
-          _k, %{node: _node, pid: nil}, %{node: node, pid: pid} ->
+          _k, %{node: node, pid: pid}, %{node: _node, pid: _pid} ->
             %{node: node, pid: pid, ref: make_ref()}
         end
 
