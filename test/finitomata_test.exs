@@ -186,6 +186,9 @@ defmodule Finitomata.Test do
     fsm = "ErrorFSM"
     Finitomata.start_fsm(ErrorAttach, fsm, %{foo: :bar})
 
+    # level = Logger.level()
+    # Logger.configure(level: :all)
+
     captured_log =
       capture_log(fn ->
         Finitomata.transition(fsm, {:start, nil})
@@ -195,6 +198,8 @@ defmodule Finitomata.Test do
     assert captured_log =~ "[failure] {:error, \"Test error\"}"
     assert captured_log =~ "[failure] state: :idle"
     assert captured_log =~ "[failure] event: :start"
+
+    # Logger.configure(level: level)
   end
 
   test "persistency" do

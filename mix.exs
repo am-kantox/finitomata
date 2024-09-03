@@ -2,7 +2,7 @@ defmodule Finitomata.MixProject do
   use Mix.Project
 
   @app :finitomata
-  @version "0.26.2"
+  @version "0.26.3"
 
   def project do
     [
@@ -96,7 +96,7 @@ defmodule Finitomata.MixProject do
       canonical: "http://hexdocs.pm/#{@app}",
       logo: "stuff/#{@app}-48x48.png",
       source_url: "https://github.com/am-kantox/#{@app}",
-      assets: "stuff/images",
+      assets: %{"stuff/images" => "assets"},
       extras: ~w[README.md stuff/fsm.md stuff/compiler.md],
       groups_for_modules: [
         FSM: [Finitomata, Infinitomata, Finitomata.Accessible],

@@ -92,9 +92,14 @@ defmodule Finitomata.Distributed.Supervisor do
   end
 
   def all(id) do
-    with empty when empty == %{} <- Agent.get(agent(id), & &1) do
-      Logger.debug("[♻️] Empty pool for ‹#{inspect(id)}›")
+    if is_nil(GenServer.whereis(agent(id))) do
+      Logger.debug("[♻️] Not healthy ‹#{inspect(id)}›, probably it’s terminating")
       %{}
+    else
+      with empty when empty == %{} <- Agent.get(agent(id), & &1) do
+        Logger.debug("[♻️] Empty pool for ‹#{inspect(id)}›")
+        %{}
+      end
     end
   end
 
