@@ -84,9 +84,6 @@ defmodule Mix.Tasks.Finitomata.Generate do
 
         :error ->
           nil
-
-        _ ->
-          "timer: true"
       end
 
     auto_terminate_clause =
