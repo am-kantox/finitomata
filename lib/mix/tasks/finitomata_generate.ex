@@ -71,8 +71,8 @@ defmodule Mix.Tasks.Finitomata.Generate do
       opts
       |> Keyword.fetch(:timer)
       |> case do
-        :error ->
-          nil
+        {:ok, value} when is_integer(value) and value > 0 ->
+          "timer: #{value}"
 
         {:ok, value} ->
           value
@@ -81,6 +81,12 @@ defmodule Mix.Tasks.Finitomata.Generate do
             {i, _} when is_integer(i) and i > 0 -> "timer: #{i}"
             :error -> "timer: true"
           end)
+
+        :error ->
+          nil
+
+        _ ->
+          "timer: true"
       end
 
     auto_terminate_clause =

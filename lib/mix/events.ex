@@ -7,12 +7,12 @@ defmodule Finitomata.Mix.Events do
   @type hooks :: MapSet.t(Finitomata.Hook.t())
   @type state :: %{hooks: hooks(), declarations: hooks(), diagnostics: diagnostics()}
 
-  def start_link,
-    do:
-      Agent.start_link(
-        fn -> %{hooks: MapSet.new(), declarations: MapSet.new(), diagnostics: MapSet.new()} end,
-        name: __MODULE__
-      )
+  def start do
+    Agent.start(
+      fn -> %{hooks: MapSet.new(), declarations: MapSet.new(), diagnostics: MapSet.new()} end,
+      name: __MODULE__
+    )
+  end
 
   @spec stop :: :ok
   def stop, do: Agent.stop(__MODULE__)

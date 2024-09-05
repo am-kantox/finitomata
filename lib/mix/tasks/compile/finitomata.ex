@@ -12,7 +12,7 @@ defmodule Mix.Tasks.Compile.Finitomata do
 
   @impl Compiler
   def run(argv) do
-    case Events.start_link() do
+    case Events.start() do
       {:ok, _pid} ->
         :ok
 
@@ -25,7 +25,7 @@ defmodule Mix.Tasks.Compile.Finitomata do
           description: "Cannot start the `Events` process, error: " <> inspect(error)
     end
 
-    Compiler.after_compiler(:app, &after_compiler(&1, argv))
+    Compiler.after_compiler(:finitomata, &after_compiler(&1, argv))
 
     tracers = Code.get_compiler_option(:tracers)
     Code.put_compiler_option(:tracers, [__MODULE__ | tracers])
@@ -67,6 +67,8 @@ defmodule Mix.Tasks.Compile.Finitomata do
     |> to_diagnostics(module |> Module.get_attribute(:__config__) |> Map.get(:fsm))
     |> add_diagnostics()
     |> amend_using_info(module)
+
+    :ok
   end
 
   def trace(_event, _env), do: :ok
@@ -75,11 +77,11 @@ defmodule Mix.Tasks.Compile.Finitomata do
           {status, [Mix.Task.Compiler.Diagnostic.t()]}
         when status: Mix.Task.Compiler.status()
   defp after_compiler({status, diagnostics}, _argv) do
-    tracers = Enum.reject(Code.get_compiler_option(:tracers), &(&1 == __MODULE__))
-    Code.put_compiler_option(:tracers, tracers)
+    _tracers = Enum.reject(Code.get_compiler_option(:tracers), &(&1 == __MODULE__))
+    # Code.put_compiler_option(:tracers, tracers)
 
     %{diagnostics: finitomata_diagnostics} = Events.all()
-    :ok = Events.stop()
+    # :ok = Events.stop()
 
     {finitomata_status, _full, _added, _removed} = manifest(finitomata_diagnostics)
 
