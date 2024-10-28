@@ -157,7 +157,7 @@ defmodule Finitomata.Cache do
     getter: [
       required: false,
       default: nil,
-      type: {:or, [{:fun, 1}, nil]},
+      type: {:or, [{:fun, 1}, {:in, [nil]}]},
       doc:
         "The shared for all instances getter returning a value based on the name of the instance, used as a key"
     ]

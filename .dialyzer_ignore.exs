@@ -1,0 +1,1 @@
+.dialyzer/ignore.exs
