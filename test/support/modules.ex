@@ -40,7 +40,7 @@ defmodule Finitomata.Test.Transition do
   done --> |end!| ended
   """
 
-  use Finitomata, fsm: @fsm, listener: :mox
+  use Finitomata, fsm: @fsm, listener: :mox, hibernate: true, cache_state: false
 end
 
 defmodule Finitomata.Test.Hard do

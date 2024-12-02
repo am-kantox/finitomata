@@ -69,6 +69,18 @@ defmodule Finitomata do
       default: Application.compile_env(:finitomata, :auto_terminate, false),
       doc: "When `true`, the transition to the end state is initiated automatically."
     ],
+    cache_state: [
+      required: false,
+      type: :boolean,
+      default: Application.compile_env(:finitomata, :cache_state, true),
+      doc: "When `true`, the FSM state is cached in `:persistent_term`"
+    ],
+    hibernate: [
+      required: false,
+      type: {:or, [:boolean, :atom, {:list, :atom}]},
+      default: Application.compile_env(:finitomata, :hibernate, false),
+      doc: "When `true`, the FSM process is hibernated between transitions"
+    ],
     ensure_entry: [
       required: false,
       type: {:or, [{:list, :atom}, :boolean]},
@@ -210,6 +222,8 @@ defmodule Finitomata do
             current: Transition.state(),
             payload: payload(),
             timer: false | {reference(), pos_integer()},
+            cache_state: boolean(),
+            hibernate: boolean() | [Transition.state()],
             history: [Transition.state()],
             last_error: last_error()
           }
@@ -220,6 +234,8 @@ defmodule Finitomata do
               current: :*,
               payload: %{},
               timer: false,
+              cache_state: true,
+              hibernate: false,
               history: [],
               last_error: nil
 
@@ -506,7 +522,7 @@ defmodule Finitomata do
       {pid, :full} when is_pid(pid) ->
         pid
         |> GenServer.call(:state, 1_000)
-        |> tap(&:persistent_term.put({Finitomata, fqn}, &1.payload))
+        |> tap(&if &1.cache_state, do: :persistent_term.put({Finitomata, fqn}, &1.payload))
 
       {pid, fun} when is_pid(pid) and is_function(fun, 1) ->
         GenServer.call(pid, {:state, fun}, 1_000)
@@ -650,6 +666,8 @@ defmodule Finitomata do
 
       shutdown = Keyword.fetch!(options, :shutdown)
       auto_terminate = Keyword.fetch!(options, :auto_terminate)
+      hibernate = Keyword.fetch!(options, :hibernate)
+      cache_state = Keyword.fetch!(options, :cache_state)
       persistency = Keyword.fetch!(options, :persistency)
       listener = Keyword.fetch!(options, :listener)
 
@@ -799,6 +817,8 @@ defmodule Finitomata do
         persistency: persistency,
         listener: listener,
         auto_terminate: auto_terminate,
+        hibernate: hibernate,
+        cache_state: cache_state,
         ensure_entry: ensure_entry,
         states: Transition.states(fsm),
         events: Transition.events(fsm),
@@ -817,27 +837,29 @@ defmodule Finitomata do
         @moduledoc """
                    The instance of _FSM_ backed up by `Finitomata`.
 
-                   - _entry event_ → `:#{@__config__[:entry]}`
-                   - _persistency_ → `#{inspect(@__config__[:persistency] || false)}`
-                   - _listener_ → `#{inspect(@__config__[:listener] || false)}`
-                   - _timer_ → `#{@__config__[:timer] || "disabled"}`
+                   - _entry event_ → `:#{@__config__.entry}`
+                   - _persistency_ → `#{inspect(@__config__.persistency || false)}`
+                   - _listener_ → `#{inspect(@__config__.listener || false)}`
+                   - _timer_ → `#{@__config__.timer || "disabled"}`
+                   - _hibernate_ → `#{@__config__.hibernate || "no"}`
+                   - _cache_state_ → `#{@__config__.cache_state || "yes"}`
 
                    ## FSM representation
 
-                   ```#{@__config__[:syntax] |> Module.split() |> List.last() |> Macro.underscore()}
-                   #{@__config__[:syntax].lint(@__config__[:dsl])}
+                   ```#{@__config__.syntax |> Module.split() |> List.last() |> Macro.underscore()}
+                   #{@__config__.syntax.lint(@__config__.dsl)}
                    ```
 
                    ### FSM paths
 
                    ```elixir
-                   #{Enum.map_join(@__config__[:paths], "\n", &inspect/1)}
+                   #{Enum.map_join(@__config__.paths, "\n", &inspect/1)}
                    ```
 
                    ### FSM loops
 
                    ```elixir
-                   #{if [] != @__config__[:loops], do: Enum.map_join(@__config__[:loops], "\n", &inspect/1), else: "no loops"}
+                   #{if [] != @__config__.loops, do: Enum.map_join(@__config__.loops, "\n", &inspect/1), else: "no loops"}
                    ```
 
                    """ <> if(is_nil(@moduledoc), do: "", else: "\n---\n" <> @moduledoc)
@@ -888,7 +910,7 @@ defmodule Finitomata do
       def start_link(payload: payload, name: name),
         do: start_link(name: name, payload: payload)
 
-      case @__config__[:persistency] do
+      case @__config__.persistency do
         nil ->
           def start_link(name: name, payload: payload) do
             GenServer.start_link(__MODULE__, %{name: name, payload: payload}, name: name)
@@ -901,7 +923,7 @@ defmodule Finitomata do
           def start_link(name: name, payload: payload) do
             GenServer.start_link(
               __MODULE__,
-              %{name: name, payload: payload, with_persistency: @__config__[:persistency]},
+              %{name: name, payload: payload, with_persistency: @__config__.persistency},
               name: name
             )
           end
@@ -956,7 +978,7 @@ defmodule Finitomata do
             :ignore -> {lifecycle, payload}
           end
 
-        timer = safe_init_timer({nil, @__config__[:timer]})
+        timer = safe_init_timer({nil, @__config__.timer})
 
         state =
           %State{
@@ -964,16 +986,18 @@ defmodule Finitomata do
             lifecycle: lifecycle,
             persistency: Map.get(init_arg, :persistency, nil),
             timer: timer,
+            cache_state: @__config__.cache_state,
+            hibernate: @__config__.hibernate,
             payload: payload
           }
           |> put_current_state_if_loaded(lifecycle, payload)
 
-        :persistent_term.put({Finitomata, state.name}, state.payload)
+        if @__config__.cache_state,
+          do: :persistent_term.put({Finitomata, state.name}, state.payload)
 
         if lifecycle == :loaded,
           do: {:ok, state},
-          else:
-            {:ok, state, {:continue, {:transition, event_payload({@__config__[:entry], nil})}}}
+          else: {:ok, state, {:continue, {:transition, event_payload({@__config__.entry, nil})}}}
       end
 
       defp put_current_state_if_loaded(state, :loaded, payload),
@@ -983,34 +1007,63 @@ defmodule Finitomata do
 
       @doc false
       @impl GenServer
+      def handle_call(:state, _from, %State{hibernate: true} = state),
+        do: {:reply, state, state, :hibernate}
+
       def handle_call(:state, _from, state), do: {:reply, state, state}
 
       @doc false
       @impl GenServer
+      def handle_call({:state, fun}, _from, %State{hibernate: true} = state)
+          when is_function(fun, 1),
+          do: {:reply, fun.(state), state, :hibernate}
+
       def handle_call({:state, fun}, _from, state) when is_function(fun, 1),
         do: {:reply, fun.(state), state}
 
       @doc false
       @impl GenServer
+      def handle_call(:current_state, _from, %State{hibernate: true} = state),
+        do: {:reply, state.current, state, :hibernate}
+
       def handle_call(:current_state, _from, state), do: {:reply, state.current, state}
 
       @doc false
       @impl GenServer
+      def handle_call(:name, _from, %State{hibernate: true} = state),
+        do: {:reply, State.human_readable_name(state, false), state, :hibernate}
+
       def handle_call(:name, _from, state),
         do: {:reply, State.human_readable_name(state, false), state}
 
       @doc false
       @impl GenServer
+      def handle_call({:allowed?, to}, _from, %State{hibernate: true} = state),
+        do: {:reply, Transition.allowed?(@__config__.fsm, state.current, to), state, :hibernate}
+
       def handle_call({:allowed?, to}, _from, state),
-        do: {:reply, Transition.allowed?(@__config__[:fsm], state.current, to), state}
+        do: {:reply, Transition.allowed?(@__config__.fsm, state.current, to), state}
 
       @doc false
       @impl GenServer
+      def handle_call({:responds?, event}, _from, %State{hibernate: true} = state),
+        do:
+          {:reply, Transition.responds?(@__config__.fsm, state.current, event), state, :hibernate}
+
       def handle_call({:responds?, event}, _from, state),
-        do: {:reply, Transition.responds?(@__config__[:fsm], state.current, event), state}
+        do: {:reply, Transition.responds?(@__config__.fsm, state.current, event), state}
 
       @doc false
       @impl GenServer
+      def handle_call(whatever, _from, %State{hibernate: true} = state) do
+        Logger.error(
+          "Unexpected `GenServer.call/2` with a message ‹#{inspect(whatever)}›. " <>
+            "`Finitomata` does not accept direct calls. Please use `on_transition/4` callback instead."
+        )
+
+        {:reply, :not_allowed, state, :hibernate}
+      end
+
       def handle_call(whatever, _from, state) do
         Logger.error(
           "Unexpected `GenServer.call/2` with a message ‹#{inspect(whatever)}›. " <>
@@ -1037,7 +1090,9 @@ defmodule Finitomata do
             safe_init_timer(state.timer)
           end
 
-        {:noreply, %State{state | timer: timer}}
+        if state.hibernate,
+          do: {:noreply, %State{state | timer: timer}, :hibernate},
+          else: {:noreply, %State{state | timer: timer}}
       end
 
       @doc false
@@ -1048,7 +1103,9 @@ defmodule Finitomata do
             "`Finitomata` does not accept direct casts. Please use `on_transition/4` callback instead."
         )
 
-        {:noreply, state}
+        if state.hibernate,
+          do: {:noreply, state, :hibernate},
+          else: {:noreply, state}
       end
 
       @doc false
@@ -1072,7 +1129,9 @@ defmodule Finitomata do
             "`Finitomata` does not accept direct messages. Please use `on_transition/4` callback instead."
         )
 
-        {:noreply, state}
+        if state.hibernate,
+          do: {:noreply, state, :hibernate},
+          else: {:noreply, state}
       end
 
       @doc false
@@ -1126,16 +1185,18 @@ defmodule Finitomata do
         do: event_payload({event, %{}})
 
       @spec transit({Transition.event(), Finitomata.event_payload()}, State.t()) ::
-              {:noreply, State.t()} | {:stop, :normal, State.t()}
+              {:noreply, State.t()}
+              | {:noreply, State.t(), :hibernate}
+              | {:stop, :normal, State.t()}
       defp transit({event, payload}, state) do
         with {:responds, true} <-
-               {:responds, Transition.responds?(@__config__[:fsm], state.current, event)},
+               {:responds, Transition.responds?(@__config__.fsm, state.current, event)},
              {:on_exit, :ok} <- {:on_exit, safe_on_exit(state.current, state)},
              {:ok, new_current, new_payload} <-
                safe_on_transition(state.name, state.current, event, payload, state.payload),
              new_timer <- safe_cancel_timer(state.timer),
              {:allowed, true} <-
-               {:allowed, Transition.allowed?(@__config__[:fsm], state.current, new_current)},
+               {:allowed, Transition.allowed?(@__config__.fsm, state.current, new_current)},
              new_history = history(state.current, state.history),
              state = %State{
                state
@@ -1145,18 +1206,22 @@ defmodule Finitomata do
                  timer: safe_init_timer(new_timer)
              },
              {:on_enter, :ok} <- {:on_enter, safe_on_enter(new_current, state)} do
-          :persistent_term.put({Finitomata, state.name}, state.payload)
+          if @__config__.cache_state,
+            do: :persistent_term.put({Finitomata, state.name}, state.payload)
 
-          case new_current do
-            :* ->
+          case {new_current, state.hibernate} do
+            {:*, _} ->
               {:stop, :normal, state}
 
-            hard when hard in @__config_hard_states__ ->
+            {hard, _} when hard in @__config_hard_states__ ->
               {:noreply, state,
-               {:continue, {:transition, event_payload(@__config__[:hard][hard].event)}}}
+               {:continue, {:transition, event_payload(@__config__.hard[hard].event)}}}
 
-            _ ->
+            {_, false} ->
               {:noreply, state}
+
+            {_, true} ->
+              {:noreply, state, :hibernate}
           end
         else
           {err, false} ->
@@ -1165,12 +1230,12 @@ defmodule Finitomata do
             )
 
             safe_on_failure(event, payload, state)
-            {:noreply, state}
+            if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
 
           {err, :ok} ->
             Logger.warning("[⚐ ↹] callback failed to return `:ok` (:#{err})")
             safe_on_failure(event, payload, state)
-            {:noreply, state}
+            if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
 
           err ->
             state = %State{state | last_error: %{state: state.current, event: event, error: err}}
@@ -1178,34 +1243,37 @@ defmodule Finitomata do
             cond do
               event in @__config_soft_events__ ->
                 Logger.debug("[⚐ ↹] transition softly failed " <> inspect(err))
-                {:noreply, state}
+                if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
 
-              @__config__[:fsm]
+              @__config__.fsm
               |> Transition.allowed(state.current, event)
-              |> Enum.all?(&(&1 in @__config__[:ensure_entry])) ->
+              |> Enum.all?(&(&1 in @__config__.ensure_entry)) ->
                 {:noreply, state, {:continue, {:transition, event_payload({event, payload})}}}
 
               true ->
                 Logger.warning("[⚐ ↹] transition failed " <> inspect(err))
                 safe_on_failure(event, payload, state)
-                {:noreply, state}
+                if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
             end
         end
       end
 
       @impl GenServer
       @doc false
-      if @__config__[:timer] do
+      if @__config__.timer do
         def handle_info(:on_timer, state) do
           state.current
           |> safe_on_timer(state)
           |> case do
             :ok ->
-              {:noreply, state}
+              if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
 
             {:ok, state_payload} ->
-              :persistent_term.put({Finitomata, state.name}, state_payload)
-              {:noreply, %State{state | payload: state_payload}}
+              if @__config__.cache_state,
+                do: :persistent_term.put({Finitomata, state.name}, state_payload)
+
+              state = %State{state | payload: state_payload}
+              if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
 
             {:transition, {event, event_payload}, state_payload} ->
               transit({event, event_payload}, %State{state | payload: state_payload})
@@ -1215,15 +1283,17 @@ defmodule Finitomata do
 
             {:reschedule, value} ->
               timer = with {ref, _old_value} <- state.timer, do: {ref, value}
-              {:noreply, %State{state | timer: timer}}
+              state = %State{state | timer: timer}
+              if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
 
             weird ->
               Logger.warning("[⚑ ↹] on_timer returned a garbage " <> inspect(weird))
-              {:noreply, state}
+              if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
           end
           |> then(fn
             {:noreply, %State{timer: timer} = state} ->
-              {:noreply, %State{state | timer: safe_init_timer(timer)}}
+              state = %State{state | timer: safe_init_timer(timer)}
+              if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
 
             other ->
               other
@@ -1235,7 +1305,7 @@ defmodule Finitomata do
             "[⚑ ↹] on_timer message received, but no `on_timer/2` callback is declared"
           )
 
-          {:noreply, state}
+          if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
         end
       end
 
@@ -1359,7 +1429,7 @@ defmodule Finitomata do
               Finitomata.event_payload(),
               State.payload()
             ) :: Finitomata.transition_resolution()
-      case @__config__[:persistency] do
+      case @__config__.persistency do
         nil ->
           defp maybe_store(result, _, _, _, _, _), do: result
 
@@ -1372,7 +1442,7 @@ defmodule Finitomata do
                  event_payload,
                  state_payload
                ) do
-            with true <- function_exported?(@__config__[:persistency], :store_error, 4),
+            with true <- function_exported?(@__config__.persistency, :store_error, 4),
                  info = %{
                    from: current,
                    to: nil,
@@ -1381,7 +1451,7 @@ defmodule Finitomata do
                    object: state_payload
                  },
                  {:error, persistency_error_reason} <-
-                   @__config__[:persistency].store_error(name, state_payload, reason, info) do
+                   @__config__.persistency.store_error(name, state_payload, reason, info) do
               {:error, transition: reason, persistency: persistency_error_reason}
             else
               _ ->
@@ -1406,7 +1476,7 @@ defmodule Finitomata do
             }
 
             name
-            |> @__config__[:persistency].store(new_state_payload, info)
+            |> @__config__.persistency.store(new_state_payload, info)
             |> case do
               :ok -> result
               {:ok, updated_state_payload} -> {:ok, new_state, updated_state_payload}
@@ -1421,17 +1491,17 @@ defmodule Finitomata do
 
       @spec maybe_pubsub(Finitomata.transition_resolution(), Finitomata.fsm_name()) :: :ok
       cond do
-        is_nil(@__config__[:listener]) ->
+        is_nil(@__config__.listener) ->
           :ok
 
-        is_atom(@__config__[:listener]) and
-            function_exported?(@__config__[:listener], :after_transition, 3) ->
+        is_atom(@__config__.listener) and
+            function_exported?(@__config__.listener, :after_transition, 3) ->
           defp maybe_pubsub({:ok, state, payload}, name) do
             with some when some != :ok <-
-                   @__config__[:listener].after_transition(name, state, payload) do
+                   @__config__.listener.after_transition(name, state, payload) do
               Logger.warning(
                 "[♻️] Listener ‹" <>
-                  inspect(Function.capture(@__config__[:listener], :after_transition, 3)) <>
+                  inspect(Function.capture(@__config__.listener, :after_transition, 3)) <>
                   "› returned unexpected ‹" <>
                   inspect(some) <>
                   "› when called with ‹" <> inspect([name, state, payload]) <> "›"
@@ -1439,10 +1509,10 @@ defmodule Finitomata do
             end
           end
 
-        is_pid(@__config__[:listener]) or is_port(@__config__[:listener]) or
-          is_atom(@__config__[:listener]) or is_tuple(@__config__[:listener]) ->
+        is_pid(@__config__.listener) or is_port(@__config__.listener) or
+          is_atom(@__config__.listener) or is_tuple(@__config__.listener) ->
           defp maybe_pubsub({:ok, state, payload}, name) do
-            send(@__config__[:listener], {:finitomata, {:transition, state, payload}})
+            send(@__config__.listener, {:finitomata, {:transition, state, payload}})
           end
       end
 
