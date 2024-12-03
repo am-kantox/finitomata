@@ -174,6 +174,12 @@ defmodule Finitomata.Mermaid do
   @spec dump(Finitomata.Transition.t() | binary()) :: String.t()
   defp dump(text) when is_binary(text), do: text
 
+  defp dump(%Finitomata.Transition{from: :*, to: to, event: event}),
+    do: "◎ --> |#{event}| #{to}"
+
+  defp dump(%Finitomata.Transition{from: from, to: :*, event: event}),
+    do: "#{from} --> |#{event}| ◉"
+
   defp dump(%Finitomata.Transition{from: from, to: to, event: event}),
     do: "#{from} --> |#{event}| #{to}"
 
