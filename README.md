@@ -157,6 +157,7 @@ end
 ```
 
 ## Changelog
+- `0.28.0` — [UPD] initial `telemetria` integration 
 - `0.27.0` — [UPD] options `hibernate: boolean()` and `cache_state: boolean()`
 - `0.26.0` — [UPD] a lot of tiny improvements, `Finitomata.Accessible`, `reset_timer` message + tests, experimental `Finitomata.Cache`
 - `0.25.0` — [UPD] allow assertions of entry states in `Finitomata.ExUnit`
