@@ -49,8 +49,23 @@ jobs:
         run: |
           MIX_ENV=finitomata mix do deps.get, deps.compile, compile
           MIX_ENV=finitomata mix test --exclude test --include finitomata
-      - name: "Compile and Test Examples"
+      - name: "Compile and Test Ecto Examples"
         run: |
           cd examples/ecto_integration
+          mix do deps.get, deps.compile, compile
+          mix test
+      - name: "Compile and Test Caches Examples"
+        run: |
+          cd examples/caches
+          mix do deps.get, deps.compile, compile
+          mix test
+      - name: "Compile and Test ExUnit Testing Examples"
+        run: |
+          cd examples/ex_unit_testing
+          mix do deps.get, deps.compile, compile
+          mix test
+      - name: "Compile and Test Telemetria Examples"
+        run: |
+          cd examples/telemetria
           mix do deps.get, deps.compile, compile
           mix test
