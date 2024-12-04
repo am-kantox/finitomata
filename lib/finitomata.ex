@@ -168,9 +168,71 @@ defmodule Finitomata do
   ```    
   """
 
+  use_with_telemetria = """
+  ## Use with `Telemetría`
+
+  `telemetria` library can be used to send all the state changes to the backend,
+    configured by this library. To enable metrics sending, one should do the following.
+
+  ### Add `telemetria` dependency
+
+  `telemetria` dependency should be added alongside its backend dependency.
+     For `:telemetry` backend, that would be
+
+  ```elixir
+  defp deps do
+    [
+      ...
+      {:telemetry, "~> 1.0"},
+      {:telemetry_poller, "~> 1.0"},
+      {:telemetria, "~> 0.22"}
+    ]
+  ```
+
+  ### Configure `telemetria` library in a compile-time config
+
+  ```elixir
+  config :telemetria,
+    backend: Telemetria.Backend.Telemetry,
+    purge_level: :debug,
+    level: :info,
+  ```
+
+  ### Add `:telemetria` compiler
+  `:telemetria` compiler should be added to the list of `mix` compilers, alongside
+    `:finitomata` compiler.
+
+  ```elixir
+  def project do
+    [
+      ...
+      compilers: [:finitomata, :telemetria | Mix.compilers()],
+      ...
+    ]
+  end
+  ```
+
+  ### Configure `:finitomata` to use `:telemetria`
+
+  The configuration parameter `[:finitomata, :telemetria]` accepts the following values:
+
+  - `false` — `:telemetria` metrics won’t be sent
+  - `true` — `:telemetria` metrics will be send for _all_ the callbacks
+  - `[callback, ...]` — `:telemetria` metrics will be send for the specified callbacks
+
+  Available callbacks may be seen below in this module documentation. Please note,
+    that the events names would be `event: [__MODULE__, :safe_on_transition]` and like.
+
+  ```elixir
+  config :finitomata, :telemetria, true
+  ```
+
+  See [`telemetria`](https://hexdocs.pm/telemetria) docs for further config details.
+  """
+
   doc_readme = "README.md" |> File.read!() |> String.split("\n---") |> Enum.at(1)
 
-  @moduledoc Enum.join([doc_readme, use_finitomata, doc_options], "\n\n")
+  @moduledoc Enum.join([doc_readme, use_finitomata, use_with_telemetria, doc_options], "\n\n")
 
   require Logger
 
@@ -635,6 +697,8 @@ defmodule Finitomata do
       options = NimbleOptions.validate!(unquote(options), unquote(Macro.escape(schema)))
 
       require Logger
+
+      use Telemetria.Wrapper
 
       alias Finitomata.Transition, as: Transition
       import Finitomata.Defstate, only: [defstate: 1]
@@ -1341,6 +1405,7 @@ defmodule Finitomata do
               {:ok, Transition.state(), State.payload()}
               | {:error, any()}
               | {:error, :on_transition_raised}
+      @telemetria level: :info, if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_transition)
       defp safe_on_transition(name, current, event, event_payload, state_payload) do
         current
         |> on_transition(event, event_payload, state_payload)
@@ -1351,6 +1416,7 @@ defmodule Finitomata do
       end
 
       @spec safe_on_failure(Transition.event(), Finitomata.event_payload(), State.t()) :: :ok
+      @telemetria level: :warning, if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_failure)
       defp safe_on_failure(event, event_payload, state_payload) do
         if function_exported?(__MODULE__, :on_failure, 3) do
           with other when other != :ok <-
@@ -1366,6 +1432,7 @@ defmodule Finitomata do
       end
 
       @spec safe_on_enter(Transition.state(), State.t()) :: :ok
+      @telemetria level: :debug, if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_enter)
       defp safe_on_enter(state, state_payload) do
         if function_exported?(__MODULE__, :on_enter, 2) do
           with other when other != :ok <- apply(__MODULE__, :on_enter, [state, state_payload]) do
@@ -1380,6 +1447,7 @@ defmodule Finitomata do
       end
 
       @spec safe_on_exit(Transition.state(), State.t()) :: :ok
+      @telemetria level: :debug, if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_exit)
       defp safe_on_exit(state, state_payload) do
         if function_exported?(__MODULE__, :on_exit, 2) do
           with other when other != :ok <- apply(__MODULE__, :on_exit, [state, state_payload]) do
@@ -1394,6 +1462,7 @@ defmodule Finitomata do
       end
 
       @spec safe_on_terminate(State.t()) :: :ok
+      @telemetria level: :info, if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_terminate)
       defp safe_on_terminate(state) do
         if function_exported?(__MODULE__, :on_terminate, 1) do
           with other when other != :ok <- apply(__MODULE__, :on_terminate, [state]) do
@@ -1407,18 +1476,21 @@ defmodule Finitomata do
         err -> report_error(err, "on_terminate/1")
       end
 
-      @spec safe_on_timer(Transition.state(), State.t()) ::
-              :ok
-              | {:ok, State.t()}
-              | {:transition, {Transition.state(), Finitomata.event_payload()}, State.payload()}
-              | {:transition, Transition.state(), State.payload()}
-              | {:reschedule, pos_integer()}
-      defp safe_on_timer(state, state_payload) do
-        if function_exported?(__MODULE__, :on_timer, 2),
-          do: apply(__MODULE__, :on_timer, [state, state_payload]),
-          else: :ok
-      rescue
-        err -> report_error(err, "on_timer/2")
+      if @__config__.timer do
+        @spec safe_on_timer(Transition.state(), State.t()) ::
+                :ok
+                | {:ok, State.t()}
+                | {:transition, {Transition.state(), Finitomata.event_payload()}, State.payload()}
+                | {:transition, Transition.state(), State.payload()}
+                | {:reschedule, pos_integer()}
+        @telemetria level: :info, if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_timer)
+        defp safe_on_timer(state, state_payload) do
+          if function_exported?(__MODULE__, :on_timer, 2),
+            do: apply(__MODULE__, :on_timer, [state, state_payload]),
+            else: :ok
+        rescue
+          err -> report_error(err, "on_timer/2")
+        end
       end
 
       @spec maybe_store(

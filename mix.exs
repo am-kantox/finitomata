@@ -42,10 +42,15 @@ defmodule Finitomata.MixProject do
 
   defp deps do
     [
+      # core
       {:nimble_parsec, "~> 1.0"},
       {:nimble_options, "~> 0.3 or ~> 1.0"},
       {:gen_stage, "~> 1.0"},
       {:estructura, "~> 1.4"},
+      # optional
+      {:telemetry, "~> 1.0", optional: true},
+      {:telemetry_poller, "~> 1.0", optional: true},
+      {:telemetria, "~> 0.21", optional: true},
       # dev / test
       {:enfiladex, "~> 0.1", only: [:dev, :test, :finitomata]},
       {:nimble_ownership, "~> 1.0", only: [:dev, :test, :ci, :finitomata]},
