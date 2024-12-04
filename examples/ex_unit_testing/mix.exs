@@ -9,7 +9,7 @@ defmodule ExUnitTesting.MixProject do
       app: @app,
       name: "ExUnit Testing",
       version: @version,
-      elixir: "~> 1.16",
+      elixir: "~> 1.14",
       compilers: Mix.compilers() ++ [:finitomata],
       start_permanent: Mix.env() == :prod,
       deps: deps(),

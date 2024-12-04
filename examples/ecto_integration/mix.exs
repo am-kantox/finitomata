@@ -5,7 +5,7 @@ defmodule EctoIntegration.MixProject do
     [
       app: :ecto_integration,
       version: "0.1.0",
-      elixir: "~> 1.12",
+      elixir: "~> 1.14",
       compilers: compilers(Mix.env()),
       aliases: aliases(),
       start_permanent: Mix.env() == :prod,

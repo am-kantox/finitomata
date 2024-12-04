@@ -5,7 +5,7 @@ defmodule FinitomataWithTelemetria.MixProject do
     [
       app: :finitomata_with_telemetria,
       version: "0.1.0",
-      elixir: "~> 1.17",
+      elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       compilers: [:finitomata, :telemetria | Mix.compilers()],
       deps: deps()
