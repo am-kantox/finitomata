@@ -166,19 +166,22 @@ defmodule Finitomata.Mermaid do
   @impl Parser
   def lint(input) when is_binary(input) do
     case parse(input) do
-      {:ok, transitions} -> Enum.map_join(["graph TD" | transitions], "\n    ", &dump/1)
-      {:error, error} -> "‹ERROR› " <> inspect(error)
+      {:ok, transitions} ->
+        ["graph TD" | transitions] |> Enum.reject(&is_nil/1) |> Enum.map_join("\n    ", &dump/1)
+
+      {:error, error} ->
+        "‹ERROR› " <> inspect(error)
     end
   end
 
   @spec dump(Finitomata.Transition.t() | binary()) :: String.t()
   defp dump(text) when is_binary(text), do: text
 
-  defp dump(%Finitomata.Transition{from: :*, to: to, event: event}),
-    do: "◎ --> |#{event}| #{to}"
+  defp dump(%Finitomata.Transition{from: :*}),
+    do: nil
 
-  defp dump(%Finitomata.Transition{from: from, to: :*, event: event}),
-    do: "#{from} --> |#{event}| ◉"
+  defp dump(%Finitomata.Transition{to: :*}),
+    do: nil
 
   defp dump(%Finitomata.Transition{from: from, to: to, event: event}),
     do: "#{from} --> |#{event}| #{to}"
