@@ -1,0 +1,11 @@
+%{
+  "start" => %{valid_states: [:new], handler: &Foo.Bar.recipient_flow_name/3, initial: "✓"},
+  "submit_name" => %{valid_states: [:enter_name, :take_photo, :confirm_photo], handler: &submit_name/3},
+  "transfer_number" => %{valid_states: [:new, :enter_name, :take_photo, :confirm_photo], handler: &transfer_number_start/3},
+  "resend" => %{valid_states: [:new, :enter_name, :take_photo, :confirm_photo], handler: &resend/3},
+  "submit_otp" => %{valid_states: [:new, :enter_name, :take_photo, :confirm_photo], handler: &transfer_verify_otp/3},
+  "photo_capture" => %{valid_states: [:take_photo, :confirm_photo], handler: &photo_capture/3},
+  "confirm_photo" => %{valid_states: [:confirm_photo], handler: &recipient_photo/3},
+  "take_photo_screen" => %{valid_states: [:take_photo, :confirm_photo], handler: &stop_loading_photo/3},
+  "finalize" => %{valid_states: [:confirm_photo], handler: &finalize/3, target_states: [], final: "✓"}
+}

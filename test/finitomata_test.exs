@@ -175,8 +175,11 @@ defmodule Finitomata.Test do
     assert %Finitomata.State{current: :started} = Finitomata.state("SoftFSM", :full)
     assert %{foo: :bar} = Finitomata.state("SoftFSM", :cached)
 
-    assert ~s|#Finitomata<[name: "SoftFSM", state: [current: :started, previous: :idle, payload: %{foo: :bar}], | <>
-             ~s|internals: [errored?: [not_allowed: | <> _ = inspect(Finitomata.state("SoftFSM"))
+    state = inspect(Finitomata.state("SoftFSM"))
+
+    assert ~s|#Finitomata<[name: "SoftFSM", pids: [self: #PID<| <> _ = state
+    assert state =~ ~s|state: [current: :started, previous: :idle, payload: %{foo: :bar}]|
+    assert state =~ ~s|internals: [errored?: [not_allowed: |
 
     assert Finitomata.alive?("SoftFSM")
   end

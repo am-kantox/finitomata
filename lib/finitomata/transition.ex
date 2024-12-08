@@ -293,26 +293,33 @@ defmodule Finitomata.Transition do
   @spec loops(:states | :transitions, [t()]) :: Enumerable.t(t()) | [Path.t()]
   def loops(what \\ :states, transitions)
 
-  def loops(:transitions, transitions) do
-    transitions
-    |> states(true)
-    |> Stream.flat_map(&do_loop(&1, transitions, [], []))
-  end
-
   def loops(:states, transitions) do
     :transitions
     |> loops(transitions)
     |> to_path()
   end
 
-  defp do_loop(state, _transitions, [%Transition{from: state} | _] = path, paths),
-    do: [path | paths]
+  def loops(:transitions, transitions) do
+    transitions
+    |> states(true)
+    |> Stream.flat_map(&do_loop(&1, transitions, [], []))
+  end
 
   defp do_loop(state, transitions, path, paths) do
+    count = 2 + div(24, count(:transitions, transitions))
+    do_loop(state, transitions, path, paths, count)
+  end
+
+  defp do_loop(_state, _transitions, path, paths, count) when length(path) > count, do: paths
+
+  defp do_loop(state, _transitions, [%Transition{from: state} | _] = path, paths, _count),
+    do: [path | paths]
+
+  defp do_loop(state, transitions, path, paths, count) do
     transitions
     |> Stream.reject(&(&1 in path))
     |> Stream.filter(&match?(%Transition{from: ^state, to: to} when to != :*, &1))
-    |> Stream.flat_map(&do_loop(&1.to, transitions, path ++ [&1], paths))
+    |> Stream.flat_map(&do_loop(&1.to, transitions, path ++ [&1], paths, count))
   end
 
   @doc ~S"""
@@ -335,6 +342,8 @@ defmodule Finitomata.Transition do
 
   def paths(:transitions, transitions, :*, to) do
     entry = entry(:transition, transitions)
+    transitions = Enum.reject(transitions, &(&1 == entry))
+
     do_path(entry.to, to, transitions, [entry], [])
   end
 
@@ -342,16 +351,42 @@ defmodule Finitomata.Transition do
     do_path(from, to, transitions, [], [])
   end
 
-  defp do_path(to, to, _transitions, [_ | _] = path, paths), do: [Enum.reverse(path) | paths]
-  defp do_path(to, to, _transitions, [], paths), do: paths
-  defp do_path(:*, _, _transitions, _, paths), do: paths
-
   defp do_path(from, to, transitions, path, paths) do
+    state_count = count(:states, transitions)
+
+    count =
+      case count(:transitions, transitions) do
+        few when few < 12 -> state_count * 3
+        avg when avg < 24 -> state_count * 2
+        _ -> state_count
+      end
+
+    do_path(from, to, transitions, path, paths, count)
+  end
+
+  defp do_path(_from, _to, _transitions, path, paths, count) when length(path) > count, do: paths
+
+  defp do_path(to, to, _transitions, [_ | _] = path, paths, _count),
+    do: [Enum.reverse(path) | paths]
+
+  defp do_path(to, to, _transitions, [], paths, _count), do: paths
+  defp do_path(:*, _, _transitions, _, paths, _count), do: paths
+
+  defp do_path(from, to, transitions, path, paths, count) do
     transitions
     |> Stream.reject(&(&1 in path))
     |> Stream.filter(&match?(%Transition{from: ^from}, &1))
-    |> Stream.flat_map(&do_path(&1.to, to, transitions, [&1 | path], paths))
+    |> Stream.flat_map(&do_path(&1.to, to, transitions, [&1 | path], paths, count))
   end
+
+  @spec count(:states | :transitions, [t()]) :: non_neg_integer()
+  def count(what \\ :states, transitions)
+
+  def count(:states, transitions),
+    do: transitions |> Enum.map(& &1.from) |> Enum.uniq() |> length()
+
+  def count(:transitions, transitions),
+    do: length(transitions)
 
   @doc ~S"""
   Returns `true` if the transition `from` → `to` is allowed, `false` otherwise.
