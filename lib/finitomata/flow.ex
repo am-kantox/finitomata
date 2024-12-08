@@ -3,39 +3,60 @@ defmodule Finitomata.Flow do
   The basic “brick” to build forks in top-level `Finitomata` instances
   """
 
-  @doc false
-  defmacro __using__(opts \\ []) do
-    {flow, opts} = Keyword.pop!(opts, :flow)
-
-    quote bind_quoted: [opts: opts, flow: Macro.escape(flow)], generated: true, location: :keep do
-      {fsm, states} = Finitomata.Flow.load_map(flow)
-
-      @finitomata_options Keyword.merge(opts, fsm: fsm, auto_terminate: true)
-
-      use Finitomata, fsm: fsm, auto_terminate: true
-
-      def on_flow_initialization(state) do
-        {:ok, state}
-      end
-    end
-  end
+  alias Finitomata.Transition
 
   @start_state "finitomata_flowing"
   @start_event "finitomata_flow_initialize!"
   @end_state "finitomata_flowed"
 
-  @typedoc "The expected map to configure `Finitomata.Flow`"
-  @type flow_map :: %{
-          valid_states: [atom()],
+  @doc false
+  defmacro __using__(opts \\ []) do
+    {flow, opts} = Keyword.pop!(opts, :flow)
+    {flow_opts, opts} = Keyword.pop(opts, :flow_opts, [])
+
+    case Finitomata.Flow.load_map(flow, flow_opts) do
+      {:ok, {fsm, states}} ->
+        finitomata_options = Keyword.merge(opts, fsm: fsm, auto_terminate: true)
+
+        quote generated: true, location: :keep do
+          use Finitomata, unquote(finitomata_options)
+
+          def on_flow_initialization(state) do
+            {:ok, state}
+          end
+        end
+
+      {:error, {_meta, message, dump}} ->
+        raise CompileError, description: message <> dump
+    end
+  end
+
+  @typedoc "The expected flow step to configure `Finitomata.Flow`"
+  @type flow_step :: %{
+          initial: boolean() | binary(),
+          final: boolean() | binary(),
+          valid_states: [Transition.state()],
+          target_states: [Transition.state()],
           handler: (... -> term())
         }
+  @typedoc "The expected map to configure `Finitomata.Flow`"
+  @type flow_map :: %{
+          optional(binary()) => flow_step()
+        }
 
-  @spec load_map(String.t()) :: {:ok, flow_map()} | {:error, {keyword(), String.t(), String.t()}}
-  def load_map(string) when is_binary(string) do
+  @spec load_map(String.t(), keyword()) ::
+          {:ok,
+           {binary(),
+            %{
+              optional(%{state: binary(), event: binary()}) =>
+                {binary(), non_neg_integer() | binary()}
+            }}}
+          | {:error, {keyword(), String.t(), String.t()}}
+  def load_map(string, opts) when is_binary(string) do
     string = if File.exists?(string), do: File.read!(string), else: string
 
     case Code.string_to_quoted(string) do
-      {:ok, {:%{}, _, ast}} -> do_parse_ast(ast)
+      {:ok, {:%{}, _, ast}} -> {:ok, do_parse_ast(ast, opts)}
       {:ok, term} -> {:error, {[line: 1, column: 1], "not a map: ", inspect(term)}}
       {:error, error} -> {:error, error}
     end
@@ -49,7 +70,13 @@ defmodule Finitomata.Flow do
   #       handler: {:&, [line: 2],
   #        [{:/, [line: 2], [{:recipient_flow_name, [line: 2], nil}, 3]}]}
   #     ]}},
-  defp do_parse_ast(kvs, opts \\ []) when is_list(kvs) do
+  @spec do_parse_ast(Macro.t(), keyword()) ::
+          {binary(),
+           %{
+             optional(%{state: binary(), event: binary()}) =>
+               {binary(), non_neg_integer() | binary()}
+           }}
+  defp do_parse_ast(kvs, opts) when is_list(kvs) do
     {arity, []} = Keyword.pop(opts, :arity, 3)
 
     {_ast, {states_acc, events_acc}} =

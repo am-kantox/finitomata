@@ -323,6 +323,77 @@ defmodule Finitomata.Transition do
   end
 
   @doc ~S"""
+  Returns the shortest path from starting to ending state.
+
+      iex> {:ok, transitions} =
+      ...>   Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns1 --> s3 : ok\ns2 --> [*] : ko\ns3 --> s4 : step\ns4 --> [*] : ko")
+      ...> Finitomata.Transition.shortest_paths(transitions)
+      [%Finitomata.Transition.Path{from: :*, to: :*, path: [foo: :s1, ok: :s2, ko: :*]}]
+  """
+  @spec shortest_paths(:states | :transitions, [t()], state(), state()) ::
+          Enumerable.t(t()) | [Path.t()]
+  def shortest_paths(what \\ :states, transitions, from \\ :*, to \\ :*) do
+    what
+    |> straight_paths(transitions, from, to)
+    |> Enum.reduce({-1, []}, fn
+      %{path: p} = path, {-1, []} -> {length(p), [path]}
+      %{path: p} = _path, {len, paths} when length(p) > len -> {len, paths}
+      %{path: p} = path, {len, paths} when length(p) == len -> {len, [path | paths]}
+      %{path: p} = path, {len, _paths} when length(p) < len -> {length(p), [path]}
+    end)
+    |> elem(1)
+  end
+
+  @doc ~S"""
+  Returns the straight paths from starting to ending state.
+
+      iex> {:ok, transitions} =
+      ...>   Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns1 --> s3 : ok\ns2 --> s2 : loop\ns2 --> [*] : ko\ns3 --> s4 : step\ns4 --> [*] : ko")
+      ...> Finitomata.Transition.straight_paths(transitions)
+      [%Finitomata.Transition.Path{from: :*, to: :*, path: [foo: :s1, ok: :s2, ko: :*]},
+       %Finitomata.Transition.Path{from: :*, to: :*, path: [foo: :s1, ok: :s3, step: :s4, ko: :*]}]
+  """
+  @spec straight_paths(:states | :transitions, [t()], state(), state()) ::
+          Enumerable.t(t()) | Path.t()
+  def straight_paths(what \\ :states, transitions, from \\ :*, to \\ :*)
+
+  def straight_paths(:states, transitions, from, to) do
+    :transitions
+    |> straight_paths(transitions, from, to)
+    |> to_path()
+  end
+
+  def straight_paths(:transitions, transitions, :*, to) do
+    entry = entry(:transition, transitions)
+    transitions = Enum.reject(transitions, &(&1 == entry))
+
+    do_straight_paths(entry.to, to, transitions, [entry], [])
+  end
+
+  def straight_paths(:transitions, transitions, from, to) do
+    do_straight_paths(from, to, transitions, [], [])
+  end
+
+  defp do_straight_paths(to, to, _transitions, [_ | _] = path, paths),
+    do: [Enum.reverse(path) | paths]
+
+  defp do_straight_paths(to, to, _transitions, [], paths), do: paths
+  defp do_straight_paths(:*, _, _transitions, path, paths), do: [Enum.reverse(path) | paths]
+
+  defp do_straight_paths(from, to, transitions, path, paths) do
+    visited_states =
+      path
+      |> Enum.flat_map(&[&1.from, &1.to])
+      |> Kernel.--([:*])
+
+    transitions
+    |> Stream.filter(&match?(%Transition{from: ^from}, &1))
+    |> Stream.reject(fn %Transition{from: from, to: to} -> from == to end)
+    |> Stream.reject(fn %Transition{to: to} -> to in visited_states end)
+    |> Stream.flat_map(&do_straight_paths(&1.to, to, transitions, [&1 | path], paths))
+  end
+
+  @doc ~S"""
   Returns all the paths from starting to ending state.
 
       iex> {:ok, transitions} =

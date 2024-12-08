@@ -2,6 +2,9 @@ defmodule Finitomata.Test.Flow do
   @moduledoc false
 
   defmodule SubFlow1 do
+    @moduledoc """
+    SubFlow Example
+    """
     use Finitomata.Flow, flow: "priv/flows/sf1.flow"
   end
 
