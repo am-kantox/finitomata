@@ -923,7 +923,7 @@ defmodule Finitomata do
         ensure_entry: ensure_entry,
         states: Transition.states(fsm),
         events: Transition.events(fsm),
-        paths: Transition.paths(fsm),
+        paths: Transition.straight_paths(fsm),
         loops: Transition.loops(fsm),
         entry: Transition.entry(:transition, fsm).event,
         hard: hard,

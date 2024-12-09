@@ -8,6 +8,7 @@ defmodule Finitomata.Flow do
   @start_state "finitomata_flowing"
   @start_event "finitomata_flow_initialize!"
   @end_state "finitomata_flowed"
+  @back_event "finitomata_back"
 
   @doc false
   defmacro __using__(opts \\ []) do
@@ -79,9 +80,9 @@ defmodule Finitomata.Flow do
   defp do_parse_ast(kvs, opts) when is_list(kvs) do
     {arity, []} = Keyword.pop(opts, :arity, 3)
 
-    {_ast, {states_acc, events_acc}} =
-      Macro.postwalk(kvs, {%{}, %{}}, fn
-        {name, {:%{}, _meta, cfg}} = ast, {states_acc, events_acc} ->
+    {_ast, {states_acc, events_acc, initial_state}} =
+      Macro.postwalk(kvs, {%{}, %{}, []}, fn
+        {name, {:%{}, _meta, cfg}} = ast, {states_acc, events_acc, initial_state} ->
           with {:valid_states, {[_ | _] = states, cfg}} <-
                  {:valid_states, Keyword.pop(cfg, :valid_states, [])},
                {:initial, {initial?, cfg}} <- {:initial, Keyword.pop(cfg, :initial)},
@@ -119,7 +120,7 @@ defmodule Finitomata.Flow do
                   "Inconsistent description: `final` transition cannot have target states"
             end
 
-            states_acc =
+            {states_acc, initial_state} =
               if initial? do
                 if Map.has_key?(states_acc, @start_state) do
                   raise CompileError,
@@ -131,9 +132,9 @@ defmodule Finitomata.Flow do
 
                 case states do
                   [state] ->
-                    Map.put(states_acc, @start_state, [
-                      {@start_event, "on_flow_initialization", state}
-                    ])
+                    {Map.put(states_acc, @start_state, [
+                       {@start_event, "on_flow_initialization", state}
+                     ]), [state | initial_state]}
 
                   _ ->
                     raise CompileError,
@@ -143,12 +144,12 @@ defmodule Finitomata.Flow do
                       """
                 end
               else
-                states_acc
+                {states_acc, initial_state}
               end
 
             events_acc = Map.put(events_acc, name, target_states)
 
-            {ast, {states_acc, events_acc}}
+            {ast, {states_acc, events_acc, initial_state}}
           end
 
         ast, acc ->
@@ -163,6 +164,18 @@ defmodule Finitomata.Flow do
           "Flow description must have exactly one initial state, marked with `initial: true`"
     end
 
+    no_back_states =
+      case initial_state do
+        [_] ->
+          [@start_state, @end_state]
+
+        other ->
+          raise CompileError,
+            description:
+              "Flow description must have exactly one initial state, marked with `initial: true`, got: " <>
+                inspect(other)
+      end
+
     events_acc =
       Map.new(events_acc, fn
         {k, nil} -> {k, states}
@@ -173,20 +186,48 @@ defmodule Finitomata.Flow do
     {mermaid, handlers} =
       for {state, event_handlers} <- states_acc,
           {event, handler, arity} <- event_handlers do
+        target_states = Map.get(events_acc, event, states)
+
         target_state =
           case event do
             @start_event -> arity
-            _ -> events_acc |> Map.get(event, states) |> Enum.join(",")
+            _ -> target_states
           end
 
-        {"#{state} --> |#{event}| #{target_state}", {state, event, handler, arity}}
+        with_back_states =
+          if state in no_back_states do
+            [{state, event, target_state}]
+          else
+            [
+              {state, event, target_state}
+              | Enum.map(
+                  target_states -- [state | no_back_states],
+                  &{&1, @back_event, state}
+                )
+            ]
+          end
+
+        {with_back_states, {state, event, handler, arity}}
       end
       |> Enum.reduce({[], %{}}, fn
-        {transition, {state, event, handler, arity}}, {mermaid, handlers} ->
-          {[transition | mermaid],
+        {transitions, {state, event, handler, arity}}, {mermaid, handlers} ->
+          {transitions ++ mermaid,
            Map.put(handlers, %{state: state, event: event}, {handler, arity})}
       end)
 
-    {mermaid |> Enum.reverse() |> Enum.join("\n"), handlers}
+    mermaid =
+      mermaid
+      |> Enum.uniq()
+      |> Enum.group_by(
+        fn {from, event, _to} -> {from, event} end,
+        fn {_from, _event, to} -> to end
+      )
+      |> Enum.map(fn {{from, event}, tos} ->
+        ~s[#{from} --> |#{event}| #{tos |> List.flatten() |> Enum.join(",")}]
+      end)
+      |> Enum.sort()
+      |> Enum.join("\n")
+
+    {mermaid, handlers}
   end
 end
