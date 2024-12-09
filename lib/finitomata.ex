@@ -42,7 +42,9 @@ defmodule Finitomata do
     ],
     forks: [
       required: false,
-      type: {:list, {:tuple, [:atom, {:or, [:atom, :string, {:list, {:or, [:atom, :string]}}]}]}},
+      # [AM] Allow runtime fork amending (:string)
+      # type: {:list, {:tuple, [:atom, {:or, [:atom, :string, {:list, {:or, [:atom, :string]}}]}]}},
+      type: {:list, {:tuple, [:atom, {:or, [:atom, {:list, :atom}]}]}},
       default: [],
       doc:
         "The keyword list of states and modules where the FSM forks and awaits for another process to finish"
@@ -257,6 +259,9 @@ defmodule Finitomata do
   @typedoc "The implementation of the FSM (basically, the module having `use Finitomata` clause)"
   @type implementation :: module()
 
+  @typedoc "The implementation of the Flow (basically, the module having `use Finitomata.Flow` clause)"
+  @type flow_implementation :: module()
+
   @typedoc "The payload that is carried by `Finitomata` instance, returned by `Finitomata.state/2`"
   @type payload :: any()
 
@@ -266,6 +271,9 @@ defmodule Finitomata do
   @typedoc "The resolution of transition, when `{:error, _}` tuple, the transition is aborted"
   @type transition_resolution ::
           {:ok, Transition.state(), Finitomata.State.payload()} | {:error, any()}
+
+  @typedoc "The resolution of fork"
+  @type fork_resolution :: {:ok, flow_implementation()}
 
   defmodule State do
     @moduledoc """
@@ -288,6 +296,7 @@ defmodule Finitomata do
     @type t :: %{
             __struct__: State,
             name: Finitomata.fsm_name(),
+            finitomata_id: Finitomata.id(),
             parent: parent(),
             lifecycle: :loaded | :created | :unknown,
             persistency: nil | module(),
@@ -301,6 +310,7 @@ defmodule Finitomata do
             last_error: last_error()
           }
     defstruct name: nil,
+              finitomata_id: nil,
               parent: nil,
               lifecycle: :unknown,
               persistency: nil,
@@ -420,6 +430,14 @@ defmodule Finitomata do
             ) :: transition_resolution()
 
   @doc """
+  This callback will be called when the transition processor encounters fork state.
+  """
+  @callback on_fork(
+              current_state :: Transition.state(),
+              state_payload :: State.payload()
+            ) :: fork_resolution()
+
+  @doc """
   This callback will be called from the underlying `c:GenServer.init/1`.
 
   Unlike other callbacks, this one might raise preventing the whole FSM from start.
@@ -475,7 +493,8 @@ defmodule Finitomata do
                       on_enter: 2,
                       on_exit: 2,
                       on_terminate: 1,
-                      on_timer: 2
+                      on_timer: 2,
+                      on_fork: 2
 
   @behaviour Finitomata.Supervisor
 
@@ -525,7 +544,7 @@ defmodule Finitomata do
 
     DynamicSupervisor.start_child(
       Finitomata.Supervisor.manager_name(id),
-      {impl, name: fqn(id, name), parent: parent, payload: payload}
+      {impl, id: id, name: fqn(id, name), parent: parent, payload: payload}
     )
   end
 
@@ -933,6 +952,7 @@ defmodule Finitomata do
       @__config_keys__ Map.keys(@__config__)
       @__config_soft_events__ Enum.map(soft, & &1.event)
       @__config_hard_states__ Keyword.keys(hard)
+      @__config_fork_states__ Keyword.keys(forks)
 
       if @moduledoc != false do
         @moduledoc """
@@ -1010,25 +1030,34 @@ defmodule Finitomata do
       For distributed applications, use `Infinitomata.start_fsm/4` instead.
       """
       def start_link(payload: payload, name: name),
-        do: start_link(name: name, parent: self(), payload: payload)
+        do: start_link(id: nil, name: name, parent: self(), payload: payload)
 
       case @__config__.persistency do
         nil ->
-          def start_link(name: name, parent: parent, payload: payload) do
-            GenServer.start_link(__MODULE__, %{name: name, parent: parent, payload: payload},
+          def start_link(id: id, name: name, parent: parent, payload: payload) do
+            GenServer.start_link(
+              __MODULE__,
+              %{name: name, finitomata_id: id, parent: parent, payload: payload},
               name: name
             )
           end
 
           def start_link(payload),
-            do: GenServer.start_link(__MODULE__, %{name: nil, parent: self(), payload: payload})
+            do:
+              GenServer.start_link(__MODULE__, %{
+                name: nil,
+                finitomata_id: nil,
+                parent: self(),
+                payload: payload
+              })
 
         module when is_atom(module) ->
-          def start_link(name: name, parent: parent, payload: payload) do
+          def start_link(id: id, name: name, parent: parent, payload: payload) do
             GenServer.start_link(
               __MODULE__,
               %{
                 name: name,
+                finitomata_id: id,
                 parent: parent,
                 payload: payload,
                 with_persistency: @__config__.persistency
@@ -1059,7 +1088,13 @@ defmodule Finitomata do
       @doc false
       @impl GenServer
       def init(
-            %{name: name, parent: parent, payload: payload, with_persistency: persistency} = state
+            %{
+              finitomata_id: id,
+              name: name,
+              parent: parent,
+              payload: payload,
+              with_persistency: persistency
+            } = state
           )
           when not is_nil(name) and not is_nil(persistency) do
         {lifecycle, payload} =
@@ -1076,6 +1111,7 @@ defmodule Finitomata do
 
         init(%{
           name: name,
+          finitomata_id: id,
           parent: parent,
           payload: payload,
           lifecycle: lifecycle,
@@ -1083,7 +1119,7 @@ defmodule Finitomata do
         })
       end
 
-      def init(%{name: name, parent: parent, payload: payload} = init_arg) do
+      def init(%{finitomata_id: id, name: name, parent: parent, payload: payload} = init_arg) do
         lifecycle = Map.get(init_arg, :lifecycle, :unknown)
 
         {lifecycle, payload} =
@@ -1100,6 +1136,7 @@ defmodule Finitomata do
         state =
           %State{
             name: name,
+            finitomata_id: id,
             parent: parent,
             lifecycle: lifecycle,
             persistency: Map.get(init_arg, :persistency, nil),
@@ -1232,6 +1269,9 @@ defmodule Finitomata do
       def handle_continue({:transition, {event, payload}}, state),
         do: transit({event, payload}, state)
 
+      def handle_continue({:fork, fork_state}, state),
+        do: fork(fork_state, state)
+
       @doc false
       @impl GenServer
       def terminate(reason, state) do
@@ -1336,6 +1376,9 @@ defmodule Finitomata do
               {:noreply, state,
                {:continue, {:transition, event_payload(@__config__.hard[hard].event)}}}
 
+            {fork, _} when fork in @__config_fork_states__ ->
+              {:noreply, state, {:continue, {:fork, fork}}}
+
             {_, false} ->
               {:noreply, state}
 
@@ -1375,6 +1418,25 @@ defmodule Finitomata do
                 if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
             end
         end
+      end
+
+      @spec fork(Transition.state(), State.t()) ::
+              {:noreply, State.t()}
+              | {:noreply, State.t(), :hibernate}
+      defp fork(fork_state, state) do
+        @__config__.forks
+        |> Keyword.fetch!(fork_state)
+        |> List.wrap()
+        |> safe_on_fork(fork_state, state)
+        |> tap(fn
+          {:ok, fork_impl} ->
+            IO.inspect({fork_state, fork_impl, state}, label: "★★★[FORK]★★★")
+
+          {:error, error} ->
+            Logger.warning("[⚐ ↹] fork from #{fork_state} failed (#{inspect(error)})")
+        end)
+
+        if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
       end
 
       @impl GenServer
@@ -1468,6 +1530,34 @@ defmodule Finitomata do
         |> tap(&maybe_pubsub(&1, name))
       rescue
         err -> report_error(err, "on_transition/4")
+      end
+
+      @spec safe_on_fork([module()], Transition.state(), State.t()) ::
+              {:ok, module()} | {:error, any()}
+      @telemetria level: :warning, if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_fork)
+      defp safe_on_fork(forks, fork_state, state) do
+        cond do
+          function_exported?(__MODULE__, :on_fork, 2) ->
+            case apply(__MODULE__, :on_fork, [fork_state, state.payload]) do
+              {:ok, fork_impl} ->
+                if fork_impl in forks,
+                  do: {:ok, fork_impl},
+                  else: {:error, :unknown_fork_resolution}
+
+              other ->
+                {:error, :bad_fork_resolution}
+            end
+
+          match?([_fork], forks) ->
+            {:ok, hd(forks)}
+
+          true ->
+            {:error, :missing_fork_resolution}
+        end
+      rescue
+        err ->
+          report_error(err, "on_fork/2")
+          {:error, :on_fork_raised}
       end
 
       @spec safe_on_failure(Transition.event(), Finitomata.event_payload(), State.t()) :: :ok
