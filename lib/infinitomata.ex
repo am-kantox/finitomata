@@ -120,6 +120,9 @@ defmodule Infinitomata do
   end
 
   @doc since: "0.15.0"
+  @doc """
+  Starts the _FSM_ in the distributed environment. See `Finitomata.start_fsm/4` for docs and options
+  """
   @impl Finitomata.Supervisor
   @spec start_fsm(Finitomata.id(), Finitomata.fsm_name(), module(), any()) ::
           DynamicSupervisor.on_start_child()
