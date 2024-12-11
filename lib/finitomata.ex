@@ -44,7 +44,9 @@ defmodule Finitomata do
       required: false,
       # [AM] Allow runtime fork amending (:string)
       # type: {:list, {:tuple, [:atom, {:or, [:atom, :string, {:list, {:or, [:atom, :string]}}]}]}},
-      type: {:list, {:tuple, [:atom, {:or, [:atom, {:list, :atom}]}]}},
+      type:
+        {:list,
+         {:tuple, [:atom, {:or, [{:tuple, [:atom, :atom]}, {:list, {:tuple, [:atom, :atom]}}]}]}},
       default: [],
       doc:
         "The keyword list of states and modules where the FSM forks and awaits for another process to finish"
@@ -386,17 +388,7 @@ defmodule Finitomata do
             persisted? = State.persisted?(state)
             errored? = State.errored?(state)
             previous = State.previous_state(state)
-
-            self =
-              case state.name do
-                {:via, registry, {registry_name, id}} ->
-                  # [AM] maybe reverse lookup the self name here?
-                  # https://www.erlang.org/doc/apps/erts/erlang.html#t:registered_process_identifier/0
-                  with [{pid, _}] <- registry.lookup(registry_name, id), do: pid
-
-                _ ->
-                  nil
-              end
+            self = Finitomata.pid(state)
 
             [
               name: name,
@@ -553,6 +545,43 @@ defmodule Finitomata do
     do: id |> fqn(target) |> GenServer.whereis() |> send(:on_timer)
 
   @doc """
+  Returns a plain version of the FSM name as it has been passed to `start_fsm/4`
+  """
+  @spec fsm_name(State.t()) :: Finitomata.fsm_name()
+  def fsm_name(%State{name: {:via, _registry, {_registry_name, name}}}), do: name
+  def fsm_name(_), do: nil
+
+  @doc """
+  Returns an `id` of the finitomata instance the FSM runs on
+  """
+  @spec finitomata_id(State.t()) :: Finitomata.id()
+  def finitomata_id(%State{finitomata_id: id}), do: id
+
+  @doc """
+  Looks up and returns the PID of the FSM by the `State.t()`.
+  """
+  # [AM] maybe reverse lookup the self name here?
+  # https://www.erlang.org/doc/apps/erts/erlang.html#t:registered_process_identifier/0
+  @spec pid(State.t()) :: pid() | nil
+  def pid(%State{name: fsm_name}) do
+    with {:via, registry, {registry_name, name}} <- fsm_name,
+         [{pid, _}] <- registry.lookup(registry_name, name),
+         do: pid,
+         else: (_ -> nil)
+  end
+
+  @doc """
+  Looks up and returns the PID of the FSM by the `State.t()`.
+  """
+  @spec pid(Finitomata.id(), Finitomata.fsm_name()) :: pid() | nil
+  def pid(id \\ nil, name) do
+    with {:via, registry, {registry_name, name}} <- fqn(id, name),
+         [{pid, _}] <- registry.lookup(registry_name, name),
+         do: pid,
+         else: (_ -> nil)
+  end
+
+  @doc """
   Initiates the transition.
 
   The arguments are
@@ -625,26 +654,32 @@ defmodule Finitomata do
         ) ::
           nil | State.t() | State.payload() | any()
   defp do_state(fqn, :cached), do: :persistent_term.get({Finitomata, fqn}, nil)
-  defp do_state(fqn, :payload), do: do_state(fqn, :cached) || do_state(fqn, :full).payload
+
+  defp do_state(fqn, :payload),
+    do: do_state(fqn, :cached) || fqn |> do_state(:full) |> then(&(&1 && &1.payload))
+
   defp do_state(fqn, :state), do: do_state(fqn, :full).current
 
   defp do_state(fqn, full_or_fun) when full_or_fun == :full or is_function(full_or_fun, 1) do
     pid = GenServer.whereis(fqn)
 
-    case {pid, full_or_fun} do
-      {nil, _} ->
+    case {pid, is_pid(pid) and Process.alive?(pid), full_or_fun} do
+      {nil, _, _} ->
         nil
 
-      {pid, :full} when is_pid(pid) ->
+      {_, false, _} ->
+        nil
+
+      {pid, _, :full} when is_pid(pid) ->
         pid
         |> GenServer.call(:state, 1_000)
         |> tap(&if &1.cache_state, do: :persistent_term.put({Finitomata, fqn}, &1.payload))
 
-      {pid, fun} when is_pid(pid) and is_function(fun, 1) ->
+      {pid, _, fun} when is_pid(pid) and is_function(fun, 1) ->
         GenServer.call(pid, {:state, fun}, 1_000)
     end
   catch
-    :exit, :normal -> nil
+    :exit, {:normal, {GenServer, :call, _}} -> nil
   end
 
   @doc """
@@ -1429,8 +1464,26 @@ defmodule Finitomata do
         |> List.wrap()
         |> safe_on_fork(fork_state, state)
         |> tap(fn
-          {:ok, fork_impl} ->
-            IO.inspect({fork_state, fork_impl, state}, label: "★★★[FORK]★★★")
+          {:ok, fork_impl, event} ->
+            fsm_name = Finitomata.fsm_name(state)
+
+            Finitomata.start_fsm(
+              state.finitomata_id,
+              fork_impl,
+              {:fork, fork_state, fsm_name},
+              %{
+                owner: %{
+                  event: event,
+                  id: state.finitomata_id,
+                  name: fsm_name,
+                  pid: Finitomata.pid(state)
+                },
+                history: %{current: 0, steps: []},
+                steps: %{passed: 0, left: Transition.steps(fork_impl.__config__(:fsm))},
+                object: nil,
+                id: nil
+              }
+            )
 
           {:error, error} ->
             Logger.warning("[⚐ ↹] fork from #{fork_state} failed (#{inspect(error)})")
@@ -1533,23 +1586,25 @@ defmodule Finitomata do
       end
 
       @spec safe_on_fork([module()], Transition.state(), State.t()) ::
-              {:ok, module()} | {:error, any()}
+              {:ok, module(), Transition.event()} | {:error, any()}
       @telemetria level: :warning, if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_fork)
       defp safe_on_fork(forks, fork_state, state) do
         cond do
           function_exported?(__MODULE__, :on_fork, 2) ->
             case apply(__MODULE__, :on_fork, [fork_state, state.payload]) do
               {:ok, fork_impl} ->
-                if fork_impl in forks,
-                  do: {:ok, fork_impl},
-                  else: {:error, :unknown_fork_resolution}
+                case Enum.find(forks, &match?({^fork_impl, _event}, &1)) do
+                  nil -> {:error, :unknown_fork_resolution}
+                  {^fork_impl, event} -> {:ok, fork_impl, event}
+                end
 
               other ->
                 {:error, :bad_fork_resolution}
             end
 
           match?([_fork], forks) ->
-            {:ok, hd(forks)}
+            [{fork_impl, event}] = forks
+            {:ok, fork_impl, event}
 
           true ->
             {:error, :missing_fork_resolution}

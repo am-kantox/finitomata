@@ -31,6 +31,8 @@ defmodule Finitomata.Transition do
 
     alias Finitomata.Transition
 
+    import Kernel, except: [length: 1]
+
     @type t :: %{
             __struct__: Path,
             from: Transition.state(),
@@ -40,6 +42,14 @@ defmodule Finitomata.Transition do
 
     @enforce_keys [:from, :to, :path]
     defstruct [:from, :to, :path]
+
+    @doc """
+    Returns the length of the path given
+    """
+    @spec length(t() | [Transition.t()] | [{Transition.event(), Transition.state()}]) ::
+            non_neg_integer()
+    def length(%Path{path: path}), do: Path.length(path)
+    def length(path) when is_list(path), do: Kernel.length(path)
 
     defimpl Inspect do
       @moduledoc false
@@ -734,6 +744,40 @@ defmodule Finitomata.Transition do
 
   def events(transitions, true),
     do: transitions |> events(false) |> Enum.reject(&(&1 in ~w|__start__ __end__|a))
+
+  @doc ~S"""
+  Tries to guess the next state based on current state and event
+
+      iex> {:ok, transitions} = Finitomata.Mermaid.parse("s1 --> |ok| s2\ns1 --> |ko| s3")
+      ...> Finitomata.Transition.guess_next_state(transitions, :s1, :ok, %{})
+      {:ok, :s2, %{}}
+
+      iex> {:ok, transitions} = Finitomata.Mermaid.parse("s1 --> |ok| s2\ns1 --> |ok| s3")
+      ...> Finitomata.Transition.guess_next_state(transitions, :s1, :ok, %{})
+      {:error, {:ambiguous_transition, {:s1, :ok}, [:s2, :s3]}}
+  """
+  @spec guess_next_state([t()], state(), event(), Finitomata.State.payload()) ::
+          Finitomata.transition_resolution()
+  def guess_next_state(transitions, current, event, payload) do
+    case allowed(transitions, current, event) do
+      [new_current] -> {:ok, new_current, payload}
+      [] -> {:error, {:undefined_transition, {current, event}}}
+      other -> {:error, {:ambiguous_transition, {current, event}, other}}
+    end
+  end
+
+  @doc """
+  Returns the minimal number of steps required to get from `from` state to `to` state
+  """
+  @spec steps([t()], state(), state()) :: non_neg_integer()
+  def steps(transitions, from \\ :*, to \\ :*) do
+    :states
+    |> Finitomata.Transition.shortest_paths(transitions, from, to)
+    |> case do
+      [] -> 0
+      [path | _] -> Finitomata.Transition.Path.length(path)
+    end
+  end
 
   @spec to_path(Enumerable.t([t()])) :: [Path.t()]
   defp to_path(transitions) do

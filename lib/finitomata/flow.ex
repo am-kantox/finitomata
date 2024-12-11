@@ -7,6 +7,7 @@ defmodule Finitomata.Flow do
 
   @start_state "finitomata_flowing"
   @start_event "finitomata_flow_initialize!"
+  @start_handler :on_flow_initialization
   @end_state "finitomata_flowed"
   @back_event "finitomata_back"
 
@@ -17,15 +18,341 @@ defmodule Finitomata.Flow do
 
     case Finitomata.Flow.load_map(flow, flow_opts) do
       {:ok, {fsm, states}} ->
-        finitomata_options = Keyword.merge(opts, fsm: fsm, auto_terminate: true)
+        finitomata_options =
+          Keyword.merge(opts, fsm: fsm, auto_terminate: true, cache_state: false)
 
-        quote generated: true, location: :keep do
-          use Finitomata, unquote(finitomata_options)
+        utility_ast =
+          quote generated: true, location: :keep do
+            defp do_transition_step(current, event, target_state, result, state) do
+              history = %{
+                steps: [
+                  {current, event, result}
+                  | Enum.slice(
+                      state.history.steps,
+                      state.history.current,
+                      length(state.history.steps)
+                    )
+                ],
+                current: 0
+              }
 
-          def on_flow_initialization(state) do
-            {:ok, state}
+              steps_left = Finitomata.Transition.steps(__config__(:fsm), current, :*)
+              steps_passed = length(history.steps) - 1
+
+              {:ok, target_state,
+               %{
+                 state
+                 | history: history,
+                   steps: %{passed: steps_passed, left: steps_left}
+               }}
+            end
           end
-        end
+
+        internal_calls_ast =
+          states
+          |> Enum.map(&elem(&1, 1))
+          |> Enum.uniq_by(&elem(&1, 0))
+          |> Enum.flat_map(fn
+            {{_, _} = _external, _arity} ->
+              []
+
+            {_fun, arity} when is_binary(arity) ->
+              []
+
+            {fun, arity} ->
+              args = Macro.generate_arguments(arity, __CALLER__.module)
+
+              [
+                quote generated: true, location: :keep do
+                  def unquote(:"#{fun}")(unquote_splicing(args)), do: nil
+                  defoverridable [{unquote(:"#{fun}"), unquote(arity)}]
+                end
+              ]
+          end)
+
+        back_handler_ast =
+          quote generated: true, location: :keep do
+            @doc false
+            @impl Finitomata
+            def on_transition(current_state, unquote(:"#{@back_event}"), _payload, state) do
+              case Enum.at(state.history.steps, state.history.current) do
+                nil ->
+                  {:error, :no_previous_state}
+
+                {prev, _event, _result} ->
+                  current_step = state.history.current + 1
+                  steps_left = Finitomata.Transition.steps(__config__(:fsm), current_state, :*)
+                  steps_passed = length(state.history.steps) - current_step
+
+                  if Map.fetch!(state.steps, :passed) != steps_passed,
+                    do: Logger.warning("[FINITOMATA] Internal error: diverges steps count")
+
+                  {:ok, prev,
+                   %{
+                     state
+                     | steps: %{passed: steps_passed, left: steps_left},
+                       history: %{current: current_step, steps: state.history.steps}
+                   }}
+              end
+            end
+
+            def on_transition(unquote(:"#{@start_state}"), unquote(:"#{@start_event}"), _, state) do
+              case unquote(@start_handler)(state) do
+                :ok ->
+                  Finitomata.Transition.guess_next_state(
+                    __config__(:fsm),
+                    unquote(:"#{@start_state}"),
+                    unquote(:"#{@start_event}"),
+                    state
+                  )
+
+                {:ok, state} ->
+                  Finitomata.Transition.guess_next_state(
+                    __config__(:fsm),
+                    unquote(:"#{@start_state}"),
+                    unquote(:"#{@start_event}"),
+                    state
+                  )
+
+                {:error, error} ->
+                  {:error, error}
+              end
+            end
+          end
+
+        handlers_ast =
+          for {%{state: state, event: event}, {fun, arity}} <- states do
+            state = String.to_atom(state)
+            event = String.to_atom(event)
+
+            case {fun, arity} do
+              {_, arity} when is_binary(arity) ->
+                quote generated: true, location: :keep do
+                  def on_transition(
+                        unquote(state),
+                        unquote(event),
+                        {target_state, _payload},
+                        state
+                      ) do
+                    result = unquote(@start_handler)(state)
+
+                    do_transition_step(
+                      unquote(state),
+                      unquote(event),
+                      target_state,
+                      result,
+                      state
+                    )
+                  end
+                end
+
+              {{mod, fun}, 1} ->
+                quote generated: true, location: :keep do
+                  def on_transition(
+                        unquote(state),
+                        unquote(event),
+                        {target_state, payload},
+                        state
+                      ) do
+                    result =
+                      Function.capture(unquote(mod), unquote(fun), unquote(arity)).(
+                        {payload, state}
+                      )
+
+                    do_transition_step(
+                      unquote(state),
+                      unquote(event),
+                      target_state,
+                      result,
+                      state
+                    )
+                  end
+                end
+
+              {{mod, fun}, 2} ->
+                quote generated: true, location: :keep do
+                  def on_transition(
+                        unquote(state),
+                        unquote(event),
+                        {target_state, payload},
+                        state
+                      ) do
+                    result =
+                      Function.capture(unquote(mod), unquote(fun), unquote(arity)).(
+                        payload,
+                        state.object
+                      )
+
+                    do_transition_step(
+                      unquote(state),
+                      unquote(event),
+                      target_state,
+                      result,
+                      state
+                    )
+                  end
+                end
+
+              {{mod, fun}, 3} ->
+                quote generated: true, location: :keep do
+                  def on_transition(
+                        unquote(state),
+                        unquote(event),
+                        {target_state, payload},
+                        state
+                      ) do
+                    result =
+                      Function.capture(unquote(mod), unquote(fun), unquote(arity)).(
+                        payload,
+                        state.id,
+                        state.object
+                      )
+
+                    do_transition_step(
+                      unquote(state),
+                      unquote(event),
+                      target_state,
+                      result,
+                      state
+                    )
+                  end
+                end
+
+              {fun, 3} when is_atom(fun) ->
+                quote generated: true, location: :keep do
+                  def on_transition(
+                        unquote(state),
+                        unquote(event),
+                        {target_state, payload},
+                        state
+                      ) do
+                    result = unquote(:"#{fun}")(payload, state.id, state.object)
+
+                    do_transition_step(
+                      unquote(state),
+                      unquote(event),
+                      target_state,
+                      result,
+                      state
+                    )
+                  end
+                end
+            end
+          end ++
+            [
+              quote generated: true, location: :keep do
+                def on_transition(current, event, _payload, state) do
+                  with {:ok, target_state, ^state} <-
+                         Finitomata.Transition.guess_next_state(
+                           __config__(:fsm),
+                           current,
+                           event,
+                           state
+                         ),
+                       do:
+                         {:ok, target_state,
+                          %{
+                            state
+                            | history:
+                                Map.update!(state.history, :steps, &[{current, event, :ok} | &1])
+                          }}
+                end
+              end
+            ]
+
+        handlers_ast = [back_handler_ast | handlers_ast]
+
+        transition_ast =
+          quote generated: true, location: :keep do
+            @doc "Performs the transition to the predefined state, awaits for a result"
+            @spec event(
+                    {Finitomata.id(), Finitomata.fsm_name()} | Finitomata.fsm_name(),
+                    Finitomata.Transition.event(),
+                    term()
+                  ) ::
+                    {:ok, term()} | :fsm_gone | {:error, Finitomata.State.payload()}
+            def event(id_name, event, payload \\ nil)
+
+            def event({id, name}, event, payload) do
+              :ok = Finitomata.transition(id, name, {event, payload})
+
+              case Finitomata.state(id, name, :payload) do
+                nil ->
+                  :fsm_gone
+
+                %{history: %{steps: [{_state, ^event, result} | _]}} ->
+                  {:ok, result}
+
+                %{history: %{steps: steps, current: current}}
+                when event == unquote(:"#{@back_event}") ->
+                  case Enum.at(steps, current) do
+                    nil -> {:error, :unknown_step}
+                    {_state, _event, result} -> {:ok, result}
+                  end
+
+                payload ->
+                  {:error, payload}
+              end
+            end
+
+            def event(name, event, payload), do: event({nil, name}, event, payload)
+
+            @doc "Performs the transition to the desired state, awaits for a result"
+            @spec event(
+                    {Finitomata.id(), Finitomata.fsm_name()} | Finitomata.fsm_name(),
+                    Finitomata.Transition.event(),
+                    Finitomata.Transition.state(),
+                    term()
+                  ) ::
+                    {:ok, term()} | :fsm_gone | {:error, Finitomata.State.payload()}
+            def event({id, name}, event, target_state, payload) do
+              :ok = Finitomata.transition(id, name, {event, {target_state, payload}})
+
+              case Finitomata.state(id, name, :payload) do
+                nil ->
+                  :fsm_gone
+
+                %{history: %{steps: [{_state, ^event, result} | _]}} ->
+                  {:ok, result}
+
+                %{history: %{steps: steps, current: current}}
+                when event == unquote(:"#{@back_event}") ->
+                  case Enum.at(steps, current) do
+                    nil -> {:error, :unknown_step}
+                    {_state, _event, result} -> {:ok, result}
+                  end
+
+                payload ->
+                  {:error, payload}
+              end
+            end
+
+            def event(name, event, target_state, payload),
+              do: event({nil, name}, event, target_state, payload)
+          end
+
+        main_ast =
+          quote generated: true, location: :keep do
+            use Finitomata, unquote(finitomata_options)
+
+            @impl Finitomata
+            def on_terminate(%Finitomata.State{
+                  payload: %{owner: %{id: id, name: name, event: event}} = payload
+                }) do
+              Finitomata.transition(id, name, {event, payload})
+            end
+
+            @doc """
+            The initialization function that will be called before the `Flow` enters the initial state
+            """
+            def unquote(@start_handler)(state) do
+              {:ok, state}
+            end
+
+            defoverridable [{unquote(@start_handler), 1}]
+          end
+
+        [main_ast, utility_ast, transition_ast, internal_calls_ast | handlers_ast]
 
       {:error, {_meta, message, dump}} ->
         raise CompileError, description: message <> dump
@@ -99,10 +426,11 @@ defmodule Finitomata.Flow do
             fun =
               case fun do
                 {{:., _, [{:__aliases__, _, aliases}, remote]}, _, _} ->
-                  aliases |> Module.concat() |> inspect() |> Kernel.<>(".#{remote}")
+                  # aliases |> Module.concat() |> inspect() |> Kernel.<>(".#{remote}")
+                  {Module.concat(aliases), remote}
 
                 {local, _, _} when is_atom(local) ->
-                  to_string(local)
+                  local
               end
 
             states_acc =
@@ -131,15 +459,17 @@ defmodule Finitomata.Flow do
                 end
 
                 case states do
-                  [state] ->
-                    {Map.put(states_acc, @start_state, [
-                       {@start_event, "on_flow_initialization", state}
-                     ]), [state | initial_state]}
+                  [_ | _] = states ->
+                    {Map.put(
+                       states_acc,
+                       @start_state,
+                       Enum.map(states, &{@start_event, @start_handler, &1})
+                     ), states ++ initial_state}
 
                   _ ->
                     raise CompileError,
                       description: """
-                        Starting event cannot have more than one target state.
+                        Starting event must have at least one target state.
                         Found: #{inspect(states)}
                       """
                 end
