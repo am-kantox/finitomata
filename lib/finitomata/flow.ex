@@ -36,7 +36,7 @@ defmodule Finitomata.Flow do
                 current: 0
               }
 
-              steps_left = Finitomata.Transition.steps(__config__(:fsm), current, :*)
+              steps_left = Finitomata.Transition.steps_handled(__config__(:fsm), target_state, :*)
               steps_passed = length(history.steps) - 1
 
               {:ok, target_state,
@@ -81,11 +81,14 @@ defmodule Finitomata.Flow do
 
                 {prev, _event, _result} ->
                   current_step = state.history.current + 1
-                  steps_left = Finitomata.Transition.steps(__config__(:fsm), current_state, :*)
+
+                  steps_left =
+                    Finitomata.Transition.steps_handled(__config__(:fsm), current_state, :*)
+
                   steps_passed = length(state.history.steps) - current_step
 
                   if Map.fetch!(state.steps, :passed) != steps_passed,
-                    do: Logger.warning("[FINITOMATA] Internal error: diverges steps count")
+                    do: Logger.warning("[FINITOMATA] Internal error: diverged steps count")
 
                   {:ok, prev,
                    %{
@@ -249,13 +252,7 @@ defmodule Finitomata.Flow do
                            event,
                            state
                          ),
-                       do:
-                         {:ok, target_state,
-                          %{
-                            state
-                            | history:
-                                Map.update!(state.history, :steps, &[{current, event, :ok} | &1])
-                          }}
+                       do: do_transition_step(current, event, target_state, :ok, state)
                 end
               end
             ]

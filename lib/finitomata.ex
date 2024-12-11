@@ -568,6 +568,10 @@ defmodule Finitomata do
          [{pid, _}] <- registry.lookup(registry_name, name),
          do: pid,
          else: (_ -> nil)
+  rescue
+    e in [ArgumentError] ->
+      Logger.warning("Error looking up the PID: #{e.message}")
+      nil
   end
 
   @doc """
@@ -1479,7 +1483,7 @@ defmodule Finitomata do
                   pid: Finitomata.pid(state)
                 },
                 history: %{current: 0, steps: []},
-                steps: %{passed: 0, left: Transition.steps(fork_impl.__config__(:fsm))},
+                steps: %{passed: 0, left: Transition.steps_handled(fork_impl.__config__(:fsm))},
                 object: nil,
                 id: nil
               }
@@ -1593,9 +1597,9 @@ defmodule Finitomata do
           function_exported?(__MODULE__, :on_fork, 2) ->
             case apply(__MODULE__, :on_fork, [fork_state, state.payload]) do
               {:ok, fork_impl} ->
-                case Enum.find(forks, &match?({^fork_impl, _event}, &1)) do
+                case Enum.find(forks, &match?({_event, ^fork_impl}, &1)) do
                   nil -> {:error, :unknown_fork_resolution}
-                  {^fork_impl, event} -> {:ok, fork_impl, event}
+                  {event, ^fork_impl} -> {:ok, fork_impl, event}
                 end
 
               other ->
@@ -1603,7 +1607,7 @@ defmodule Finitomata do
             end
 
           match?([_fork], forks) ->
-            [{fork_impl, event}] = forks
+            [{event, fork_impl}] = forks
             {:ok, fork_impl, event}
 
           true ->

@@ -340,16 +340,60 @@ defmodule Finitomata.Transition do
       ...> Finitomata.Transition.shortest_paths(transitions)
       [%Finitomata.Transition.Path{from: :*, to: :*, path: [foo: :s1, ok: :s2, ko: :*]}]
   """
-  @spec shortest_paths(:states | :transitions, [t()], state(), state()) ::
+  @spec shortest_paths(:states | :transitions, [t()], state(), state(), boolean()) ::
           Enumerable.t(t()) | [Path.t()]
-  def shortest_paths(what \\ :states, transitions, from \\ :*, to \\ :*) do
+  def shortest_paths(what \\ :states, transitions, from \\ :*, to \\ :*, handled_only? \\ false) do
     what
     |> straight_paths(transitions, from, to)
+    |> then(fn paths ->
+      if handled_only? do
+        Enum.map(paths, fn
+          %Path{path: path} = full_path ->
+            path =
+              Enum.reject(path, fn
+                {_event, :*} -> true
+                {:__start__, _state} -> true
+                {event, _state} -> event |> to_string() |> String.ends_with?("!")
+                _ -> false
+              end)
+
+            %Path{full_path | path: path}
+
+          transitions when is_list(transitions) ->
+            Enum.reject(transitions, fn
+              %Transition{from: :*} -> true
+              %Transition{to: :*} -> true
+              %Transition{event: event} -> event |> to_string() |> String.ends_with?("!")
+            end)
+        end)
+      else
+        paths
+      end
+    end)
     |> Enum.reduce({-1, []}, fn
-      %{path: p} = path, {-1, []} -> {length(p), [path]}
-      %{path: p} = _path, {len, paths} when length(p) > len -> {len, paths}
-      %{path: p} = path, {len, paths} when length(p) == len -> {len, [path | paths]}
-      %{path: p} = path, {len, _paths} when length(p) < len -> {length(p), [path]}
+      %{path: p} = path, {-1, []} ->
+        {length(p), [path]}
+
+      %{path: p} = _path, {len, paths} when length(p) > len ->
+        {len, paths}
+
+      %{path: p} = path, {len, paths} when length(p) == len ->
+        {len, [path | paths]}
+
+      %{path: p} = path, {len, _paths} when length(p) < len ->
+        {length(p), [path]}
+
+      [%Transition{} | _] = transitions, {-1, []} ->
+        {length(transitions), [transitions]}
+
+      [%Transition{} | _] = transitions, {len, paths} when length(transitions) > len ->
+        {len, paths}
+
+      [%Transition{} | _] = transitions, {len, paths} when length(transitions) == len ->
+        {len, [transitions | paths]}
+
+      [%Transition{} | _] = transitions, {len, _paths} when length(transitions) < len ->
+        {length(transitions), [transitions]}
     end)
     |> elem(1)
   end
@@ -767,12 +811,27 @@ defmodule Finitomata.Transition do
   end
 
   @doc """
-  Returns the minimal number of steps required to get from `from` state to `to` state
+  Returns the minimal number of steps required to get from `from` state to `to` state,
+    including hard transitions
   """
   @spec steps([t()], state(), state()) :: non_neg_integer()
   def steps(transitions, from \\ :*, to \\ :*) do
     :states
     |> Finitomata.Transition.shortest_paths(transitions, from, to)
+    |> case do
+      [] -> 0
+      [path | _] -> Finitomata.Transition.Path.length(path)
+    end
+  end
+
+  @doc """
+  Returns the minimal number of steps required to get from `from` state to `to` state,
+    omitting hard transitions
+  """
+  @spec steps_handled([t()], state(), state()) :: non_neg_integer()
+  def steps_handled(transitions, from \\ :*, to \\ :*) do
+    :states
+    |> Finitomata.Transition.shortest_paths(transitions, from, to, true)
     |> case do
       [] -> 0
       [path | _] -> Finitomata.Transition.Path.length(path)

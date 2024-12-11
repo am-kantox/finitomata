@@ -18,7 +18,7 @@ defmodule Finitomata.Test.Flow do
   # - `SimpleFlow.create/2` injects a callback (message) to the parent process once finished
   # - if the textual representation is specified, it’ll be cached as a module,
   #     and reloaded in a runtime if changed
-  use Finitomata, fsm: @fsm, forks: [s2: [{SubFlow1, :to_s3}]]
+  use Finitomata, fsm: @fsm, forks: [s2: [to_s3: SubFlow1]]
 
   @impl Finitomata
   def on_transition(:s1, :to_s2, event_payload, state_payload) do
