@@ -81,10 +81,7 @@ defmodule Finitomata.Flow do
 
                 {prev, _event, _result} ->
                   current_step = state.history.current + 1
-
-                  steps_left =
-                    Finitomata.Transition.steps_handled(__config__(:fsm), current_state, :*)
-
+                  steps_left = Finitomata.Transition.steps_handled(__config__(:fsm), prev, :*)
                   steps_passed = length(state.history.steps) - current_step
 
                   if Map.fetch!(state.steps, :passed) != steps_passed,

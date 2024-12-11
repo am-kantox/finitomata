@@ -6,7 +6,7 @@ level =
     :finitomata -> :debug
     :ci -> :debug
     :prod -> :warning
-    :dev -> :error
+    :dev -> :debug
   end
 
 config :logger, level: level
