@@ -1,6 +1,73 @@
 defmodule Finitomata.Flow do
   @moduledoc """
-  The basic “brick” to build forks in top-level `Finitomata` instances
+  The basic “brick” to build forks in top-level `Finitomata` instances.
+
+  ## Definition Syntax
+
+  To construct the `Flow`, one should use the declarative map with events and states, as a string.
+
+  ```elixir
+  %{
+    "start" => %{valid_states: [:new], handler: &Foo.Bar.recipient_flow_name/3, initial: "✓"},
+    "submit_name" => %{valid_states: [:started, :phone_number_submitted], handler: &submit_name/3},
+    "submit_phone_number" => %{valid_states: [:started, :name_submitted], handler: &sumbit_phone/3},
+    "commit" => %{valid_states: [:submit_name, :submit_phone_number], handler: &commit/3, final: "✓"}
+  }
+  ```
+
+  and pass it to the `use Finitomata.Flow` as shown below. The declaration might be loaded from a file,
+    or passed directly as a string.
+
+  ```elixir
+  defmodule OnboardingFlow do
+    @moduledoc false
+    use Finitomata.Flow, flow: "priv/flows/onboarding.flow"
+  end
+  ```
+
+  ## Using with _FSM_
+
+  The FSM wanting to use the flow, must use `forks: [state: [event: FlowImplModule, …]]` option in a call to
+    `use Finitomata`
+
+  ```elixir
+    use Finitomata, fsm: @fsm, …, forks: [started: [to_onboarded: OnboardingFlow]]
+  ```
+
+  The compilation checks for both validity and consistency would be performed for `OnboardingFlow`.
+
+  Once the main FSM enters the state marked as `forks:` (`:started` in this particular example,)
+  the FSM with the name `{:fork, :started, MainFsmName}` will be launched and the main FSM would
+  wait for it to be finished. Upon termination, the flow FSM would send `:to_onboarded` event to
+  the main FSM, enforcing it to move to the next state.
+
+  One might specify several `Flow`s for the same event and state. In that case, `c:Finitomata.on_fork/2`
+  event must be implemented to decide what `Flow` to start in runtime.
+
+  ```elixir
+    use Finitomata, fsm: @fsm, …, forks: [s1: [evt: Flow1, evt: Flow2]]
+
+    […]
+
+    @impl Finitomata
+    def on_fork(:s1, %{} = state) do
+      if state.simple_flow?,
+        do: {:ok, Flow1},
+        else: {:ok, Flow2}
+    end
+  ```
+
+  ## `Flow` management
+
+  `Flow`’s API is dedicated to the `event/4` function. To start a transition
+    for the `FLow`, one should call somewhat along the following lines.
+
+  ```elixir
+  Finitomata.Flow.event({:fork, :s1, "MainFSM"}, :submit_name, :commit)
+  ```
+
+  The above will transition the `Flow` to the final state, terminating the `Flow`
+    and sending `:to_onboarded` event to the main _FSM_.
   """
 
   alias Finitomata.Transition
@@ -10,6 +77,72 @@ defmodule Finitomata.Flow do
   @start_handler :on_flow_initialization
   @end_state "finitomata_flowed"
   @back_event "finitomata_back"
+
+  @doc "Performs the transition to the predefined state, awaits for a result"
+  @spec event(
+          {Finitomata.id(), Finitomata.fsm_name()} | Finitomata.fsm_name(),
+          Finitomata.Transition.event(),
+          term()
+        ) ::
+          {:ok, term()} | :fsm_gone | {:error, Finitomata.State.payload()}
+  def event(id_name, event, payload \\ nil)
+
+  def event({id, name}, event, payload) do
+    :ok = Finitomata.transition(id, name, {event, payload})
+
+    case Finitomata.state(id, name, :payload) do
+      nil ->
+        :fsm_gone
+
+      %{history: %{steps: [{_state, ^event, result} | _]}} ->
+        {:ok, result}
+
+      %{history: %{steps: steps, current: current}}
+      when event == unquote(:"#{@back_event}") ->
+        case Enum.at(steps, current) do
+          nil -> {:error, :unknown_step}
+          {_state, _event, result} -> {:ok, result}
+        end
+
+      payload ->
+        {:error, payload}
+    end
+  end
+
+  def event(name, event, payload), do: event({nil, name}, event, payload)
+
+  @doc "Performs the transition to the desired state, awaits for a result"
+  @spec event(
+          {Finitomata.id(), Finitomata.fsm_name()} | Finitomata.fsm_name(),
+          Finitomata.Transition.event(),
+          Finitomata.Transition.state(),
+          term()
+        ) ::
+          {:ok, term()} | :fsm_gone | {:error, Finitomata.State.payload()}
+  def event({id, name}, event, target_state, payload) do
+    :ok = Finitomata.transition(id, name, {event, {target_state, payload}})
+
+    case Finitomata.state(id, name, :payload) do
+      nil ->
+        :fsm_gone
+
+      %{history: %{steps: [{_state, ^event, result} | _]}} ->
+        {:ok, result}
+
+      %{history: %{steps: steps, current: current}}
+      when event == unquote(:"#{@back_event}") ->
+        case Enum.at(steps, current) do
+          nil -> {:error, :unknown_step}
+          {_state, _event, result} -> {:ok, result}
+        end
+
+      payload ->
+        {:error, payload}
+    end
+  end
+
+  def event(name, event, target_state, payload),
+    do: event({nil, name}, event, target_state, payload)
 
   @doc false
   defmacro __using__(opts \\ []) do
@@ -21,6 +154,7 @@ defmodule Finitomata.Flow do
         finitomata_options =
           Keyword.merge(opts, fsm: fsm, auto_terminate: true, cache_state: false)
 
+        # AST for the internal `defp` functions, performing the actual work
         utility_ast =
           quote generated: true, location: :keep do
             defp do_transition_step(current, event, target_state, result, state) do
@@ -48,6 +182,8 @@ defmodule Finitomata.Flow do
             end
           end
 
+        # AST for the generated handlers, returning `nil` as the result
+        # [AM] [TODO] raise from here? implement a behaviour?
         internal_calls_ast =
           states
           |> Enum.map(&elem(&1, 1))
@@ -70,6 +206,7 @@ defmodule Finitomata.Flow do
               ]
           end)
 
+        # AST for the `on_transition/4` handler for `:finitomata_back` event
         back_handler_ast =
           quote generated: true, location: :keep do
             @doc false
@@ -120,6 +257,11 @@ defmodule Finitomata.Flow do
             end
           end
 
+        # AST for `on_transition/4` handlers
+        # According to the arity of the handler, it’ll receive:
+        # ① `{payload, state}` tuple
+        # ② `payload, object`
+        # ③ `payload, id, object`
         handlers_ast =
           for {%{state: state, event: event}, {fun, arity}} <- states do
             state = String.to_atom(state)
@@ -240,6 +382,9 @@ defmodule Finitomata.Flow do
             end
           end ++
             [
+              # AST to carry all the default implementation for transitions where
+              #   handlers are not needed/defined (e. g. for `:__start__` and other
+              #   internal transitions)
               quote generated: true, location: :keep do
                 def on_transition(current, event, _payload, state) do
                   with {:ok, target_state, ^state} <-
@@ -256,75 +401,7 @@ defmodule Finitomata.Flow do
 
         handlers_ast = [back_handler_ast | handlers_ast]
 
-        transition_ast =
-          quote generated: true, location: :keep do
-            @doc "Performs the transition to the predefined state, awaits for a result"
-            @spec event(
-                    {Finitomata.id(), Finitomata.fsm_name()} | Finitomata.fsm_name(),
-                    Finitomata.Transition.event(),
-                    term()
-                  ) ::
-                    {:ok, term()} | :fsm_gone | {:error, Finitomata.State.payload()}
-            def event(id_name, event, payload \\ nil)
-
-            def event({id, name}, event, payload) do
-              :ok = Finitomata.transition(id, name, {event, payload})
-
-              case Finitomata.state(id, name, :payload) do
-                nil ->
-                  :fsm_gone
-
-                %{history: %{steps: [{_state, ^event, result} | _]}} ->
-                  {:ok, result}
-
-                %{history: %{steps: steps, current: current}}
-                when event == unquote(:"#{@back_event}") ->
-                  case Enum.at(steps, current) do
-                    nil -> {:error, :unknown_step}
-                    {_state, _event, result} -> {:ok, result}
-                  end
-
-                payload ->
-                  {:error, payload}
-              end
-            end
-
-            def event(name, event, payload), do: event({nil, name}, event, payload)
-
-            @doc "Performs the transition to the desired state, awaits for a result"
-            @spec event(
-                    {Finitomata.id(), Finitomata.fsm_name()} | Finitomata.fsm_name(),
-                    Finitomata.Transition.event(),
-                    Finitomata.Transition.state(),
-                    term()
-                  ) ::
-                    {:ok, term()} | :fsm_gone | {:error, Finitomata.State.payload()}
-            def event({id, name}, event, target_state, payload) do
-              :ok = Finitomata.transition(id, name, {event, {target_state, payload}})
-
-              case Finitomata.state(id, name, :payload) do
-                nil ->
-                  :fsm_gone
-
-                %{history: %{steps: [{_state, ^event, result} | _]}} ->
-                  {:ok, result}
-
-                %{history: %{steps: steps, current: current}}
-                when event == unquote(:"#{@back_event}") ->
-                  case Enum.at(steps, current) do
-                    nil -> {:error, :unknown_step}
-                    {_state, _event, result} -> {:ok, result}
-                  end
-
-                payload ->
-                  {:error, payload}
-              end
-            end
-
-            def event(name, event, target_state, payload),
-              do: event({nil, name}, event, target_state, payload)
-          end
-
+        # AST for the main stuff, like declaring the `Finitomata` using and stuff
         main_ast =
           quote generated: true, location: :keep do
             use Finitomata, unquote(finitomata_options)
@@ -346,7 +423,7 @@ defmodule Finitomata.Flow do
             defoverridable [{unquote(@start_handler), 1}]
           end
 
-        [main_ast, utility_ast, transition_ast, internal_calls_ast | handlers_ast]
+        [main_ast, utility_ast, internal_calls_ast | handlers_ast]
 
       {:error, {_meta, message, dump}} ->
         raise CompileError, description: message <> dump
@@ -374,6 +451,7 @@ defmodule Finitomata.Flow do
                 {binary(), non_neg_integer() | binary()}
             }}}
           | {:error, {keyword(), String.t(), String.t()}}
+  @doc false
   def load_map(string, opts) when is_binary(string) do
     string = if File.exists?(string), do: File.read!(string), else: string
 

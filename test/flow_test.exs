@@ -33,7 +33,9 @@ defmodule Finitomata.Flow.Test do
            } = Finitomata.state(Fini, {:fork, :s2, "Flow"})
 
     assert {:ok, nil} =
-             SubFlow.event({Fini, {:fork, :s2, "Flow"}}, :submit_otp, :confirm_photo, %{foo: 42})
+             Finitomata.Flow.event({Fini, {:fork, :s2, "Flow"}}, :submit_otp, :confirm_photo, %{
+               foo: 42
+             })
 
     assert %{
              current: :confirm_photo,
@@ -56,7 +58,7 @@ defmodule Finitomata.Flow.Test do
                steps: %{left: 1, passed: 1},
                object: nil
              }
-           } = SubFlow.event({Fini, {:fork, :s2, "Flow"}}, :confirm_photo)
+           } = Finitomata.Flow.event({Fini, {:fork, :s2, "Flow"}}, :confirm_photo)
 
     assert %{
              current: :confirm_photo,
@@ -76,7 +78,7 @@ defmodule Finitomata.Flow.Test do
              }
            } = Finitomata.state(Fini, {:fork, :s2, "Flow"})
 
-    assert :fsm_gone = SubFlow.event({Fini, {:fork, :s2, "Flow"}}, :finalize)
+    assert :fsm_gone = Finitomata.Flow.event({Fini, {:fork, :s2, "Flow"}}, :finalize)
     refute Finitomata.state(Fini, {:fork, :s2, "Flow"})
   end
 end

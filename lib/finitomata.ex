@@ -265,10 +265,10 @@ defmodule Finitomata do
   @type flow_implementation :: module()
 
   @typedoc "The payload that is carried by `Finitomata` instance, returned by `Finitomata.state/2`"
-  @type payload :: any()
+  @type payload :: term()
 
   @typedoc "The payload that can be passed to each call to `transition/3`"
-  @type event_payload :: any()
+  @type event_payload :: term()
 
   @typedoc "The resolution of transition, when `{:error, _}` tuple, the transition is aborted"
   @type transition_resolution ::
@@ -472,6 +472,11 @@ defmodule Finitomata do
   @doc """
   This callback will be called recurrently if `timer: pos_integer()`
     option has been given to `use Finitomata`.
+
+  By design, `Finitomata` library is the in-memory solution (unless `persistency: true`
+  is set in options _and_ the persistency layer is implemented by the consumer’s code.)
+
+  That being said, the consumer should not rely on `on_timer/2` consistency between restarts.
   """
   @callback on_timer(current_state :: Transition.state(), state :: State.t()) ::
               :ok
@@ -1467,7 +1472,7 @@ defmodule Finitomata do
         |> Keyword.fetch!(fork_state)
         |> List.wrap()
         |> safe_on_fork(fork_state, state)
-        |> tap(fn
+        |> case do
           {:ok, fork_impl, event} ->
             fsm_name = Finitomata.fsm_name(state)
 
@@ -1491,7 +1496,7 @@ defmodule Finitomata do
 
           {:error, error} ->
             Logger.warning("[⚐ ↹] fork from #{fork_state} failed (#{inspect(error)})")
-        end)
+        end
 
         if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
       end
