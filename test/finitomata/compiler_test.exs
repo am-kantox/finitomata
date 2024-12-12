@@ -3,8 +3,6 @@ defmodule Finitomata.Compiler.Test do
 
   import ExUnit.CaptureIO
 
-  alias Mix.Tasks.Compile, as: Cmp
-
   setup tags do
     Mix.ProjectStack.post_config(Map.get(tags, :project, []))
     # Mix.Project.push(MixTest.Case.Finitomata)
@@ -12,7 +10,22 @@ defmodule Finitomata.Compiler.Test do
   end
 
   @tag project: [compilers: [:app, :finitomata, :elixir]]
-  test "compiles does not require all compilers available on manifest" do
+  if Version.compare(System.version(), "1.18.0-rc.0") == :lt do
+    alias Mix.Tasks.Compile, as: Cmp
+
+    test "compiles does not require all compilers available on manifest" do
+      assert Cmp.manifests() |> Enum.map(&Path.basename/1) ==
+               [
+                 "compile.yecc",
+                 "compile.leex",
+                 "compile.erlang",
+                 "compile.elixir",
+                 "compile.finitomata"
+               ]
+    end
+  else
+    alias Mix.Task.Compiler, as: Cmp
+
     assert Cmp.manifests() |> Enum.map(&Path.basename/1) ==
              [
                "compile.yecc",

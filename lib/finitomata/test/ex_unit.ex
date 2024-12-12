@@ -591,7 +591,7 @@ defmodule Finitomata.ExUnit do
               do_handle_matches(matches)
 
             {:assert_payload, _meta, [assertion]} ->
-              [quote(do: if(not is_nil(payload), do: assert(unquote(assertion) = payload)))]
+              [do_handle_matches_with_guards(assertion)]
 
             {:refute_receive, _, _} = ast ->
               [ast]
@@ -902,25 +902,24 @@ defmodule Finitomata.ExUnit do
   defp do_handle_matches(ast, loop? \\ false)
   defp do_handle_matches([], _), do: []
 
-  defp do_handle_matches({:when, _, [{:~>, _meta, [_var, _match_ast]}, _guard]} = guard, _),
-    do: do_handle_matches([guard])
+  defp do_handle_matches({:when, _, [{:~>, _meta, [_var, _match_ast]}, _guard]} = guard, loop?),
+    do: do_handle_matches([guard], loop?)
 
-  defp do_handle_matches([{:when, guard_meta, [{:~>, meta, [var, match_ast]}, guard]} | more], _) do
-    do_handle_matches([{:~>, meta, [var, {:when, guard_meta, [match_ast, guard]}]} | more])
+  defp do_handle_matches(
+         [{:when, guard_meta, [{:~>, meta, [var, match_ast]}, guard]} | more],
+         loop?
+       ) do
+    do_handle_matches([{:~>, meta, [var, {:when, guard_meta, [match_ast, guard]}]} | more], loop?)
   end
 
-  defp do_handle_matches([{:->, meta, [[{_, _, _} = var], match_ast]} | more], _),
-    do: do_handle_matches([{:~>, meta, [var, match_ast]} | more])
+  defp do_handle_matches([{:->, meta, [[{_, _, _} = var], match_ast]} | more], loop?),
+    do: do_handle_matches([{:~>, meta, [var, match_ast]} | more], loop?)
 
-  defp do_handle_matches([{:~>, _meta, [{_, _, _} = var, match_ast]} | more], _) do
+  defp do_handle_matches([{:~>, _meta, [{_, _, _} = var, match_ast]} | more], loop?) do
     path = var |> estructura_path() |> Enum.reverse()
+    match = do_handle_matches_with_guards(match_ast, path)
 
-    match =
-      quote do
-        assert unquote(match_ast) = get_in(payload, unquote(path))
-      end
-
-    [match | do_handle_matches(more)]
+    [match | do_handle_matches(more, loop?)]
   end
 
   defp do_handle_matches(any, false),
@@ -928,4 +927,46 @@ defmodule Finitomata.ExUnit do
 
   defp do_handle_matches(any, true),
     do: raise(Finitomata.TestSyntaxError, code: Macro.to_string(any))
+
+  if Version.compare(System.version(), "1.18.0-rc.0") == :lt do
+    defp do_handle_matches_with_guards(match_ast) do
+      quote do
+        if not is_nil(payload), do: assert(unquote(match_ast) = payload)
+      end
+    end
+
+    defp do_handle_matches_with_guards(match_ast, path) do
+      quote do
+        assert unquote(match_ast) = get_in(payload, unquote(path))
+      end
+    end
+  else
+    defp do_handle_matches_with_guards(match_ast) do
+      case match_ast do
+        {:when, _, _} ->
+          quote do
+            if not is_nil(payload), do: assert(match?(unquote(match_ast), payload))
+          end
+
+        _no_guards ->
+          quote do
+            if not is_nil(payload), do: assert(unquote(match_ast) = payload)
+          end
+      end
+    end
+
+    defp do_handle_matches_with_guards(match_ast, path) do
+      case match_ast do
+        {:when, _, _} ->
+          quote do
+            assert match?(unquote(match_ast), get_in(payload, unquote(path)))
+          end
+
+        _no_guards ->
+          quote do
+            assert unquote(match_ast) = get_in(payload, unquote(path))
+          end
+      end
+    end
+  end
 end
