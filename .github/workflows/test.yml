@@ -39,7 +39,7 @@ jobs:
           epmd -daemon
       - name: "Compile and Test Library"
         run: |
-          mix do deps.get, deps.compile, compile
+          mix do deps.clean, deps.get, deps.compile, compile
           mix test --exclude distributed --exclude finitomata
           mix test --exclude test --include distributed
       - name: "Test Library with itself in :finitomata env"
