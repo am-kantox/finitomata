@@ -46,7 +46,7 @@ defmodule Finitomata.MixProject do
       {:nimble_parsec, "~> 1.0"},
       {:nimble_options, "~> 0.3 or ~> 1.0"},
       {:gen_stage, "~> 1.0"},
-      {:estructura, "~> 1.4"},
+      {:estructura, "~> 1.6"},
       # optional
       {:telemetry, "~> 1.0", optional: true},
       {:telemetry_poller, "~> 1.0", optional: true},
