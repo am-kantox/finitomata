@@ -741,6 +741,7 @@ defmodule Finitomata do
           matched :: Finitomata.Transition.state(),
           state :: Finitomata.Transition.state() | {Finitomata.Transition.state(), pos_integer()}
         ) :: boolean()
+  def match_state?(matched, state)
   def match_state?(state, state), do: true
   def match_state?(state, {state, _reenters}), do: true
   def match_state?({state, _reenters}, state), do: true
