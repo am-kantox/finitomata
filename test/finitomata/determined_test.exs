@@ -17,7 +17,7 @@ defmodule Finitomata.Test.Determined.Test do
       [
         fsm: [
           implementation: Finitomata.Test.Determined,
-          payload: %{parent: parent},
+          payload: %{},
           options: [transition_count: 7]
         ],
         context: [parent: parent]

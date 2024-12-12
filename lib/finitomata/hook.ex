@@ -128,11 +128,7 @@ defmodule Finitomata.Hook do
               )
           )
 
-          case Finitomata.Transition.allowed(@__config__[:fsm], current, event) do
-            [new_current] -> {:ok, new_current, state_payload}
-            [] -> {:error, {:undefined_transition, {current, event}}}
-            other -> {:error, {:ambiguous_transition, {current, event}, other}}
-          end
+          Finitomata.Transition.guess_next_state(@__config__[:fsm], current, event, state_payload)
         end
       end
 

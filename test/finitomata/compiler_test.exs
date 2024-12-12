@@ -44,7 +44,7 @@ defmodule Finitomata.Compiler.Test do
                  :ok
                else
                  {[{TestInplace, _}], []} =
-                   Code.with_diagnostics(fn -> Code.compile_string(module) end)
+                   apply(Code, :with_diagnostics, [fn -> Code.compile_string(module) end])
                end
              end)
   end

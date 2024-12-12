@@ -62,10 +62,12 @@ defmodule Finitomata.Supervisor do
   @impl Supervisor
   @doc false
   def init(id) do
-    children = [
-      {Registry, keys: :unique, name: registry_name(id), partitions: System.schedulers_online()},
-      {Finitomata.Manager, name: manager_name(id)}
-    ]
+    children =
+      [
+        {Registry,
+         keys: :unique, name: registry_name(id), partitions: System.schedulers_online()},
+        {Finitomata.Manager, name: manager_name(id)}
+      ]
 
     Supervisor.init(children, strategy: :rest_for_one)
   end

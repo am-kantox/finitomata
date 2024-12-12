@@ -31,6 +31,8 @@ defmodule Finitomata.Transition do
 
     alias Finitomata.Transition
 
+    import Kernel, except: [length: 1]
+
     @type t :: %{
             __struct__: Path,
             from: Transition.state(),
@@ -40,6 +42,14 @@ defmodule Finitomata.Transition do
 
     @enforce_keys [:from, :to, :path]
     defstruct [:from, :to, :path]
+
+    @doc """
+    Returns the length of the path given
+    """
+    @spec length(t() | [Transition.t()] | [{Transition.event(), Transition.state()}]) ::
+            non_neg_integer()
+    def length(%Path{path: path}), do: Path.length(path)
+    def length(path) when is_list(path), do: Kernel.length(path)
 
     defimpl Inspect do
       @moduledoc false
@@ -293,26 +303,148 @@ defmodule Finitomata.Transition do
   @spec loops(:states | :transitions, [t()]) :: Enumerable.t(t()) | [Path.t()]
   def loops(what \\ :states, transitions)
 
-  def loops(:transitions, transitions) do
-    transitions
-    |> states(true)
-    |> Stream.flat_map(&do_loop(&1, transitions, [], []))
-  end
-
   def loops(:states, transitions) do
     :transitions
     |> loops(transitions)
     |> to_path()
   end
 
-  defp do_loop(state, _transitions, [%Transition{from: state} | _] = path, paths),
-    do: [path | paths]
+  def loops(:transitions, transitions) do
+    transitions
+    |> states(true)
+    |> Stream.flat_map(&do_loop(&1, transitions, [], []))
+  end
 
   defp do_loop(state, transitions, path, paths) do
+    count = 2 + div(24, count(:transitions, transitions))
+    do_loop(state, transitions, path, paths, count)
+  end
+
+  defp do_loop(_state, _transitions, path, paths, count) when length(path) > count, do: paths
+
+  defp do_loop(state, _transitions, [%Transition{from: state} | _] = path, paths, _count),
+    do: [path | paths]
+
+  defp do_loop(state, transitions, path, paths, count) do
     transitions
     |> Stream.reject(&(&1 in path))
     |> Stream.filter(&match?(%Transition{from: ^state, to: to} when to != :*, &1))
-    |> Stream.flat_map(&do_loop(&1.to, transitions, path ++ [&1], paths))
+    |> Stream.flat_map(&do_loop(&1.to, transitions, path ++ [&1], paths, count))
+  end
+
+  @doc ~S"""
+  Returns the shortest path from starting to ending state.
+
+      iex> {:ok, transitions} =
+      ...>   Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns1 --> s3 : ok\ns2 --> [*] : ko\ns3 --> s4 : step\ns4 --> [*] : ko")
+      ...> Finitomata.Transition.shortest_paths(transitions)
+      [%Finitomata.Transition.Path{from: :*, to: :*, path: [foo: :s1, ok: :s2, ko: :*]}]
+  """
+  @spec shortest_paths(:states | :transitions, [t()], state(), state(), boolean()) ::
+          Enumerable.t(t()) | [Path.t()]
+  def shortest_paths(what \\ :states, transitions, from \\ :*, to \\ :*, handled_only? \\ false) do
+    what
+    |> straight_paths(transitions, from, to)
+    |> then(fn paths ->
+      if handled_only? do
+        Enum.map(paths, fn
+          %Path{path: path} = full_path ->
+            path =
+              Enum.reject(path, fn
+                {_event, :*} -> true
+                {:__start__, _state} -> true
+                {event, _state} -> event |> to_string() |> String.ends_with?("!")
+                _ -> false
+              end)
+
+            %Path{full_path | path: path}
+
+          transitions when is_list(transitions) ->
+            Enum.reject(transitions, fn
+              %Transition{from: :*} -> true
+              %Transition{to: :*} -> true
+              %Transition{event: event} -> event |> to_string() |> String.ends_with?("!")
+            end)
+        end)
+      else
+        paths
+      end
+    end)
+    |> Enum.reduce({-1, []}, fn
+      %{path: p} = path, {-1, []} ->
+        {length(p), [path]}
+
+      %{path: p} = _path, {len, paths} when length(p) > len ->
+        {len, paths}
+
+      %{path: p} = path, {len, paths} when length(p) == len ->
+        {len, [path | paths]}
+
+      %{path: p} = path, {len, _paths} when length(p) < len ->
+        {length(p), [path]}
+
+      [%Transition{} | _] = transitions, {-1, []} ->
+        {length(transitions), [transitions]}
+
+      [%Transition{} | _] = transitions, {len, paths} when length(transitions) > len ->
+        {len, paths}
+
+      [%Transition{} | _] = transitions, {len, paths} when length(transitions) == len ->
+        {len, [transitions | paths]}
+
+      [%Transition{} | _] = transitions, {len, _paths} when length(transitions) < len ->
+        {length(transitions), [transitions]}
+    end)
+    |> elem(1)
+  end
+
+  @doc ~S"""
+  Returns the straight paths from starting to ending state.
+
+      iex> {:ok, transitions} =
+      ...>   Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns1 --> s3 : ok\ns2 --> s2 : loop\ns2 --> [*] : ko\ns3 --> s4 : step\ns4 --> [*] : ko")
+      ...> Finitomata.Transition.straight_paths(transitions)
+      [%Finitomata.Transition.Path{from: :*, to: :*, path: [foo: :s1, ok: :s2, ko: :*]},
+       %Finitomata.Transition.Path{from: :*, to: :*, path: [foo: :s1, ok: :s3, step: :s4, ko: :*]}]
+  """
+  @spec straight_paths(:states | :transitions, [t()], state(), state()) ::
+          Enumerable.t(t()) | Path.t()
+  def straight_paths(what \\ :states, transitions, from \\ :*, to \\ :*)
+
+  def straight_paths(:states, transitions, from, to) do
+    :transitions
+    |> straight_paths(transitions, from, to)
+    |> to_path()
+  end
+
+  def straight_paths(:transitions, transitions, :*, to) do
+    entry = entry(:transition, transitions)
+    transitions = Enum.reject(transitions, &(&1 == entry))
+
+    do_straight_paths(entry.to, to, transitions, [entry], [])
+  end
+
+  def straight_paths(:transitions, transitions, from, to) do
+    do_straight_paths(from, to, transitions, [], [])
+  end
+
+  defp do_straight_paths(to, to, _transitions, [_ | _] = path, paths),
+    do: [Enum.reverse(path) | paths]
+
+  defp do_straight_paths(to, to, _transitions, [], paths), do: paths
+  defp do_straight_paths(:*, _, _transitions, path, paths), do: [Enum.reverse(path) | paths]
+
+  defp do_straight_paths(from, to, transitions, path, paths) do
+    visited_states =
+      path
+      |> Enum.flat_map(&[&1.from, &1.to])
+      |> Kernel.--([:*])
+
+    transitions
+    |> Stream.filter(&match?(%Transition{from: ^from}, &1))
+    |> Stream.reject(fn %Transition{from: from, to: to} -> from == to end)
+    |> Stream.reject(fn %Transition{to: to} -> to in visited_states end)
+    |> Stream.flat_map(&do_straight_paths(&1.to, to, transitions, [&1 | path], paths))
   end
 
   @doc ~S"""
@@ -335,6 +467,8 @@ defmodule Finitomata.Transition do
 
   def paths(:transitions, transitions, :*, to) do
     entry = entry(:transition, transitions)
+    transitions = Enum.reject(transitions, &(&1 == entry))
+
     do_path(entry.to, to, transitions, [entry], [])
   end
 
@@ -342,16 +476,42 @@ defmodule Finitomata.Transition do
     do_path(from, to, transitions, [], [])
   end
 
-  defp do_path(to, to, _transitions, [_ | _] = path, paths), do: [Enum.reverse(path) | paths]
-  defp do_path(to, to, _transitions, [], paths), do: paths
-  defp do_path(:*, _, _transitions, _, paths), do: paths
-
   defp do_path(from, to, transitions, path, paths) do
+    state_count = count(:states, transitions)
+
+    count =
+      case count(:transitions, transitions) do
+        few when few < 12 -> state_count * 3
+        avg when avg < 24 -> state_count * 2
+        _ -> state_count
+      end
+
+    do_path(from, to, transitions, path, paths, count)
+  end
+
+  defp do_path(_from, _to, _transitions, path, paths, count) when length(path) > count, do: paths
+
+  defp do_path(to, to, _transitions, [_ | _] = path, paths, _count),
+    do: [Enum.reverse(path) | paths]
+
+  defp do_path(to, to, _transitions, [], paths, _count), do: paths
+  defp do_path(:*, _, _transitions, _, paths, _count), do: paths
+
+  defp do_path(from, to, transitions, path, paths, count) do
     transitions
     |> Stream.reject(&(&1 in path))
     |> Stream.filter(&match?(%Transition{from: ^from}, &1))
-    |> Stream.flat_map(&do_path(&1.to, to, transitions, [&1 | path], paths))
+    |> Stream.flat_map(&do_path(&1.to, to, transitions, [&1 | path], paths, count))
   end
+
+  @spec count(:states | :transitions, [t()]) :: non_neg_integer()
+  def count(what \\ :states, transitions)
+
+  def count(:states, transitions),
+    do: transitions |> Enum.map(& &1.from) |> Enum.uniq() |> length()
+
+  def count(:transitions, transitions),
+    do: length(transitions)
 
   @doc ~S"""
   Returns `true` if the transition `from` → `to` is allowed, `false` otherwise.
@@ -628,6 +788,55 @@ defmodule Finitomata.Transition do
 
   def events(transitions, true),
     do: transitions |> events(false) |> Enum.reject(&(&1 in ~w|__start__ __end__|a))
+
+  @doc ~S"""
+  Tries to guess the next state based on current state and event
+
+      iex> {:ok, transitions} = Finitomata.Mermaid.parse("s1 --> |ok| s2\ns1 --> |ko| s3")
+      ...> Finitomata.Transition.guess_next_state(transitions, :s1, :ok, %{})
+      {:ok, :s2, %{}}
+
+      iex> {:ok, transitions} = Finitomata.Mermaid.parse("s1 --> |ok| s2\ns1 --> |ok| s3")
+      ...> Finitomata.Transition.guess_next_state(transitions, :s1, :ok, %{})
+      {:error, {:ambiguous_transition, {:s1, :ok}, [:s2, :s3]}}
+  """
+  @spec guess_next_state([t()], state(), event(), Finitomata.State.payload()) ::
+          Finitomata.transition_resolution()
+  def guess_next_state(transitions, current, event, payload) do
+    case allowed(transitions, current, event) do
+      [new_current] -> {:ok, new_current, payload}
+      [] -> {:error, {:undefined_transition, {current, event}}}
+      other -> {:error, {:ambiguous_transition, {current, event}, other}}
+    end
+  end
+
+  @doc """
+  Returns the minimal number of steps required to get from `from` state to `to` state,
+    including hard transitions
+  """
+  @spec steps([t()], state(), state()) :: non_neg_integer()
+  def steps(transitions, from \\ :*, to \\ :*) do
+    :states
+    |> Finitomata.Transition.shortest_paths(transitions, from, to)
+    |> case do
+      [] -> 0
+      [path | _] -> Finitomata.Transition.Path.length(path)
+    end
+  end
+
+  @doc """
+  Returns the minimal number of steps required to get from `from` state to `to` state,
+    omitting hard transitions
+  """
+  @spec steps_handled([t()], state(), state()) :: non_neg_integer()
+  def steps_handled(transitions, from \\ :*, to \\ :*) do
+    :states
+    |> Finitomata.Transition.shortest_paths(transitions, from, to, true)
+    |> case do
+      [] -> 0
+      [path | _] -> Finitomata.Transition.Path.length(path)
+    end
+  end
 
   @spec to_path(Enumerable.t([t()])) :: [Path.t()]
   defp to_path(transitions) do
