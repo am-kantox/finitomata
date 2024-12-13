@@ -50,15 +50,13 @@ defmodule Finitomata.Compiler.Test do
       end
     }
 
-    assert "" ==
-             capture_io(fn ->
-               # Mix.Tasks.Compile.run(["test/seeds/compiler_test_modules.ex"])
-               if Version.compare(System.version(), "1.16.0") == :lt do
-                 :ok
-               else
+    if Version.compare(System.version(), "1.16.0") != :lt do
+      assert "" ==
+               capture_io(fn ->
+                 # Mix.Tasks.Compile.run(["test/seeds/compiler_test_modules.ex"])
                  {[{TestInplace, _}], []} =
-                   apply(Code, :with_diagnostics, [fn -> Code.compile_string(module) end])
-               end
-             end)
+                   Code.with_diagnostics(fn -> Code.compile_string(module) end)
+               end)
+    end
   end
 end
