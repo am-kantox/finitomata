@@ -262,6 +262,7 @@ defmodule Finitomata.Flow do
         # ① `{payload, state}` tuple
         # ② `payload, object`
         # ③ `payload, id, object`
+
         handlers_ast =
           for {%{state: state, event: event}, {fun, arity}} <- states do
             state = String.to_atom(state)
@@ -386,25 +387,40 @@ defmodule Finitomata.Flow do
               #   handlers are not needed/defined (e. g. for `:__start__` and other
               #   internal transitions)
               quote generated: true, location: :keep do
-                def on_transition(current, event, _payload, state) do
-                  with {:ok, target_state, ^state} <-
-                         Finitomata.Transition.guess_next_state(
-                           __config__(:fsm),
-                           current,
-                           event,
-                           state
-                         ),
-                       do: do_transition_step(current, event, target_state, :ok, state)
+                def on_transition(current, event, payload, state) do
+                  :fsm
+                  |> __config__()
+                  |> Finitomata.Transition.guess_next_state(current, event, state)
+                  |> case do
+                    {:ok, flow_state, ^state} when flow_state in @finitomata_flow_states ->
+                      on_transition(current, event, {flow_state, payload}, state)
+
+                    {:ok, target_state, ^state} ->
+                      do_transition_step(current, event, target_state, :ok, state)
+
+                    errored ->
+                      errored
+                  end
                 end
               end
             ]
 
         handlers_ast = [back_handler_ast | handlers_ast]
 
+        flow_states =
+          states
+          |> Enum.map(&elem(&1, 0))
+          |> Enum.map(& &1.state)
+          |> Enum.uniq()
+          |> Enum.map(&String.to_atom/1)
+          |> Kernel.--([:"#{@start_state}"])
+          |> Kernel.++([:"#{@end_state}"])
+
         # AST for the main stuff, like declaring the `Finitomata` using and stuff
         main_ast =
           quote generated: true, location: :keep do
             use Finitomata, unquote(finitomata_options)
+            @finitomata_flow_states unquote(flow_states)
 
             @impl Finitomata
             def on_terminate(%Finitomata.State{
