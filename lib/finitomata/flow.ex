@@ -197,10 +197,28 @@ defmodule Finitomata.Flow do
 
             {fun, arity} ->
               args = Macro.generate_arguments(arity, __CALLER__.module)
+              args_string = Enum.map_join(args, ", ", &elem(&1, 0))
 
               [
                 quote generated: true, location: :keep do
-                  def unquote(:"#{fun}")(unquote_splicing(args)), do: nil
+                  def unquote(:"#{fun}")(unquote_splicing(args)) do
+                    require Logger
+
+                    Logger.warning("""
+                      handler #{unquote(fun)}/#{unquote(arity)} has been declared in the flow definition (module #{inspect(__MODULE__)}).
+
+                      We will inject a default implementation for now:
+
+                        def #{unquote(fun)}(#{unquote(args_string)}) do
+                          {:ok, {#{unquote(args_string)}}}
+                        end
+
+                    You can copy the implementation above or define your own that actually handles the flow step.
+                    """)
+
+                    {unquote_splicing(args)}
+                  end
+
                   defoverridable [{unquote(:"#{fun}"), unquote(arity)}]
                 end
               ]

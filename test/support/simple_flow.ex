@@ -4,6 +4,15 @@ defmodule Finitomata.Test.Flow do
   defmodule SubFlow1 do
     @moduledoc false
     use Finitomata.Flow, flow: "priv/flows/sf1.flow"
+
+    def finalize(params, id, object) do
+      require Logger
+
+      Logger.warning(
+        "Implementation for finalize is here with args " <>
+          inspect(params: params, id: id, object: object)
+      )
+    end
   end
 
   defmodule SubFlow2 do
