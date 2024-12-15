@@ -1469,6 +1469,15 @@ defmodule Finitomata do
               {:noreply, State.t()}
               | {:noreply, State.t(), :hibernate}
       defp fork(fork_state, state) do
+        fork_data =
+          case state.payload do
+            %{fork_data: %{} = fork_data} -> fork_data
+            _ -> %{}
+          end
+
+        {object, fork_data} = Map.pop(fork_data, :object)
+        {id, fork_data} = Map.pop(fork_data, :id)
+
         @__config__.forks
         |> Keyword.fetch!(fork_state)
         |> List.wrap()
@@ -1490,8 +1499,9 @@ defmodule Finitomata do
                 },
                 history: %{current: 0, steps: []},
                 steps: %{passed: 0, left: Transition.steps_handled(fork_impl.__config__(:fsm))},
-                object: nil,
-                id: nil
+                object: object,
+                id: id,
+                data: fork_data
               }
             )
 
