@@ -42,7 +42,7 @@ defmodule Finitomata.Flow.Test do
         |> tap(fn _ -> Process.sleep(100) end)
       end)
 
-    assert {:ok, {%{foo: 42}, :id, %{flow: :flow}}} == result
+    assert {:ok, {:ok, {%{foo: 42}, :id, %{flow: :flow}}}} == result
     assert log =~ "[warning]   handler transfer_verify_otp/3"
 
     assert %{
@@ -52,7 +52,7 @@ defmodule Finitomata.Flow.Test do
                history: %{
                  current: 0,
                  steps: [
-                   {:new, :submit_otp, {%{foo: 42}, :id, %{flow: :flow}}},
+                   {:new, :submit_otp, {:ok, {%{foo: 42}, :id, %{flow: :flow}}}},
                    {:*, :__start__, :ok}
                  ]
                },
@@ -74,7 +74,7 @@ defmodule Finitomata.Flow.Test do
                history: %{
                  current: 0,
                  steps: [
-                   {:new, :submit_otp, {%{foo: 42}, :id, %{flow: :flow}}},
+                   {:new, :submit_otp, {:ok, {%{foo: 42}, :id, %{flow: :flow}}}},
                    {:*, :__start__, :ok}
                  ]
                },
@@ -92,7 +92,7 @@ defmodule Finitomata.Flow.Test do
                history: %{
                  current: 0,
                  steps: [
-                   {:new, :submit_otp, {%{foo: 42}, :id, %{flow: :flow}}},
+                   {:new, :submit_otp, {:ok, {%{foo: 42}, :id, %{flow: :flow}}}},
                    {:*, :__start__, :ok}
                  ]
                },

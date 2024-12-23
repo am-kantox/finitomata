@@ -72,9 +72,9 @@ defmodule Finitomata.Flow do
 
   alias Finitomata.Transition
 
+  @start_handler :on_flow_initialization
   @start_state "finitomata_flowing"
   @start_event "finitomata_flow_initialize!"
-  @start_handler :on_flow_initialization
   @end_state "finitomata_flowed"
   @back_event "finitomata_back"
 
@@ -182,8 +182,9 @@ defmodule Finitomata.Flow do
             end
           end
 
-        # AST for the generated handlers, returning `nil` as the result
-        # [AM] [TODO] raise from here? implement a behaviour?
+        # AST for the generated handlers,
+        #   returning `{:ok, {unquote_splicing(args)}}` as the result
+        #   and printing a warning
         internal_calls_ast =
           states
           |> Enum.map(&elem(&1, 1))
@@ -216,7 +217,7 @@ defmodule Finitomata.Flow do
                     You can copy the implementation above or define your own that actually handles the flow step.
                     """)
 
-                    {unquote_splicing(args)}
+                    {:ok, {unquote_splicing(args)}}
                   end
 
                   defoverridable [{unquote(:"#{fun}"), unquote(arity)}]
