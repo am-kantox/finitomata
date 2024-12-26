@@ -16,18 +16,18 @@ defmodule Finitomata.Flow.Test do
   test "Invokes a subflow and runs it till the end" do
     Finitomata.start_fsm(Fini, Flow, "Flow", %{fork_data: %{id: :id, object: %{flow: :flow}}})
     assert %{"Flow" => %{module: Finitomata.Test.Flow, pid: pid}} = all = Finitomata.all(Fini)
-    assert map_size(all) == 1
+    assert map_size(all) >= 1
     assert is_pid(pid)
 
     assert :ok = Finitomata.transition(Fini, "Flow", :to_s2)
     assert %{current: :s2, history: [:s1, :*], payload: %{}} = Finitomata.state(Fini, "Flow")
     assert %{{:fork, :s2, "Flow"} => %{module: SubFlow, pid: pid}} = all = Finitomata.all(Fini)
-    assert map_size(all) == 2
+    assert map_size(all) >= 2
     assert is_pid(pid)
 
     assert %{
              current: :new,
-             history: [:finitomata_flowing, :*],
+             history: [:finitomata__flowing, :*],
              payload: %{
                history: %{current: 0, steps: [{:*, :__start__, :ok}]},
                steps: %{left: 2, passed: 0}
@@ -47,7 +47,7 @@ defmodule Finitomata.Flow.Test do
 
     assert %{
              current: :confirm_photo,
-             history: [:new, :finitomata_flowing, :*],
+             history: [:new, :finitomata__flowing, :*],
              payload: %{
                history: %{
                  current: 0,
@@ -87,7 +87,7 @@ defmodule Finitomata.Flow.Test do
 
     assert %{
              current: :confirm_photo,
-             history: [:new, :finitomata_flowing, :*],
+             history: [:new, :finitomata__flowing, :*],
              payload: %{
                history: %{
                  current: 0,
@@ -109,6 +109,63 @@ defmodule Finitomata.Flow.Test do
     {result, log} =
       with_log(fn ->
         Finitomata.Flow.event({Fini, {:fork, :s2, "Flow"}}, :finalize, %{param1: 42})
+        |> tap(fn _ -> Process.sleep(100) end)
+      end)
+
+    assert :fsm_gone = result
+    refute log =~ "[warning]   handler finalize/3"
+
+    assert log =~
+             "[warning] Implementation for finalize is here with args [params: %{param1: 42}, id: :id, object: %{flow: :flow}]"
+
+    refute Finitomata.state(Fini, {:fork, :s2, "Flow"})
+  end
+
+  test "Invokes a subflow and fast-forwards it" do
+    Finitomata.start_fsm(Fini, Flow, "FlowFF", %{fork_data: %{id: :id, object: %{flow: :flow}}})
+    assert %{"FlowFF" => %{module: Finitomata.Test.Flow, pid: pid}} = Finitomata.all(Fini)
+    assert is_pid(pid)
+
+    assert :ok = Finitomata.transition(Fini, "FlowFF", :to_s2)
+    assert %{current: :s2, history: [:s1, :*], payload: %{}} = Finitomata.state(Fini, "FlowFF")
+    assert %{{:fork, :s2, "FlowFF"} => %{module: SubFlow, pid: pid}} = Finitomata.all(Fini)
+    assert is_pid(pid)
+
+    assert %{
+             current: :new,
+             history: [:finitomata__flowing, :*],
+             payload: %{
+               history: %{current: 0, steps: [{:*, :__start__, :ok}]},
+               steps: %{left: 2, passed: 0}
+             }
+           } = Finitomata.state(Fini, {:fork, :s2, "FlowFF"})
+
+    {result, _log} =
+      with_log(fn ->
+        Finitomata.Flow.fast_forward({Fini, {:fork, :s2, "FlowFF"}}, :confirm_photo)
+        |> tap(fn _ -> Process.sleep(100) end)
+      end)
+
+    assert [ok: {:ok, {nil, :id, %{flow: :flow}}}] == result
+
+    assert %{
+             current: :confirm_photo,
+             history: [:new, :finitomata__flowing, :*],
+             payload: %{
+               history: %{
+                 current: 0,
+                 steps: [
+                   {:new, :transfer_number, {:ok, {nil, :id, %{flow: :flow}}}},
+                   {:*, :__start__, :ok}
+                 ]
+               },
+               steps: %{left: 1, passed: 1}
+             }
+           } = Finitomata.state(Fini, {:fork, :s2, "FlowFF"})
+
+    {result, log} =
+      with_log(fn ->
+        Finitomata.Flow.event({Fini, {:fork, :s2, "FlowFF"}}, :finalize, %{param1: 42})
         |> tap(fn _ -> Process.sleep(100) end)
       end)
 

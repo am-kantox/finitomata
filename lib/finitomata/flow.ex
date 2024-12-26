@@ -70,18 +70,18 @@ defmodule Finitomata.Flow do
     and sending `:to_onboarded` event to the main _FSM_.
   """
 
-  alias Finitomata.Transition
+  alias Finitomata.{State, Transition}
 
   @start_handler :on_flow_initialization
-  @start_state "finitomata_flowing"
-  @start_event "finitomata_flow_initialize!"
-  @end_state "finitomata_flowed"
-  @back_event "finitomata_back"
+  @start_state "finitomata__flowing"
+  @end_state "finitomata__flowed"
+  @start_event "finitomata__flow__initialize!"
+  @back_event "finitomata__back"
 
   @doc "Performs the transition to the predefined state, awaits for a result"
   @spec event(
           {Finitomata.id(), Finitomata.fsm_name()} | Finitomata.fsm_name(),
-          Finitomata.Transition.event(),
+          Transition.event(),
           term()
         ) ::
           {:ok, term()} | :fsm_gone | {:error, Finitomata.State.payload()}
@@ -114,8 +114,8 @@ defmodule Finitomata.Flow do
   @doc "Performs the transition to the desired state, awaits for a result"
   @spec event(
           {Finitomata.id(), Finitomata.fsm_name()} | Finitomata.fsm_name(),
-          Finitomata.Transition.event(),
-          Finitomata.Transition.state(),
+          Transition.event(),
+          Transition.state(),
           term()
         ) ::
           {:ok, term()} | :fsm_gone | {:error, Finitomata.State.payload()}
@@ -143,6 +143,33 @@ defmodule Finitomata.Flow do
 
   def event(name, event, target_state, payload),
     do: event({nil, name}, event, target_state, payload)
+
+  @doc """
+  Fast-forwards the flow into one of the reachable states.
+  """
+  @spec fast_forward(
+          {Finitomata.id(), Finitomata.fsm_name()} | Finitomata.fsm_name(),
+          target_state :: Transition.state()
+        ) ::
+          {:ok, State.t()} | {:error, term()}
+  def fast_forward({id, name}, target_state) do
+    with {:ok, %{module: module}} <- Fini |> Finitomata.all() |> Map.fetch(name),
+         %State{} = state <- Finitomata.state(id, name),
+         [%Transition.Path{path: path} | _] <-
+           Transition.shortest_paths(
+             :states,
+             module.__config__(:fsm),
+             state.current,
+             target_state,
+             false
+           ) do
+      Enum.map(path, fn {event, state} -> event({id, name}, event, state, nil) end)
+    else
+      not_ok -> {:error, {:ffwd_flow, not_ok}}
+    end
+  end
+
+  def fast_forward(name, target_state), do: fast_forward({nil, name}, target_state)
 
   @doc false
   defmacro __using__(opts \\ []) do
@@ -603,8 +630,8 @@ defmodule Finitomata.Flow do
 
     no_back_states =
       case initial_state do
-        [_] ->
-          [@start_state, @end_state]
+        [state] ->
+          [@start_state, @end_state, state]
 
         other ->
           raise CompileError,

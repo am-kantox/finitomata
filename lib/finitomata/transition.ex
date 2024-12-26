@@ -353,6 +353,7 @@ defmodule Finitomata.Transition do
               Enum.reject(path, fn
                 {_event, :*} -> true
                 {:__start__, _state} -> true
+                {:finitomata__back, _state} -> true
                 {event, _state} -> event |> to_string() |> String.ends_with?("!")
                 _ -> false
               end)
