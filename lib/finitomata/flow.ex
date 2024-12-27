@@ -153,7 +153,7 @@ defmodule Finitomata.Flow do
           target_state :: Transition.state()
         ) :: {:ok, [event_resolution()]} | {:error, term()}
   def fast_forward({id, name}, target_state) do
-    with {:ok, %{module: module}} <- Fini |> Finitomata.all() |> Map.fetch(name),
+    with {:ok, %{module: module}} <- id |> Finitomata.all() |> Map.fetch(name),
          %State{} = state <- Finitomata.state(id, name),
          [%Transition.Path{path: path} | _] <-
            Transition.shortest_paths(
