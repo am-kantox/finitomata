@@ -78,13 +78,15 @@ defmodule Finitomata.Flow do
   @start_event "finitomata__flow__initialize!"
   @back_event "finitomata__back"
 
+  @typedoc "THe result of event processing"
+  @type event_resolution :: {:ok, term()} | :fsm_gone | {:error, Finitomata.State.payload()}
+
   @doc "Performs the transition to the predefined state, awaits for a result"
   @spec event(
           {Finitomata.id(), Finitomata.fsm_name()} | Finitomata.fsm_name(),
           Transition.event(),
           term()
-        ) ::
-          {:ok, term()} | :fsm_gone | {:error, Finitomata.State.payload()}
+        ) :: event_resolution()
   def event(id_name, event, payload \\ nil)
 
   def event({id, name}, event, payload) do
@@ -117,8 +119,7 @@ defmodule Finitomata.Flow do
           Transition.event(),
           Transition.state(),
           term()
-        ) ::
-          {:ok, term()} | :fsm_gone | {:error, Finitomata.State.payload()}
+        ) :: event_resolution()
   def event({id, name}, event, target_state, payload) do
     :ok = Finitomata.transition(id, name, {event, {target_state, payload}})
 
@@ -150,8 +151,7 @@ defmodule Finitomata.Flow do
   @spec fast_forward(
           {Finitomata.id(), Finitomata.fsm_name()} | Finitomata.fsm_name(),
           target_state :: Transition.state()
-        ) ::
-          {:ok, State.t()} | {:error, term()}
+        ) :: {:ok, [event_resolution()]} | {:error, term()}
   def fast_forward({id, name}, target_state) do
     with {:ok, %{module: module}} <- Fini |> Finitomata.all() |> Map.fetch(name),
          %State{} = state <- Finitomata.state(id, name),
@@ -163,8 +163,9 @@ defmodule Finitomata.Flow do
              target_state,
              false
            ) do
-      Enum.map(path, fn {event, state} -> event({id, name}, event, state, nil) end)
+      {:ok, Enum.map(path, fn {event, state} -> event({id, name}, event, state, nil) end)}
     else
+      [] -> {:ok, []}
       not_ok -> {:error, {:ffwd_flow, not_ok}}
     end
   end

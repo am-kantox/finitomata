@@ -142,11 +142,28 @@ defmodule Finitomata.Flow.Test do
 
     {result, _log} =
       with_log(fn ->
+        Finitomata.Flow.fast_forward({Fini, {:fork, :s2, "FlowFF"}}, :new)
+        |> tap(fn _ -> Process.sleep(100) end)
+      end)
+
+    assert {:ok, []} == result
+
+    assert %{
+             current: :new,
+             history: [:finitomata__flowing, :*],
+             payload: %{
+               history: %{current: 0, steps: [{:*, :__start__, :ok}]},
+               steps: %{left: 2, passed: 0}
+             }
+           } = Finitomata.state(Fini, {:fork, :s2, "FlowFF"})
+
+    {result, _log} =
+      with_log(fn ->
         Finitomata.Flow.fast_forward({Fini, {:fork, :s2, "FlowFF"}}, :confirm_photo)
         |> tap(fn _ -> Process.sleep(100) end)
       end)
 
-    assert [ok: {:ok, {nil, :id, %{flow: :flow}}}] == result
+    assert {:ok, [ok: {:ok, {nil, :id, %{flow: :flow}}}]} == result
 
     assert %{
              current: :confirm_photo,
