@@ -150,12 +150,34 @@ defmodule Finitomata.Flow do
   """
   @spec fast_forward(
           {Finitomata.id(), Finitomata.fsm_name()} | Finitomata.fsm_name(),
-          target_state :: Transition.state()
-        ) :: {:ok, [event_resolution()]} | {:error, term()}
-  def fast_forward({id, name}, target_state) do
+          target :: Transition.state() | [Transition.state()] | Transition.Path.t()
+        ) :: {:ok, [event_resolution()]} | {:fsm_gone, [event_resolution()]} | {:error, term()}
+  def fast_forward({id, name}, %Transition.Path{path: path} = _target) do
+    Enum.reduce_while(path, {:ok, []}, fn
+      {event, state}, {:ok, acc} ->
+        case event({id, name}, event, state, nil) do
+          {:ok, term} -> {:cont, {:ok, acc ++ [{event, {state, term}}]}}
+          :fsm_gone -> {:halt, {:fsm_gone, acc}}
+          {:error, reason} -> {:halt, {:error, {reason, acc}}}
+        end
+    end)
+  end
+
+  def fast_forward({id, name}, target_states) when is_list(target_states) do
+    Enum.reduce_while(target_states, {:ok, []}, fn
+      target_state, {:ok, acc} ->
+        case fast_forward({id, name}, target_state) do
+          {:ok, results} -> {:cont, {:ok, acc ++ results}}
+          {:fsm_gone, inner_acc} -> {:halt, {:fsm_gone, acc ++ inner_acc}}
+          {:error, {reason, inner_acc}} -> {:halt, {:error, {reason, acc ++ inner_acc}}}
+        end
+    end)
+  end
+
+  def fast_forward({id, name}, target_state) when is_atom(target_state) do
     with {:ok, %{module: module}} <- id |> Finitomata.all() |> Map.fetch(name),
          %State{} = state <- Finitomata.state(id, name),
-         [%Transition.Path{path: path} | _] <-
+         [%Transition.Path{} = path | _] <-
            Transition.shortest_paths(
              :states,
              module.__config__(:fsm),
@@ -163,7 +185,7 @@ defmodule Finitomata.Flow do
              target_state,
              false
            ) do
-      {:ok, Enum.map(path, fn {event, state} -> event({id, name}, event, state, nil) end)}
+      fast_forward({id, name}, path)
     else
       [] -> {:ok, []}
       not_ok -> {:error, {:ffwd_flow, not_ok}}

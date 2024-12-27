@@ -50,3 +50,8 @@ defmodule Finitomata.Test.Flow do
     {:ok, SubFlow1}
   end
 end
+
+defmodule Foo.Bar do
+  @moduledoc false
+  def recipient_flow_name(_, _, _), do: :recipient_flow_name
+end
