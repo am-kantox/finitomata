@@ -78,8 +78,14 @@ defmodule Finitomata.Flow do
   @start_event "finitomata__flow__initialize!"
   @back_event "finitomata__back"
 
-  @typedoc "THe result of event processing"
+  @typedoc "The result of event processing"
   @type event_resolution :: {:ok, term()} | :fsm_gone | {:error, Finitomata.State.payload()}
+
+  @typedoc "The option to be passed to control the event behaviour"
+  @type event_option :: {:skip_handlers?, boolean()}
+
+  @typedoc "The options to be passed to control the event behaviour"
+  @type event_options :: [event_option()]
 
   @doc "Performs the transition to the predefined state, awaits for a result"
   @spec event(
@@ -118,10 +124,13 @@ defmodule Finitomata.Flow do
           {Finitomata.id(), Finitomata.fsm_name()} | Finitomata.fsm_name(),
           Transition.event(),
           Transition.state(),
-          term()
+          term(),
+          event_options()
         ) :: event_resolution()
-  def event({id, name}, event, target_state, payload) do
-    :ok = Finitomata.transition(id, name, {event, {target_state, payload}})
+  def event(id_name, event, target_state, payload, options \\ [])
+
+  def event({id, name}, event, target_state, payload, options) do
+    :ok = Finitomata.transition(id, name, {event, {target_state, payload, options}})
 
     case Finitomata.state(id, name, :payload) do
       nil ->
@@ -142,20 +151,23 @@ defmodule Finitomata.Flow do
     end
   end
 
-  def event(name, event, target_state, payload),
-    do: event({nil, name}, event, target_state, payload)
+  def event(name, event, target_state, payload, options),
+    do: event({nil, name}, event, target_state, payload, options)
 
   @doc """
   Fast-forwards the flow into one of the reachable states.
   """
   @spec fast_forward(
           {Finitomata.id(), Finitomata.fsm_name()} | Finitomata.fsm_name(),
-          target :: Transition.state() | [Transition.state()] | Transition.Path.t()
+          target :: Transition.state() | [Transition.state()] | Transition.Path.t(),
+          options :: event_options()
         ) :: {:ok, [event_resolution()]} | {:fsm_gone, [event_resolution()]} | {:error, term()}
-  def fast_forward({id, name}, %Transition.Path{path: path} = _target) do
+  def fast_forward(id_name, target, options \\ [])
+
+  def fast_forward({id, name}, %Transition.Path{path: path} = _target, options) do
     Enum.reduce_while(path, {:ok, []}, fn
       {event, state}, {:ok, acc} ->
-        case event({id, name}, event, state, nil) do
+        case event({id, name}, event, state, nil, options) do
           {:ok, term} -> {:cont, {:ok, acc ++ [{event, {state, term}}]}}
           :fsm_gone -> {:halt, {:fsm_gone, acc}}
           {:error, reason} -> {:halt, {:error, {reason, acc}}}
@@ -163,10 +175,10 @@ defmodule Finitomata.Flow do
     end)
   end
 
-  def fast_forward({id, name}, target_states) when is_list(target_states) do
+  def fast_forward({id, name}, target_states, options) when is_list(target_states) do
     Enum.reduce_while(target_states, {:ok, []}, fn
       target_state, {:ok, acc} ->
-        case fast_forward({id, name}, target_state) do
+        case fast_forward({id, name}, target_state, options) do
           {:ok, results} -> {:cont, {:ok, acc ++ results}}
           {:fsm_gone, inner_acc} -> {:halt, {:fsm_gone, acc ++ inner_acc}}
           {:error, {reason, inner_acc}} -> {:halt, {:error, {reason, acc ++ inner_acc}}}
@@ -174,7 +186,7 @@ defmodule Finitomata.Flow do
     end)
   end
 
-  def fast_forward({id, name}, target_state) when is_atom(target_state) do
+  def fast_forward({id, name}, target_state, options) when is_atom(target_state) do
     with {:ok, %{module: module}} <- id |> Finitomata.all() |> Map.fetch(name),
          %State{} = state <- Finitomata.state(id, name),
          [%Transition.Path{} = path | _] <-
@@ -185,14 +197,15 @@ defmodule Finitomata.Flow do
              target_state,
              false
            ) do
-      fast_forward({id, name}, path)
+      fast_forward({id, name}, path, options)
     else
       [] -> {:ok, []}
       not_ok -> {:error, {:ffwd_flow, not_ok}}
     end
   end
 
-  def fast_forward(name, target_state), do: fast_forward({nil, name}, target_state)
+  def fast_forward(name, target_state, options),
+    do: fast_forward({nil, name}, target_state, options)
 
   @doc false
   defmacro __using__(opts \\ []) do
@@ -343,10 +356,11 @@ defmodule Finitomata.Flow do
                   def on_transition(
                         unquote(state),
                         unquote(event),
-                        {target_state, _payload},
+                        {target_state, _payload, options},
                         state
                       ) do
-                    result = unquote(@start_handler)(state)
+                    skip_handlers? = Keyword.get(options, :skip_handlers?, false)
+                    result = if skip_handlers?, do: :skipped, else: unquote(@start_handler)(state)
 
                     do_transition_step(
                       unquote(state),
@@ -363,13 +377,18 @@ defmodule Finitomata.Flow do
                   def on_transition(
                         unquote(state),
                         unquote(event),
-                        {target_state, payload},
+                        {target_state, payload, options},
                         state
                       ) do
+                    skip_handlers? = Keyword.get(options, :skip_handlers?, false)
+
                     result =
-                      Function.capture(unquote(mod), unquote(fun), unquote(arity)).(
-                        {payload, state}
-                      )
+                      if skip_handlers?,
+                        do: :skipped,
+                        else:
+                          Function.capture(unquote(mod), unquote(fun), unquote(arity)).(
+                            {payload, state}
+                          )
 
                     do_transition_step(
                       unquote(state),
@@ -386,14 +405,19 @@ defmodule Finitomata.Flow do
                   def on_transition(
                         unquote(state),
                         unquote(event),
-                        {target_state, payload},
+                        {target_state, payload, options},
                         state
                       ) do
+                    skip_handlers? = Keyword.get(options, :skip_handlers?, false)
+
                     result =
-                      Function.capture(unquote(mod), unquote(fun), unquote(arity)).(
-                        payload,
-                        state.object
-                      )
+                      if skip_handlers?,
+                        do: :skipped,
+                        else:
+                          Function.capture(unquote(mod), unquote(fun), unquote(arity)).(
+                            payload,
+                            state.object
+                          )
 
                     do_transition_step(
                       unquote(state),
@@ -410,15 +434,20 @@ defmodule Finitomata.Flow do
                   def on_transition(
                         unquote(state),
                         unquote(event),
-                        {target_state, payload},
+                        {target_state, payload, options},
                         state
                       ) do
+                    skip_handlers? = Keyword.get(options, :skip_handlers?, false)
+
                     result =
-                      Function.capture(unquote(mod), unquote(fun), unquote(arity)).(
-                        payload,
-                        state.id,
-                        state.object
-                      )
+                      if skip_handlers?,
+                        do: :skipped,
+                        else:
+                          Function.capture(unquote(mod), unquote(fun), unquote(arity)).(
+                            payload,
+                            state.id,
+                            state.object
+                          )
 
                     do_transition_step(
                       unquote(state),
@@ -435,10 +464,15 @@ defmodule Finitomata.Flow do
                   def on_transition(
                         unquote(state),
                         unquote(event),
-                        {target_state, payload},
+                        {target_state, payload, options},
                         state
                       ) do
-                    result = unquote(:"#{fun}")(payload, state.id, state.object)
+                    skip_handlers? = Keyword.get(options, :skip_handlers?, false)
+
+                    result =
+                      if skip_handlers?,
+                        do: :skipped,
+                        else: unquote(:"#{fun}")(payload, state.id, state.object)
 
                     do_transition_step(
                       unquote(state),
@@ -462,7 +496,7 @@ defmodule Finitomata.Flow do
                   |> Finitomata.Transition.guess_next_state(current, event, state)
                   |> case do
                     {:ok, flow_state, ^state} when flow_state in @finitomata_flow_states ->
-                      on_transition(current, event, {flow_state, payload}, state)
+                      on_transition(current, event, {flow_state, payload, []}, state)
 
                     {:ok, target_state, ^state} ->
                       do_transition_step(current, event, target_state, :ok, state)

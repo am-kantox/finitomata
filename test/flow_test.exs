@@ -311,15 +311,18 @@ defmodule Finitomata.Flow.Test do
 
     {result, _log} =
       with_log(fn ->
-        Finitomata.Flow.fast_forward({Fini, {:fork, :s2, "FlowFFB"}}, [
-          :confirm_photo,
-          :finitomata__flowed
-        ])
+        Finitomata.Flow.fast_forward(
+          {Fini, {:fork, :s2, "FlowFFB"}},
+          [
+            :confirm_photo,
+            :finitomata__flowed
+          ],
+          skip_handlers?: true
+        )
         |> tap(fn _ -> Process.sleep(300) end)
       end)
 
-    assert {:fsm_gone, [transfer_number: {:confirm_photo, {:ok, {nil, :id, %{flow: :flow}}}}]} ==
-             result
+    assert {:fsm_gone, [transfer_number: {:confirm_photo, :skipped}]} == result
 
     refute Finitomata.state(Fini, {:fork, :s2, "FlowFFB"})
   end
