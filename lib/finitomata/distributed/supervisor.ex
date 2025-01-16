@@ -19,7 +19,7 @@ defmodule Finitomata.Distributed.Supervisor do
           end
         end)
 
-        {:ok, _task_pid} = Task.start(fn -> synch(id) end)
+        {:ok, _task_pid} = Task.start(fn -> synch(id, nodes) end)
         {:ok, pid}
 
       {:error, {:already_started, pid}} ->
@@ -54,7 +54,7 @@ defmodule Finitomata.Distributed.Supervisor do
 
   def ungroup(id), do: id |> Module.split() |> Enum.slice(0..-2//1) |> Module.concat()
 
-  def synch(id, fqn_id \\ nil) do
+  def synch(id, nodes \\ Node.list(), fqn_id \\ nil) do
     fqn_id = if is_nil(fqn_id), do: Finitomata.Supervisor.infinitomata_name(id), else: fqn_id
     known_processes_alive = fqn_id |> group() |> :pg.get_members()
     domestic = Map.new(Infinitomata.all(id), &fix_pid(&1, known_processes_alive))
@@ -79,7 +79,7 @@ defmodule Finitomata.Distributed.Supervisor do
         end
       end
 
-      Enum.reduce(Node.list(), domestic, fn node, acc ->
+      Enum.reduce(nodes, domestic, fn node, acc ->
         node
         |> :rpc.block_call(Infinitomata, :all, [id])
         |> call_handler.(id, node)
