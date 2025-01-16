@@ -3,12 +3,12 @@ defmodule Finitomata.ClusterInfo.Naive do
   @behaviour Finitomata.ClusterInfo
 
   @impl Finitomata.ClusterInfo
-  def nodes, do: [node() | Node.list()]
+  def nodes, do: Node.list()
 
   @impl Finitomata.ClusterInfo
   def whois(id) do
     {%{next: _next_fun, type: :exsss}, _} = :rand.seed(:exsss, term_to_seed(id))
-    Enum.random(nodes())
+    Enum.random([node() | nodes()])
   end
 
   @spec term_to_seed(term(), integer()) :: integer()

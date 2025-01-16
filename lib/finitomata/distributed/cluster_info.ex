@@ -22,7 +22,9 @@ defmodule Finitomata.ClusterInfo do
     do: :persistent_term.put(Finitomata.ClusterInfo, %{implementation: impl})
 
   @doc "Delegates to the selected implementation of a cluster lookup"
-  def nodes, do: impl().nodes()
+  def nodes(self? \\ false)
+  def nodes(false), do: impl().nodes()
+  def nodes(true), do: [node() | nodes(false)]
 
   @doc "Delegates to the selected implementation of a cluster lookup"
   def whois(id), do: impl().whois(id)

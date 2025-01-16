@@ -15,7 +15,7 @@ defmodule Infinitomata do
     @behaviour Finitomata.ClusterInfo
 
     @impl Finitomata.ClusterInfo
-    def nodes, do: HashRing.nodes(@ring)
+    def nodes, do: HashRing.nodes(@ring) -- [node()]
 
     @impl Finitomata.ClusterInfo
     def whois(id), do: HashRing.key_to_node(@ring, id) 
@@ -115,8 +115,8 @@ defmodule Infinitomata do
 
   @doc since: "0.19.0"
   @doc "Synchronizes the local `Infinitomata` instance with the cluster"
-  def synch(id \\ nil) do
-    InfSup.synch(id, FinSup.infinitomata_name(id))
+  def synch(id \\ nil, nodes \\ ClusterInfo.nodes()) do
+    InfSup.synch(id, nodes, FinSup.infinitomata_name(id))
   end
 
   @doc since: "0.15.0"
