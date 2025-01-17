@@ -11,8 +11,11 @@ defmodule Finitomata.ClusterInfo do
     to preserve a determined consistency.
   """
 
-  @doc "Returns nodes available to select from"
-  @callback nodes :: [node()]
+  @doc "
+  Returns nodes available to select from for the given `Finitomata` instance.
+
+  If the instance is `false`, should return all the nodes for all instances."
+  @callback nodes(Finitomata.id()) :: [node()]
 
   @doc "Returns the node “selected” for this particular `id`"
   @callback whois(id :: term()) :: node() | nil
@@ -22,12 +25,13 @@ defmodule Finitomata.ClusterInfo do
     do: :persistent_term.put(Finitomata.ClusterInfo, %{implementation: impl})
 
   @doc "Delegates to the selected implementation of a cluster lookup"
-  def nodes(self? \\ false)
-  def nodes(false), do: impl().nodes()
-  def nodes(true), do: [node() | nodes(false)]
+  def nodes(id \\ false, self? \\ false)
+  def nodes(true, false), do: [node() | nodes(false, false)]
+  def nodes(id, false), do: impl().nodes(id)
+  def nodes(id, true), do: [node() | nodes(id, false)]
 
   @doc "Delegates to the selected implementation of a cluster lookup"
-  def whois(id), do: impl().whois(id)
+  def whois(fini_id \\ false, id), do: impl().whois(fini_id, id)
 
   defp impl do
     Finitomata.ClusterInfo

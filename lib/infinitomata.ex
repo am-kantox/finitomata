@@ -15,10 +15,10 @@ defmodule Infinitomata do
     @behaviour Finitomata.ClusterInfo
 
     @impl Finitomata.ClusterInfo
-    def nodes, do: HashRing.nodes(@ring) -- [node()]
+    def nodes(_fini_id), do: HashRing.nodes(@ring) -- [node()]
 
     @impl Finitomata.ClusterInfo
-    def whois(id), do: HashRing.key_to_node(@ring, id) 
+    def whois(_fini_id, id), do: HashRing.key_to_node(@ring, id)
   end
   ```
   """
@@ -115,7 +115,14 @@ defmodule Infinitomata do
 
   @doc since: "0.19.0"
   @doc "Synchronizes the local `Infinitomata` instance with the cluster"
-  def synch(id \\ nil, nodes \\ ClusterInfo.nodes()) do
+  @spec synch(Finitomata.id(), [node()] | false) :: :ok
+  def synch(id \\ nil, nodes \\ false)
+
+  def synch(id, false) do
+    InfSup.synch(id, ClusterInfo.nodes(id), FinSup.infinitomata_name(id))
+  end
+
+  def synch(id, nodes) when is_list(nodes) do
     InfSup.synch(id, nodes, FinSup.infinitomata_name(id))
   end
 
@@ -126,12 +133,12 @@ defmodule Infinitomata do
   @impl Finitomata.Supervisor
   @spec start_fsm(Finitomata.id(), Finitomata.fsm_name(), module(), any()) ::
           DynamicSupervisor.on_start_child()
-  def start_fsm(id \\ nil, target, implementation, payload) do
-    id = FinSup.infinitomata_name(id)
+  def start_fsm(fini_id \\ nil, target, implementation, payload) do
+    id = FinSup.infinitomata_name(fini_id)
 
     case InfSup.get(id, target) do
       nil ->
-        node = ClusterInfo.whois({id, target})
+        node = ClusterInfo.whois(fini_id, {id, target})
         do_start_fsm(node == node(), node, id, target, implementation, payload)
 
       %{node: node, pid: pid} ->
