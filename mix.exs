@@ -1,8 +1,34 @@
 defmodule Finitomata.MixProject do
   use Mix.Project
 
+  major = System.otp_release()
+
+  otp_version =
+    try do
+      {:ok, contents} = File.read(Path.join([:code.root_dir(), "releases", major, "OTP_VERSION"]))
+      String.split(contents, "\n", trim: true)
+    else
+      [full] -> full
+      _ -> major
+    catch
+      :error, _ -> major
+    end
+    |> String.split(".")
+    |> case do
+      [major] -> [major, 0, 0]
+      [major, minor] -> [major, minor, 0]
+      [major, minor, patch | _] -> [major, minor, patch]
+    end
+    |> Enum.join(".")
+
+  @modern_libs if Version.compare(otp_version, "25.1.0") == :lt,
+                 do: [],
+                 else: [{:enfiladex, "~> 0.1", only: [:dev, :test, :finitomata]}]
+
   @app :finitomata
   @version "0.29.10"
+
+  def lib?(lib), do: lib in Enum.map(@modern_libs, &elem(&1, 0))
 
   def project do
     [
@@ -52,7 +78,6 @@ defmodule Finitomata.MixProject do
       {:telemetry_poller, "~> 1.0", optional: true},
       {:telemetria, "~> 0.21", optional: true},
       # dev / test
-      {:enfiladex, "~> 0.1", only: [:dev, :test, :finitomata]},
       {:nimble_ownership, "~> 1.0", only: [:dev, :test, :ci, :finitomata]},
       {:mox, "~> 1.2", only: [:dev, :test, :ci, :finitomata]},
       {:stream_data, "~> 1.0"},
@@ -60,7 +85,7 @@ defmodule Finitomata.MixProject do
       {:credo, "~> 1.0", only: [:dev, :ci]},
       {:dialyxir, "~> 1.0", only: [:dev, :ci], runtime: false},
       {:ex_doc, "~> 0.11", only: [:dev]}
-    ]
+    ] ++ @modern_libs
   end
 
   defp aliases do

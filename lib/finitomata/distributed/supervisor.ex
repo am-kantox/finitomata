@@ -114,9 +114,17 @@ defmodule Finitomata.Distributed.Supervisor do
     )
   end
 
-  def delete_by_pids(id, pids) do
+  def delete_by_pids(id, pids) when is_list(pids) do
     {match, mismatch} =
       Agent.get(agent(id), &split_with(&1, fn {_, %{pid: pid}} -> pid in pids end))
+
+    Agent.update(agent(id), fn _ -> mismatch end)
+    match
+  end
+
+  def delete_by_pids(id, %MapSet{} = pids) do
+    {match, mismatch} =
+      Agent.get(agent(id), &split_with(&1, fn {_, %{pid: pid}} -> MapSet.member?(pids, pid) end))
 
     Agent.update(agent(id), fn _ -> mismatch end)
     match
