@@ -72,7 +72,7 @@ defmodule Turnstile do
 end
 ```
 
-The docs for this module would have the following diagram contained (see the `ex_doc` for how to enable _Mermaid_.)
+The docs for this module would have the following diagram contained (see the [`ex_doc`](https://hexdocs.pm/ex_doc/readme.html#rendering-mermaid-graphs) for how to enable _Mermaid_.)
 
 ```mermaid
 graph TD 
