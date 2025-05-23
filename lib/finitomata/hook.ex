@@ -132,13 +132,6 @@ defmodule Finitomata.Hook do
         end
       end
 
-      if :on_failure in @__config__[:impl_for] do
-        @impl Finitomata
-        def on_failure(event, payload, state) do
-          Logger.warning("[✗ ↹] " <> inspect(state: state, event: event, event_payload: payload))
-        end
-      end
-
       if :on_enter in @__config__[:impl_for] do
         @impl Finitomata
         def on_enter(entering, state) do
@@ -150,6 +143,27 @@ defmodule Finitomata.Hook do
         @impl Finitomata
         def on_exit(exiting, state) do
           Logger.debug("[→ ↹] " <> inspect(state: state, exiting: exiting))
+        end
+      end
+
+      if :on_failure in @__config__[:impl_for] do
+        @impl Finitomata
+        def on_failure(event, payload, state) do
+          Logger.warning("[✗ ↹] " <> inspect(state: state, event: event, event_payload: payload))
+        end
+      end
+
+      if :on_fork in @__config__[:impl_for] do
+        @impl Finitomata
+        def on_fork(forking, state) do
+          Logger.debug("[🗘 ↹] " <> inspect(state: state, forking: forking))
+        end
+      end
+
+      if :on_start in @__config__[:impl_for] do
+        @impl Finitomata
+        def on_start(state) do
+          Logger.debug("[◎ ↹] " <> inspect(state: state))
         end
       end
 

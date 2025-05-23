@@ -269,7 +269,7 @@ defmodule Mix.Tasks.Finitomata.Generate do
 
   @doc false
   defp parse_impl_for(specified) do
-    impls = ~w|on_failure on_enter on_exit on_terminate|a
+    impls = ~w|on_enter on_exit on_failure on_fork on_start on_terminate|a
 
     states =
       specified
