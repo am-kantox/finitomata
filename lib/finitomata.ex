@@ -206,6 +206,37 @@ defmodule Finitomata do
   ```    
   """
 
+  callback_types = """
+  ## Types of callbacks
+
+  Some callbacks in `Finitomata` are pure, others might mutate the inner state (payload).
+
+  ### Pure callbacks
+
+  - `c:Finitomata.on_enter/2` — called when the new state is entered; receives
+    the state entered (the atom) and the whole `t:Finitomata.State.t/0`
+  - `c:Finitomata.on_exit/2` — called when the new state is exited; receives
+    the state entered (the atom) and the whole `t:Finitomata.State.t/0`
+  - `c:Finitomata.on_failure/3` — called when the transition had failed and the target
+    state has not been reached; receives the event (the atom), the event payload, and
+    the whole `t:Finitomata.State.t/0`
+  - `c:Finitomata.on_fork/2` — called when the `Finitomata.Fork` has been requested;
+    receives the current state (the atom) and the payload `t:Finitomata.State.payload/0`
+  - `c:Finitomata.on_terminate/1` — called when the finitomata is about to terminate;
+    receives the whole `t:Finitomata.State.t/0`
+
+  ### Mutating callbacks
+
+  The following callbacks might (or might not) mutate the inner state (payload).
+
+  - `c:Finitomata.on_start/1` — returning anything but `:ignore` amends the inner state
+    to the value returned (it might be `{:continue | :ok, Finitomata.State.payload()}`)
+  - `c:Finitomata.on_timer/2` — when `:ok` or `{:rescedule, non_neg_integer()}` is returned,
+    this callback is pure, it’s potentially mutating otherwise
+  - `c:Finitomata.on_transition/4` — as the main driving callback of the _FSM_, it’s
+    definitively mutating, unless errored
+  """
+
   use_with_telemetria = """
   ## Use with `Telemetría`
 
@@ -270,7 +301,10 @@ defmodule Finitomata do
 
   doc_readme = "README.md" |> File.read!() |> String.split("\n---") |> Enum.at(1)
 
-  @moduledoc Enum.join([doc_readme, use_finitomata, use_with_telemetria, doc_options], "\n\n")
+  @moduledoc Enum.join(
+               [doc_readme, use_finitomata, callback_types, use_with_telemetria, doc_options],
+               "\n\n"
+             )
 
   require Logger
 
@@ -461,7 +495,7 @@ defmodule Finitomata do
 
   Unlike other callbacks, this one might raise preventing the whole FSM from start.
 
-  When `:ok`, `:ignore`, or `{:continues, new_payload}` tuple is returned from the callback,
+  When `:ok`, `:ignore`, or `{:continue, new_payload}` tuple is returned from the callback,
      the normal initalization continues through continuing to the next state.
 
   `{:ok, new_payload}` prevents the _FSM_ from automatically getting into start state,
