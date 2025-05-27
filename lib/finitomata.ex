@@ -1251,16 +1251,31 @@ defmodule Finitomata do
         })
       end
 
-      def init(%{finitomata_id: id, name: name, parent: parent, payload: payload} = init_arg) do
+      def init(%{payload: payload} = init_arg) do
         lifecycle = Map.get(init_arg, :lifecycle, :unknown)
 
-        {lifecycle, payload} =
-          case safe_on_start(init_arg, payload) do
-            {:ok, payload} -> {:loaded, payload}
-            {:continue, payload} -> {lifecycle, payload}
-            _ -> {lifecycle, payload}
-          end
+        init_arg
+        |> safe_on_start(payload)
+        |> case do
+          {:stop, reason} -> {:stop, reason}
+          {:ok, payload} -> {:loaded, payload}
+          {:continue, payload} -> {lifecycle, payload}
+          _ -> {lifecycle, payload}
+        end
+        |> do_init(init_arg)
+      end
 
+      defp do_init({:stop, reason}, _), do: {:stop, reason}
+
+      defp do_init(
+             {lifecycle, payload},
+             %{
+               finitomata_id: id,
+               name: name,
+               parent: parent,
+               payload: payload
+             } = init_arg
+           ) do
         timer = safe_init_timer({nil, @__config__.timer})
 
         state =
@@ -1784,7 +1799,8 @@ defmodule Finitomata do
       end
 
       @spec safe_on_start(state :: State.t(), payload :: State.payload()) ::
-              {:continue, State.payload()}
+              {:stop, term()}
+              | {:continue, State.payload()}
               | {:ok, State.payload()}
               | :ignore
       @telemetria level: telemetria_levels[:on_start],
@@ -1795,7 +1811,9 @@ defmodule Finitomata do
           do: apply(__MODULE__, :on_start, [payload]),
           else: :ignore
       rescue
-        err -> report_error(err, "on_start/1")
+        err ->
+          report_error(err, "on_start/1")
+          {:stop, err}
       end
 
       @spec safe_on_terminate(State.t()) :: :ok
@@ -1805,8 +1823,9 @@ defmodule Finitomata do
       defp safe_on_terminate(state) do
         if function_exported?(__MODULE__, :on_terminate, 1) do
           with other when other != :ok <- apply(__MODULE__, :on_terminate, [state]) do
-            Logger.info("[♻️] Unexpected return from a callback [#{inspect(other)}], must be :ok")
-            :ok
+            Logger.warning(
+              "[♻️] Unexpected return from `on_terminate/1` [#{inspect(other)}], must be :ok"
+            )
           end
         else
           :ok
