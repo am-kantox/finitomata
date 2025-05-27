@@ -6,7 +6,7 @@
 >
 > _FSM_ consists of states, transitions, and events, where the state is an adjective (or noun,) the event is a verb and the transition is an adverbial participle.
 
-This definition, while being mathematically lax, shallow, cursory, and maybe even perfunctory, reveals the whole and allows to grasp the very core thing about _FSM_ nature: it describes a life in the same way the human language desribes it.
+This definition, while being mathematically lax, shallow, cursory, and maybe even perfunctory, reveals the whole and allows to grasp the very core thing about _FSM_ nature: it describes a life in the same way the human language describes it.
 
 ## Yet Another Library
 
