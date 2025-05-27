@@ -1272,8 +1272,7 @@ defmodule Finitomata do
              %{
                finitomata_id: id,
                name: name,
-               parent: parent,
-               payload: payload
+               parent: parent
              } = init_arg
            ) do
         timer = safe_init_timer({nil, @__config__.timer})
