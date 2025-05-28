@@ -1695,7 +1695,7 @@ defmodule Finitomata do
               | {:error, any()}
               | {:error, :on_transition_raised}
       @telemetria level: telemetria_levels[:on_transition],
-                  group: {:finitomata, __MODULE__},
+                  group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_transition)
       defp safe_on_transition(name, current, event, event_payload, state_payload) do
         current
@@ -1709,7 +1709,7 @@ defmodule Finitomata do
       @spec safe_on_fork([module()], Transition.state(), State.t()) ::
               {:ok, module(), Transition.event()} | {:error, any()}
       @telemetria level: telemetria_levels[:on_fork],
-                  group: {:finitomata, __MODULE__},
+                  group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_fork)
       defp safe_on_fork(forks, fork_state, state) do
         cond do
@@ -1747,7 +1747,7 @@ defmodule Finitomata do
 
       @spec safe_on_failure(Transition.event(), Finitomata.event_payload(), State.t()) :: :ok
       @telemetria level: telemetria_levels[:on_failure],
-                  group: {:finitomata, __MODULE__},
+                  group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_failure)
       defp safe_on_failure(event, event_payload, state_payload) do
         if function_exported?(__MODULE__, :on_failure, 3) do
@@ -1765,7 +1765,7 @@ defmodule Finitomata do
 
       @spec safe_on_enter(Transition.state(), State.t()) :: :ok
       @telemetria level: telemetria_levels[:on_enter],
-                  group: {:finitomata, __MODULE__},
+                  group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_enter)
       defp safe_on_enter(state, state_payload) do
         if function_exported?(__MODULE__, :on_enter, 2) do
@@ -1782,7 +1782,7 @@ defmodule Finitomata do
 
       @spec safe_on_exit(Transition.state(), State.t()) :: :ok
       @telemetria level: telemetria_levels[:on_exit],
-                  group: {:finitomata, __MODULE__},
+                  group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_exit)
       defp safe_on_exit(state, state_payload) do
         if function_exported?(__MODULE__, :on_exit, 2) do
@@ -1803,7 +1803,7 @@ defmodule Finitomata do
               | {:ok, State.payload()}
               | :ignore
       @telemetria level: telemetria_levels[:on_start],
-                  group: {:finitomata, __MODULE__},
+                  group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_start)
       defp safe_on_start(_state, payload) do
         if function_exported?(__MODULE__, :on_start, 1),
@@ -1817,7 +1817,7 @@ defmodule Finitomata do
 
       @spec safe_on_terminate(State.t()) :: :ok
       @telemetria level: telemetria_levels[:on_terminate],
-                  group: {:finitomata, __MODULE__},
+                  group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_terminate)
       defp safe_on_terminate(state) do
         if function_exported?(__MODULE__, :on_terminate, 1) do
@@ -1841,7 +1841,7 @@ defmodule Finitomata do
                 | {:transition, Transition.state(), State.payload()}
                 | {:reschedule, pos_integer()}
         @telemetria level: telemetria_levels[:on_timer],
-                    group: {:finitomata, __MODULE__},
+                    group: __MODULE__,
                     if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_timer)
         defp safe_on_timer(state, state_payload) do
           if function_exported?(__MODULE__, :on_timer, 2),
