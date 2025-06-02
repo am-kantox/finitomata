@@ -20,16 +20,34 @@ defmodule <%= inspect(@module) %> do
 
   # Interface
 
+  @doc """
+  Starts an FSM under `Finitomata`-driven supervision tree.
+
+  If `UUID` is available and `name` is not passed (is `nil`,)
+    the name will be generated.
+  """
   @spec start_fsm(Finitomata.id(), Finitomata.fsm_name()) ::
           DynamicSupervisor.on_start_child()
-  def start_fsm(id \\ nil, name),
-    do: Finitomata.start_fsm(id, name, __MODULE__, %__MODULE__{name: name})
+  def start_fsm(id \\ nil, name \\ nil)
+  case Code.ensure_compiled(UUID) do
+    {:module, UUID} ->
+      def start_fsm(id, nil),
+        do: start_fsm(id, UUID.uuid4())
+    {:error, _} ->
+      def start_fsm(id, nil),
+        do: raise("add `uuid` to deps to use `nil` as a name")
+  end
+
+  def start_fsm(id, name) when not is_nil(name) do
+    with {:ok, pid} <- Finitomata.start_fsm(id, name, __MODULE__, %__MODULE__{name: name}),
+      do: {:ok, pid, name}
+  end
 
   # Implementation
 
+  @impl Finitomata
   <%= for %Finitomata.Transition{from: from, to: to, event: event} <- @transitions, from != :* do %>
   <%= if to != :* or not @auto_terminate? do %>
-  @impl Finitomata
   def on_transition(:<%= from %>, :<%= event %>, _event_payload, state) do
     {:ok, :<%= to %>, state}
   end

@@ -40,7 +40,7 @@ defmodule Mix.Tasks.Finitomata.Generate.Test do
       Keyword.get(
         opts,
         :file,
-        module |> Module.split() |> List.last() |> Macro.underscore() |> Kernel.<>("_test.exs")
+        module |> Macro.underscore() |> Kernel.<>("_test.exs")
       )
 
     if module?(module) do

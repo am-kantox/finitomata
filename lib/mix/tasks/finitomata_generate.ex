@@ -1,5 +1,6 @@
 defmodule Mix.Tasks.Finitomata.Generate do
   @shortdoc "Generates the FSM scaffold for the `Finitomata` instance"
+
   @moduledoc """
   Mix task to generate the `Finitomata` instance scaffold.
 
@@ -12,6 +13,8 @@ defmodule Mix.Tasks.Finitomata.Generate do
 
   - **`--module: :string`** __[mandatory]__ the name of the module to generate, it will be prepended
     with `OtpApp.Finitomata.`
+  - **`--fsm-file: :string`** __[optional, default: `nil`]__ the name of the file to read the FSM description from,
+    the `ELIXIR_EDITOR` will be opened to enter a description otherwise
   - **`--syntax: :string`** __[optional, default: `:flowchart`]__ the syntax to be used, might be
     `:flowchart`, `:state_diagram`, or a module name for custom implementation
   - **`--timer: :integer`** __[optional, default: `false`]__ whether to use recurrent calls in
@@ -22,6 +25,7 @@ defmodule Mix.Tasks.Finitomata.Generate do
   - **`--impl-for: :string`** __[optional, default: `:all`]__ what callbacks should be auto-implemented 
   - **`--generate-test: :boolean`** __[optional, default `false`]__ whether the test should be
     generated as well
+  - **`--callback: :string`** __[optional, default: `nil`]__ the function to be called before actual generation
 
   ### Example
 
@@ -33,6 +37,7 @@ defmodule Mix.Tasks.Finitomata.Generate do
   use Mix.Task
 
   @finitomata_default_path "lib/finitomata"
+  @stub "idle --> |start| started\nstarted --> |run| running\nrunning --> |stop| stopped"
 
   @impl Mix.Task
   @doc false
@@ -44,16 +49,56 @@ defmodule Mix.Tasks.Finitomata.Generate do
       OptionParser.parse(args,
         strict: [
           module: :string,
+          prefix: :string,
+          fsm_file: :string,
           syntax: :string,
           timer: :integer,
           auto_terminate: :string,
           listener: :string,
           impl_for: :string,
-          generate_test: :boolean
+          generate_test: :boolean,
+          callback: :string
         ]
       )
 
     module = Keyword.fetch!(opts, :module)
+
+    callback =
+      case Keyword.fetch(opts, :callback) do
+        {:ok, fun} ->
+          fun
+          |> String.split(~w[& . /], trim: true)
+          |> Enum.reverse()
+          |> then(fn [a, f | m] ->
+            m
+            |> Enum.reverse()
+            |> Module.concat()
+            |> Function.capture(
+              String.to_existing_atom(f),
+              String.to_integer(a)
+            )
+          end)
+
+        _ ->
+          nil
+      end
+
+    prefix =
+      Keyword.get_lazy(opts, :prefix, fn ->
+        Mix.ProjectStack
+        |> GenServer.whereis()
+        |> case do
+          nil ->
+            [Finitomata.Implementations]
+
+          pid when is_pid(pid) ->
+            Mix.Project.get()
+            |> Module.split()
+            |> List.first()
+            |> List.wrap()
+            |> Kernel.++(["Finitomata"])
+        end
+      end)
 
     {syntax, syntax_name} =
       opts
@@ -91,6 +136,7 @@ defmodule Mix.Tasks.Finitomata.Generate do
       |> Keyword.fetch(:auto_terminate)
       |> case do
         :error -> nil
+        {:ok, value} when is_boolean(value) -> "auto_terminate: #{value}"
         {:ok, value} -> "auto_terminate: " <> parse_auto_terminate(value)
       end
 
@@ -147,26 +193,27 @@ defmodule Mix.Tasks.Finitomata.Generate do
 
     target_file = Path.join(dir, file)
 
-    otp_app =
-      Mix.ProjectStack
-      |> GenServer.whereis()
-      |> case do
-        nil ->
-          []
-
-        pid when is_pid(pid) ->
-          Mix.Project.get()
-          |> Module.split()
-          |> List.first()
-          |> List.wrap()
-          |> Kernel.++(["Finitomata"])
-      end
-
-    module = Module.concat(otp_app ++ [module])
+    module = Module.concat(prefix ++ [module])
 
     fsm =
-      case System.fetch_env("ELIXIR_EDITOR") do
-        :error ->
+      case {Keyword.fetch(opts, :fsm_file), System.fetch_env("ELIXIR_EDITOR")} do
+        {{:ok, file}, _} ->
+          case File.read(file) do
+            {:ok, fsm_definition} ->
+              fsm_definition
+
+            error ->
+              Mix.shell().info([
+                [:bright, :red, "✗ #{file}", :reset],
+                " file could not be read (error: #{inspect(error)}). ",
+                [:yellow, "Stub FSM definition", :reset],
+                " will be generated."
+              ])
+
+              @stub
+          end
+
+        {_, :error} ->
           Mix.shell().info([
             [:bright, :red, "✗ #{ELIXIR_EDITOR}", :reset],
             " environment variable is not set. ",
@@ -174,10 +221,10 @@ defmodule Mix.Tasks.Finitomata.Generate do
             " will be generated."
           ])
 
-          "idle --> |start| started\nstarted --> |run| running\nrunning --> |stop| stopped"
+          @stub
 
-        {:ok, editor} ->
-          open_in_editor("idle --> |start| started\nstarted --> |finish| finished\n", editor)
+        {_, {:ok, editor}} ->
+          open_in_editor(@stub, editor)
       end
 
     case syntax.parse(fsm) do
@@ -210,6 +257,12 @@ defmodule Mix.Tasks.Finitomata.Generate do
           end
 
           Mix.Task.run("finitomata.generate.test", ["--module", inspect(module)])
+        end
+
+        case callback do
+          fun when is_function(fun, 1) -> fun.(module)
+          fun when is_function(fun, 2) -> fun.(module, target_file)
+          _ -> :ok
         end
 
       {:error, message, _, _, {line, col}, pos} ->
