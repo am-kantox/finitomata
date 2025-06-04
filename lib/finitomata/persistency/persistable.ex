@@ -65,12 +65,16 @@ defimpl Finitomata.Persistency.Persistable, for: Tuple do
       |> Keyword.values() == [0, 1]
     end
 
-    with true <- Code.ensure_loaded?(module),
-         true <- defines_struct?.(module),
+    with {:module, true} <- {:module, Code.ensure_loaded?(module)},
+         {:struct, true} <- {:struct, defines_struct?.(module)},
          %^module{} = result <- struct(module, fields),
          impl when not is_nil(impl) <- Proto.impl_for(result) do
-      Proto.load(result)
+      case result do
+        %^module{id: _id} -> Proto.load(result)
+        _ -> impl.load({fields.id, result})
+      end
     else
+      {:struct, false} -> Proto.load({module, fields})
       _ -> {:unknown, nil}
     end
   end

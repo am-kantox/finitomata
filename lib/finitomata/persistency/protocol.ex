@@ -8,8 +8,8 @@ defmodule Finitomata.Persistency.Protocol do
   @behaviour Persistency
 
   @impl Persistency
-  def load({module, fields}) do
-    Persistable.load({module, fields})
+  def load({_, _} = info) do
+    Persistable.load(info)
   end
 
   def load(%_{} = data) do
@@ -21,10 +21,14 @@ defmodule Finitomata.Persistency.Protocol do
     Persistable.store(data, info)
   end
 
+  def store(_id, _any, _info), do: :ok
+
   @impl Persistency
   def store_error(_id, %_{} = data, reason, info) do
     Persistable.store_error(data, reason, info)
   end
+
+  def store_error(_id, _any, _reason, _info), do: :ok
 
   def idfy({:via, Registry, {Registry.Finitomata, name}}), do: name
   def idfy(name), do: name

@@ -361,7 +361,7 @@ defmodule Finitomata do
             name: Finitomata.fsm_name(),
             finitomata_id: Finitomata.id(),
             parent: parent(),
-            lifecycle: :loaded | :created | :unknown,
+            lifecycle: :loaded | :created | :failed | :unknown,
             persistency: nil | module(),
             listener: nil | module(),
             current: Transition.state(),
@@ -399,9 +399,9 @@ defmodule Finitomata do
     end
 
     @doc false
-    def persisted?(%State{lifecycle: :unknown}), do: false
     def persisted?(%State{lifecycle: :loaded}), do: true
     def persisted?(%State{lifecycle: :created}), do: true
+    def persisted?(_), do: false
 
     @doc false
     def errored?(%State{last_error: nil}), do: false
@@ -1239,6 +1239,14 @@ defmodule Finitomata do
 
             %{type: type, id: id} ->
               persistency.load({type, %{id => name}})
+
+            other ->
+              Logger.warning(
+                "Loading from persisted for ‹#{inspect(state)}› failed; wrong payload: " <>
+                  inspect(other)
+              )
+
+              {:failed, other}
           end
 
         init(%{
