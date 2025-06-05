@@ -1229,7 +1229,7 @@ defmodule Finitomata do
             } = state
           )
           when not is_nil(name) and not is_nil(persistency) do
-        {lifecycle, payload} =
+        {lifecycle, {state, payload}} =
           case payload do
             module when is_atom(module) ->
               persistency.load({payload, id: name})
@@ -1246,13 +1246,14 @@ defmodule Finitomata do
                   inspect(other)
               )
 
-              {:failed, other}
+              {:failed, {nil, other}}
           end
 
         init(%{
           name: name,
           finitomata_id: id,
           parent: parent,
+          state: state,
           payload: payload,
           lifecycle: lifecycle,
           persistency: persistency
@@ -1261,28 +1262,37 @@ defmodule Finitomata do
 
       def init(%{payload: payload} = init_arg) do
         lifecycle = Map.get(init_arg, :lifecycle, :unknown)
+        {state, init_arg} = Map.pop(init_arg, :state)
 
-        init_arg
-        |> safe_on_start(payload)
-        |> case do
-          {:stop, reason} -> {:stop, reason}
-          {:ok, payload} -> {:loaded, payload}
-          {:continue, payload} -> {lifecycle, payload}
-          _ -> {lifecycle, payload}
-        end
-        |> do_init(init_arg)
+        init_state =
+          if is_nil(state) or lifecycle in [:failed, :created] do
+            init_arg
+            |> safe_on_start(payload)
+            |> case do
+              {:stop, reason} -> {:stop, :on_start, reason}
+              {:ok, payload} -> {nil, payload}
+              {:continue, payload} -> {nil, payload}
+              _ -> {nil, payload}
+            end
+          else
+            {state, payload}
+          end
+
+        do_init(init_state, init_arg)
       end
 
-      defp do_init({:stop, reason}, _), do: {:stop, reason}
+      defp do_init({:stop, :on_start, reason}, init_arg),
+        do: {:stop, reason: reason, init_arg: init_arg}
 
       defp do_init(
-             {lifecycle, payload},
+             {state, payload},
              %{
                finitomata_id: id,
                name: name,
                parent: parent
              } = init_arg
            ) do
+        lifecycle = Map.get(init_arg, :lifecycle, :unknown)
         timer = safe_init_timer({nil, @__config__.timer})
 
         state =
@@ -1297,7 +1307,7 @@ defmodule Finitomata do
             hibernate: @__config__.hibernate,
             payload: payload
           }
-          |> put_current_state_if_loaded(lifecycle, payload)
+          |> put_current_state_if_loaded(lifecycle, state)
 
         if @__config__.cache_state,
           do: :persistent_term.put({Finitomata, state.name}, state.payload)
@@ -1307,10 +1317,11 @@ defmodule Finitomata do
           else: {:ok, state, {:continue, {:transition, event_payload({@__config__.entry, nil})}}}
       end
 
-      defp put_current_state_if_loaded(state, :loaded, payload),
-        do: Map.put(state, :current, payload.state)
+      defp put_current_state_if_loaded(state, :loaded, fsm_state)
+           when not is_nil(fsm_state),
+           do: Map.put(state, :current, fsm_state)
 
-      defp put_current_state_if_loaded(state, _, payload), do: state
+      defp put_current_state_if_loaded(state, _, _fsm_state), do: state
 
       @doc false
       @impl GenServer
@@ -1805,7 +1816,7 @@ defmodule Finitomata do
         err -> report_error(err, "on_exit/2")
       end
 
-      @spec safe_on_start(state :: State.t(), payload :: State.payload()) ::
+      @spec safe_on_start(state :: :loaded | State.t(), payload :: State.payload()) ::
               {:stop, term()}
               | {:continue, State.payload()}
               | {:ok, State.payload()}
@@ -1813,6 +1824,9 @@ defmodule Finitomata do
       @telemetria level: telemetria_levels[:on_start],
                   group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_start)
+      defp safe_on_start(state, payload)
+      defp safe_on_start(:loaded, payload), do: {:ok, payload}
+
       defp safe_on_start(_state, payload) do
         if function_exported?(__MODULE__, :on_start, 1),
           do: apply(__MODULE__, :on_start, [payload]),

@@ -243,6 +243,12 @@ defmodule Mix.Tasks.Finitomata.Generate do
 
         File.write!(target_file, Code.format_file!(target_file))
 
+        case callback do
+          fun when is_function(fun, 1) -> fun.(module)
+          fun when is_function(fun, 2) -> fun.(module, target_file)
+          _ -> :ok
+        end
+
         Mix.shell().info([
           [:bright, :blue, "* #{inspect(module)}", :reset],
           " has been created."
@@ -257,12 +263,6 @@ defmodule Mix.Tasks.Finitomata.Generate do
           end
 
           Mix.Task.run("finitomata.generate.test", ["--module", inspect(module)])
-        end
-
-        case callback do
-          fun when is_function(fun, 1) -> fun.(module)
-          fun when is_function(fun, 2) -> fun.(module, target_file)
-          _ -> :ok
         end
 
       {:error, message, _, _, {line, col}, pos} ->

@@ -12,7 +12,7 @@ defimpl Finitomata.Persistency.Persistable, for: EctoIntegration.Data.Post do
     |> Repo.get(id)
     |> case do
       %Post{} = post ->
-        {:loaded, post}
+        {:loaded, {post.state, post}}
 
       nil ->
         new =
@@ -22,7 +22,7 @@ defimpl Finitomata.Persistency.Persistable, for: EctoIntegration.Data.Post do
           |> Post.new_changeset()
           |> Repo.insert!()
 
-        {:created, new}
+        {:created, {nil, new}}
     end
   end
 

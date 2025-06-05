@@ -213,8 +213,10 @@ defmodule Finitomata.Test do
       pid: self()
     })
 
-    assert_receive :on_start!
-    assert_receive :on_do!
+    refute_receive :on_start!
+
+    Finitomata.transition(Finitomata, fsm, :do)
+    assert_receive :on_do
     assert_receive :on_end
   end
 end

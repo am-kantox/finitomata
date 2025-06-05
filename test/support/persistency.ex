@@ -3,7 +3,7 @@ defmodule Finitomata.Test.Persistency do
 
   @fsm """
   idle --> |start!| started
-  started --> |do!| done
+  started --> |do| done
   """
 
   use Finitomata, fsm: @fsm, auto_terminate: true, persistency: Finitomata.Persistency.Protocol
@@ -17,8 +17,8 @@ defmodule Finitomata.Test.Persistency do
   end
 
   @impl Finitomata
-  def on_transition(:started, :do!, _, %__MODULE__{pid: pid} = state) do
-    send(pid, :on_do!)
+  def on_transition(:started, :do, _, %__MODULE__{pid: pid} = state) do
+    send(pid, :on_do)
     {:ok, :done, state}
   end
 
@@ -37,7 +37,7 @@ defimpl Finitomata.Persistency.Persistable, for: Finitomata.Test.Persistency do
 
   def load(data) do
     Logger.debug("[♻️] Load: " <> inspect(data))
-    {:unknown, data}
+    {:loaded, {:started, data}}
   end
 
   def store(data, info) do
