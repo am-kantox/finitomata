@@ -81,7 +81,7 @@ defmodule Finitomata.Cache do
     def on_transition(:ready, :set, {getter, live?, value}, %__MODULE__{} = state)
         when is_function(getter, 1) do
       {:ok, :set,
-       %__MODULE__{
+       %{
          state
          | since: DateTime.utc_now(),
            value: {:ok, value},
@@ -96,7 +96,7 @@ defmodule Finitomata.Cache do
     end
 
     def on_transition(:ready, :set, _, %__MODULE__{} = state) do
-      {:ok, :set, %__MODULE__{state | since: DateTime.utc_now(), value: :error}}
+      {:ok, :set, %{state | since: DateTime.utc_now(), value: :error}}
     end
 
     @impl Finitomata

@@ -33,7 +33,7 @@ defmodule Finitomata.Throttler.Producer do
   defp normalize(from, items) do
     Enum.map(items, fn
       %Throttler{} = t ->
-        %Throttler{t | from: from, duration: DateTime.utc_now(@utc_now_truncate_to)}
+        %{t | from: from, duration: DateTime.utc_now(@utc_now_truncate_to)}
 
       {fun, args} when is_function(fun, 1) ->
         %Throttler{

@@ -206,17 +206,22 @@ defmodule Finitomata.Test do
   end
 
   test "persistency" do
-    start_supervised(Finitomata.Supervisor)
+    start_supervised({Finitomata.Supervisor, FS_Persistency})
     fsm = "PersistentFSM"
 
-    Finitomata.start_fsm(Finitomata.Test.Persistency, fsm, %Finitomata.Test.Persistency{
-      pid: self()
-    })
+    Finitomata.start_fsm(
+      FS_Persistency,
+      Finitomata.Test.Persistency,
+      fsm,
+      %Finitomata.Test.Persistency{
+        pid: self()
+      }
+    )
 
     refute_receive :on_start!
 
-    Finitomata.transition(Finitomata, fsm, :do)
-    assert_receive :on_do
+    Finitomata.transition(FS_Persistency, fsm, :do)
+    assert_receive :on_do, 1_000
     assert_receive :on_end
   end
 end

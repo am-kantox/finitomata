@@ -358,7 +358,7 @@ defmodule Finitomata.Transition do
                 _ -> false
               end)
 
-            %Path{full_path | path: path}
+            %{full_path | path: path}
 
           transitions when is_list(transitions) ->
             Enum.reject(transitions, fn

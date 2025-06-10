@@ -939,7 +939,12 @@ defmodule Finitomata do
           ])
         end
 
-        [__MODULE__, Mox] |> Module.concat() |> tap(&Mox.defmock(&1, for: Finitomata.Listener))
+        [__MODULE__, Mox]
+        |> Module.concat()
+        |> tap(fn mox_mod ->
+          Mox.defmock(mox_mod, for: Finitomata.Listener)
+          Code.ensure_compiled!(mox_mod)
+        end)
       end
 
       mox_envs = options |> Keyword.fetch!(:mox_envs) |> List.wrap()
@@ -1330,41 +1335,31 @@ defmodule Finitomata do
 
       def handle_call(:state, _from, state), do: {:reply, state, state, :hibernate}
 
-      @doc false
-      @impl GenServer
       def handle_call({:state, fun}, _from, %State{hibernate: false} = state)
           when is_function(fun, 1),
           do: {:reply, fun.(state), state}
 
-      def handle_call({:state, fun}, _from, state) when is_function(fun, 1),
+      def handle_call({:state, fun}, _from, %State{} = state) when is_function(fun, 1),
         do: {:reply, fun.(state), state, :hibernate}
 
-      @doc false
-      @impl GenServer
       def handle_call(:current_state, _from, %State{hibernate: false} = state),
         do: {:reply, state.current, state}
 
-      def handle_call(:current_state, _from, state),
+      def handle_call(:current_state, _from, %State{} = state),
         do: {:reply, state.current, state, :hibernate}
 
-      @doc false
-      @impl GenServer
       def handle_call(:name, _from, %State{hibernate: false} = state),
         do: {:reply, State.human_readable_name(state, false), state}
 
-      def handle_call(:name, _from, state),
+      def handle_call(:name, _from, %State{} = state),
         do: {:reply, State.human_readable_name(state, false), state, :hibernate}
 
-      @doc false
-      @impl GenServer
       def handle_call({:allowed?, to}, _from, %State{hibernate: false} = state),
         do: {:reply, Transition.allowed?(@__config__.fsm, state.current, to), state}
 
-      def handle_call({:allowed?, to}, _from, state),
+      def handle_call({:allowed?, to}, _from, %State{} = state),
         do: {:reply, Transition.allowed?(@__config__.fsm, state.current, to), state, :hibernate}
 
-      @doc false
-      @impl GenServer
       def handle_call({:responds?, event}, _from, %State{hibernate: false} = state),
         do: {:reply, Transition.responds?(@__config__.fsm, state.current, event), state}
 
@@ -1372,8 +1367,6 @@ defmodule Finitomata do
         {:reply, Transition.responds?(@__config__.fsm, state.current, event), state, :hibernate}
       end
 
-      @doc false
-      @impl GenServer
       def handle_call(whatever, _from, %State{hibernate: false} = state) do
         Logger.error(
           "Unexpected `GenServer.call/2` with a message ‹#{inspect(whatever)}›. " <>
@@ -1383,7 +1376,7 @@ defmodule Finitomata do
         {:reply, :not_allowed, state}
       end
 
-      def handle_call(whatever, _from, state) do
+      def handle_call(whatever, _from, %State{} = state) do
         Logger.error(
           "Unexpected `GenServer.call/2` with a message ‹#{inspect(whatever)}›. " <>
             "`Finitomata` does not accept direct calls. Please use `on_transition/4` callback instead."
@@ -1394,12 +1387,10 @@ defmodule Finitomata do
 
       @doc false
       @impl GenServer
-      def handle_cast({event, payload}, state),
+      def handle_cast({event, payload}, %State{} = state),
         do: {:noreply, state, {:continue, {:transition, {event, payload}}}}
 
-      @doc false
-      @impl GenServer
-      def handle_cast({:reset_timer, tick?, new_value}, state) do
+      def handle_cast({:reset_timer, tick?, new_value}, %State{} = state) do
         timer =
           if tick? do
             safe_cancel_timer(state.timer)
@@ -1410,13 +1401,11 @@ defmodule Finitomata do
           end
 
         if state.hibernate,
-          do: {:noreply, %State{state | timer: timer}, :hibernate},
-          else: {:noreply, %State{state | timer: timer}}
+          do: {:noreply, %{state | timer: timer}, :hibernate},
+          else: {:noreply, %{state | timer: timer}}
       end
 
-      @doc false
-      @impl GenServer
-      def handle_cast(whatever, state) do
+      def handle_cast(whatever, %State{} = state) do
         Logger.error(
           "Unexpected `GenServer.cast/2` with a message ‹#{inspect(whatever)}›. " <>
             "`Finitomata` does not accept direct casts. Please use `on_transition/4` callback instead."
@@ -1429,21 +1418,21 @@ defmodule Finitomata do
 
       @doc false
       @impl GenServer
-      def handle_continue({:transition, {event, payload}}, state),
+      def handle_continue({:transition, {event, payload}}, %State{} = state),
         do: transit({event, payload}, state)
 
-      def handle_continue({:fork, fork_state}, state),
+      def handle_continue({:fork, fork_state}, %State{} = state),
         do: fork(fork_state, state)
 
       @doc false
       @impl GenServer
-      def terminate(reason, state) do
+      def terminate(reason, %State{} = state) do
         safe_on_terminate(state)
       end
 
       @doc false
       @impl GenServer
-      def handle_info(whatever, state)
+      def handle_info(whatever, %State{} = state)
           when not is_tuple(state.timer) or not is_integer(elem(state.timer, 1)) or
                  whatever != :on_timer do
         Logger.error(
@@ -1458,12 +1447,12 @@ defmodule Finitomata do
 
       @doc false
       @impl GenServer
-      def code_change(_old_vsn, state, extra) when extra in [[], %{}, nil],
+      def code_change(_old_vsn, %State{} = state, extra) when extra in [[], %{}, nil],
         do: {:ok, state}
 
       @doc false
       @impl GenServer
-      def code_change(_old_vsn, state, _extra) do
+      def code_change(_old_vsn, %State{} = state, _extra) do
         Logger.warning(
           "Hot code swapping is requested. `Finitomata` does not accept changes through hot swap. " <>
             "The request would be ignored."
@@ -1474,15 +1463,8 @@ defmodule Finitomata do
 
       @doc false
       @impl GenServer
-      def format_status(:normal, [pdict, state]) do
-        {:state, State.excerpt(state, false)}
-      end
-
-      @doc false
-      @impl GenServer
-      def format_status(:terminate, [pdict, state]) do
-        {:state, State.excerpt(state, true)}
-      end
+      def format_status(:normal, [pdict, state]), do: {:state, State.excerpt(state, false)}
+      def format_status(:terminate, [pdict, state]), do: {:state, State.excerpt(state, true)}
 
       @spec history(Transition.state(), [Transition.state()]) :: [Transition.state()]
       defp history(current, history) do
@@ -1510,7 +1492,7 @@ defmodule Finitomata do
               {:noreply, State.t()}
               | {:noreply, State.t(), :hibernate}
               | {:stop, :normal, State.t()}
-      defp transit({event, payload}, state) do
+      defp transit({event, payload}, %State{} = state) do
         with {:responds, true} <-
                {:responds, Transition.responds?(@__config__.fsm, state.current, event)},
              {:on_exit, :ok} <- {:on_exit, safe_on_exit(state.current, state)},
@@ -1520,7 +1502,7 @@ defmodule Finitomata do
              {:allowed, true} <-
                {:allowed, Transition.allowed?(@__config__.fsm, state.current, new_current)},
              new_history = history(state.current, state.history),
-             state = %State{
+             state = %{
                state
                | payload: new_payload,
                  current: new_current,
@@ -1563,7 +1545,7 @@ defmodule Finitomata do
             if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
 
           err ->
-            state = %State{state | last_error: %{state: state.current, event: event, error: err}}
+            state = %{state | last_error: %{state: state.current, event: event, error: err}}
 
             cond do
               event in @__config_soft_events__ ->
@@ -1586,7 +1568,7 @@ defmodule Finitomata do
       @spec fork(Transition.state(), State.t()) ::
               {:noreply, State.t()}
               | {:noreply, State.t(), :hibernate}
-      defp fork(fork_state, state) do
+      defp fork(fork_state, %State{} = state) do
         fork_data =
           case state.payload do
             %{fork_data: %{} = fork_data} -> fork_data
@@ -1633,7 +1615,7 @@ defmodule Finitomata do
       @impl GenServer
       @doc false
       if @__config__.timer do
-        def handle_info(:on_timer, state) do
+        def handle_info(:on_timer, %State{} = state) do
           state.current
           |> safe_on_timer(state)
           |> case do
@@ -1644,18 +1626,18 @@ defmodule Finitomata do
               if @__config__.cache_state,
                 do: :persistent_term.put({Finitomata, state.name}, state_payload)
 
-              state = %State{state | payload: state_payload}
+              state = %{state | payload: state_payload}
               if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
 
             {:transition, {event, event_payload}, state_payload} ->
-              transit({event, event_payload}, %State{state | payload: state_payload})
+              transit({event, event_payload}, %{state | payload: state_payload})
 
             {:transition, event, state_payload} ->
-              transit({event, nil}, %State{state | payload: state_payload})
+              transit({event, nil}, %{state | payload: state_payload})
 
             {:reschedule, value} ->
               timer = with {ref, _old_value} <- state.timer, do: {ref, value}
-              state = %State{state | timer: timer}
+              state = %{state | timer: timer}
               if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
 
             weird ->
@@ -1664,7 +1646,7 @@ defmodule Finitomata do
           end
           |> then(fn
             {:noreply, %State{timer: timer} = state} ->
-              state = %State{state | timer: safe_init_timer(timer)}
+              state = %{state | timer: safe_init_timer(timer)}
               if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
 
             other ->
@@ -1672,7 +1654,7 @@ defmodule Finitomata do
           end)
         end
       else
-        def handle_info(:on_timer, state) do
+        def handle_info(:on_timer, %State{} = state) do
           Logger.warning(
             "[⚑ ↹] on_timer message received, but no `on_timer/2` callback is declared"
           )

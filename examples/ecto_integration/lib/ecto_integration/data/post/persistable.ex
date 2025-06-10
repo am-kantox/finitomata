@@ -7,7 +7,7 @@ defimpl Finitomata.Persistency.Persistable, for: EctoIntegration.Data.Post do
 
   alias EctoIntegration.{Data.Post, Data.Post.EventLog, Repo}
 
-  def load(%Post{id: id} = data) do
+  def load(%Post{id: id} = data, _opts \\ []) do
     Post
     |> Repo.get(id)
     |> case do

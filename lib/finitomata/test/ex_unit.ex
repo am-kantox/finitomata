@@ -294,10 +294,7 @@ defmodule Finitomata.ExUnit do
   ```
   """
   @dialyzer {:no_return, {:assert_state, 1}}
-  @spec assert_state(state :: Finitomata.Transition.state()) :: any()
   @dialyzer {:no_return, {:assert_state, 2}}
-  @spec assert_state(state :: Finitomata.Transition.state(), do_block :: [{:do, Macro.t()}]) ::
-          any()
   def assert_state(state, do_block \\ []) do
     _ = state
     _ = do_block

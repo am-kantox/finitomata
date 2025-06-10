@@ -131,13 +131,17 @@ defmodule Finitomata.Throttler do
     name
     |> producer()
     |> GenStage.call({:add, request}, timeout)
-    |> then(
-      &%Finitomata.Throttler{
-        &1
+    |> then(fn %Finitomata.Throttler{} = throttler ->
+      %{
+        throttler
         | duration:
-            DateTime.diff(DateTime.utc_now(@utc_now_truncate_to), &1.duration, :microsecond)
+            DateTime.diff(
+              DateTime.utc_now(@utc_now_truncate_to),
+              throttler.duration,
+              :microsecond
+            )
       }
-    )
+    end)
   end
 
   @doc false

@@ -15,7 +15,7 @@ defprotocol Finitomata.Persistency.Persistable do
   @fallback_to_any false
 
   @doc "Loads the entity from some external storage"
-  def load(data)
+  def load(data, opts \\ [])
 
   @doc "Persists the transitioned entity to some external storage"
   def store(data, info)
@@ -38,14 +38,18 @@ defimpl Finitomata.Persistency.Persistable,
     Port,
     Reference
   ] do
-  def load(data) do
+  @dialyzer {:no_return, {:load, 1}}
+  @dialyzer {:no_return, {:load, 2}}
+  def load(data, _opts \\ []) do
     raise Protocol.UndefinedError, protocol: __MODULE__, value: data
   end
 
+  @dialyzer {:no_return, {:store, 2}}
   def store(data, _info) do
     raise Protocol.UndefinedError, protocol: __MODULE__, value: data
   end
 
+  @dialyzer {:no_return, {:store_error, 3}}
   def store_error(data, _reason, _info) do
     raise Protocol.UndefinedError, protocol: __MODULE__, value: data
   end
@@ -54,10 +58,10 @@ end
 defimpl Finitomata.Persistency.Persistable, for: Tuple do
   alias Finitomata.Persistency.Persistable, as: Proto
 
-  def load({module, fields}) when is_list(fields),
-    do: load({module, Map.new(fields)})
+  def load({module, fields}, opts) when is_list(fields),
+    do: load({module, Map.new(fields)}, opts)
 
-  def load({module, fields}) when is_map(fields) do
+  def load({module, fields}, opts) when is_map(fields) do
     defines_struct? = fn module ->
       :functions
       |> module.__info__()
@@ -65,13 +69,17 @@ defimpl Finitomata.Persistency.Persistable, for: Tuple do
       |> Keyword.values() == [0, 1]
     end
 
-    with {:module, true} <- {:module, Code.ensure_loaded?(module)},
+    with {:module, ^module} <- Code.ensure_compiled(module),
          {:struct, true} <- {:struct, defines_struct?.(module)},
          %^module{} = result <- struct(module, fields),
          impl when not is_nil(impl) <- Proto.impl_for(result) do
       case result do
-        %^module{id: _id} -> Proto.load(result)
-        _ -> impl.load({fields.id, result})
+        %^module{id: _id} ->
+          Proto.load(result, opts)
+
+        %^module{} ->
+          id = Keyword.get_lazy(opts, :id, fn -> Map.get(fields, :id) end)
+          impl.load(result, id: id)
       end
     else
       {:struct, false} -> Proto.load({module, fields})

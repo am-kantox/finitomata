@@ -33,9 +33,7 @@ defimpl Finitomata.Persistency.Persistable, for: Finitomata.Test.Persistency do
   @moduledoc false
   require Logger
 
-  def load({{:via, _, _}, data}), do: load(data)
-
-  def load(data) do
+  def load(data, _opts \\ []) do
     Logger.debug("[♻️] Load: " <> inspect(data))
     {:loaded, {:started, data}}
   end

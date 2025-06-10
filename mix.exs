@@ -39,7 +39,6 @@ defmodule Finitomata.MixProject do
       compilers: compilers(Mix.env()),
       elixirc_paths: elixirc_paths(Mix.env()),
       prune_code_paths: Mix.env() == :prod,
-      preferred_cli_env: [{:"enfiladex.suite", :test}],
       consolidate_protocols: Mix.env() not in [:dev, :test],
       description: description(),
       package: package(),
@@ -64,6 +63,10 @@ defmodule Finitomata.MixProject do
       mod: {Finitomata.Application, []},
       extra_applications: [:logger]
     ]
+  end
+
+  def cli do
+    [preferred_envs: ["enfiladex.suite": :test]]
   end
 
   defp deps do

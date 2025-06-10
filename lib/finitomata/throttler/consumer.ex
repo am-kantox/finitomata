@@ -98,10 +98,10 @@ defmodule Finitomata.Throttler.Consumer do
 
       case from do
         {pid, _alias_ref} when is_pid(pid) ->
-          GenStage.reply(from, %Throttler{throttler | result: result})
+          GenStage.reply(from, %{throttler | result: result})
 
         nil ->
-          Throttler.debug(%Throttler{throttler | result: result}, label: "Malformed owner")
+          Throttler.debug(%{throttler | result: result}, label: "Malformed owner")
       end
     end)
   end

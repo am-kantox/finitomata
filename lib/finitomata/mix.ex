@@ -37,7 +37,9 @@ defmodule Finitomata.Mix do
     File.write!(path, :erlang.term_to_binary(data))
   end
 
-  defp load_app_recursive(app_name, visited \\ MapSet.new()) do
+  defp load_app_recursive(app_name, visited \\ nil) do
+    visited = with nil <- visited, do: MapSet.new()
+
     if MapSet.member?(visited, app_name) do
       visited
     else
