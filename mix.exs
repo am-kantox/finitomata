@@ -28,7 +28,7 @@ defmodule Finitomata.MixProject do
                  else: [{:enfiladex, "~> 0.1", only: [:dev, :test, :finitomata]}]
 
   @app :finitomata
-  @version "0.34.0"
+  @version "0.35.0"
 
   def lib?(lib), do: lib in Enum.map(@modern_libs, &elem(&1, 0))
 
