@@ -150,7 +150,7 @@ defmodule Mix.Tasks.Compile.Finitomata do
       when is_atom(f) and is_atom(e) ->
         {:halt, %{acc | implicit: [{from, {event, tos, hook}} | acc.implicit]}}
 
-      %Hook{args: args, guards: guards} = hook, acc ->
+      %Hook{args: args, guards: [_ | _] = guards} = hook, acc ->
         {:cont, cover(args, {from, {event, tos, hook}}, guards, acc)}
 
       %Hook{}, acc ->

@@ -14,8 +14,8 @@ defprotocol Finitomata.Persistency.Persistable do
 
   @fallback_to_any false
 
-  @doc "Loads the entity from some external storage"
-  def load(data, opts \\ [])
+  @doc "Loads the entity from some external storage with opts"
+  def load(data, opts)
 
   @doc "Persists the transitioned entity to some external storage"
   def store(data, info)
@@ -58,6 +58,8 @@ end
 defimpl Finitomata.Persistency.Persistable, for: Tuple do
   alias Finitomata.Persistency.Persistable, as: Proto
 
+  def load(any), do: load(any, [])
+
   def load({module, fields}, opts) when is_list(fields),
     do: load({module, Map.new(fields)}, opts)
 
@@ -82,14 +84,16 @@ defimpl Finitomata.Persistency.Persistable, for: Tuple do
           impl.load(result, id: id)
       end
     else
-      {:struct, false} -> Proto.load({module, fields})
+      {:struct, false} -> Proto.load({module, fields}, opts)
       _ -> {:unknown, nil}
     end
   end
 
-  def load({module, loader}) when is_function(loader, 1) do
-    loader.(module)
-  end
+  def load({module, loader}, _opts) when is_function(loader, 1),
+    do: loader.(module)
+
+  def load({module, loader}, opts) when is_function(loader, 2),
+    do: loader.(module, opts)
 
   def store({data, storer}, info) when is_function(storer, 2) do
     storer.(data, info)

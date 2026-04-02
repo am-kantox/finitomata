@@ -1269,10 +1269,34 @@ defmodule Finitomata do
         lifecycle = Map.get(init_arg, :lifecycle, :unknown)
         {state, init_arg} = Map.pop(init_arg, :state)
 
+        # @spec safe_on_start(state :: :loaded | State.t(), payload :: State.payload()) ::
+        #         {:stop, term()}
+        #         | {:continue, State.payload()}
+        #         | {:ok, State.payload()}
+        #         | :ignore
+        # @telemetria level: telemetria_levels[:on_start],
+        #             group: __MODULE__,
+        #             if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_start)
+        safe_on_start = fn
+          :loaded, payload ->
+            {:ok, payload}
+
+          _state, payload ->
+            try do
+              if function_exported?(__MODULE__, :on_start, 1),
+                do: apply(__MODULE__, :on_start, [payload]),
+                else: :ignore
+            rescue
+              err ->
+                report_error(err, "on_start/1")
+                {:stop, err}
+            end
+        end
+
         init_state =
           if is_nil(state) or lifecycle in [:failed, :created] do
             init_arg
-            |> safe_on_start(payload)
+            |> safe_on_start.(payload)
             |> case do
               {:stop, reason} -> {:stop, :on_start, reason}
               {:ok, payload} -> {nil, payload}
@@ -1796,27 +1820,6 @@ defmodule Finitomata do
         end
       rescue
         err -> report_error(err, "on_exit/2")
-      end
-
-      @spec safe_on_start(state :: :loaded | State.t(), payload :: State.payload()) ::
-              {:stop, term()}
-              | {:continue, State.payload()}
-              | {:ok, State.payload()}
-              | :ignore
-      @telemetria level: telemetria_levels[:on_start],
-                  group: __MODULE__,
-                  if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_start)
-      defp safe_on_start(state, payload)
-      defp safe_on_start(:loaded, payload), do: {:ok, payload}
-
-      defp safe_on_start(_state, payload) do
-        if function_exported?(__MODULE__, :on_start, 1),
-          do: apply(__MODULE__, :on_start, [payload]),
-          else: :ignore
-      rescue
-        err ->
-          report_error(err, "on_start/1")
-          {:stop, err}
       end
 
       @spec safe_on_terminate(State.t()) :: :ok

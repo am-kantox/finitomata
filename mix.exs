@@ -13,6 +13,8 @@ defmodule Finitomata.MixProject do
     catch
       :error, _ -> major
     end
+    |> String.split("-")
+    |> hd()
     |> String.split(".")
     |> case do
       [major] -> [major, 0, 0]
