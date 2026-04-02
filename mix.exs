@@ -132,7 +132,7 @@ defmodule Finitomata.MixProject do
       logo: "stuff/#{@app}-48x48.png",
       source_url: "https://github.com/am-kantox/#{@app}",
       assets: %{"stuff/images" => "assets"},
-      extras: ~w[README.md stuff/fsm.md stuff/compiler.md],
+      extras: ~w[README.md stuff/fsm.md stuff/compiler.md stuff/cheatsheet.md],
       groups_for_modules: [
         FSM: [Finitomata, Infinitomata, Finitomata.Flow],
         Test: [Finitomata.ExUnit],
