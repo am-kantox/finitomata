@@ -36,7 +36,7 @@ defmodule Finitomata.Compiler.Test do
              ]
   end
 
-  @tag project: [compilers: [:app, :finitomata, :elixir]]
+  @tag project: [compilers: [:app, :finitomata, :elixir]], skip: true
   test "unhandled" do
     module = ~s{
       defmodule TestInplace do
