@@ -1116,13 +1116,13 @@ defmodule Finitomata do
         loops: Transition.loops(fsm),
         entry: Transition.entry(:transition, fsm).event,
         hard: hard,
+        hard_states: Keyword.keys(hard),
         soft: soft,
+        soft_events: Enum.map(soft, & &1.event),
+        fork_states: Keyword.keys(forks),
         timer: timer
       }
       @__config_keys__ Map.keys(@__config__)
-      @__config_soft_events__ Enum.map(soft, & &1.event)
-      @__config_hard_states__ Keyword.keys(hard)
-      @__config_fork_states__ Keyword.keys(forks)
 
       if @moduledoc != false do
         @moduledoc """
@@ -1385,21 +1385,11 @@ defmodule Finitomata do
 
       defp put_current_state_if_loaded(state, _, _fsm_state), do: state
 
-      # Append `:hibernate` to a `GenServer` reply/noreply tuple when the FSM is
-      #   configured to hibernate between messages, collapsing the otherwise
-      #   duplicated `%State{hibernate: false}` and catch-all clauses.
-      @spec hibernate_noreply(State.t()) ::
-              {:noreply, State.t()} | {:noreply, State.t(), :hibernate}
-      defp hibernate_noreply(%State{hibernate: false} = state), do: {:noreply, state}
-      defp hibernate_noreply(%State{} = state), do: {:noreply, state, :hibernate}
-
-      @spec hibernate_reply(term(), State.t()) ::
-              {:reply, term(), State.t()} | {:reply, term(), State.t(), :hibernate}
-      defp hibernate_reply(reply, %State{hibernate: false} = state),
-        do: {:reply, reply, state}
-
-      defp hibernate_reply(reply, %State{} = state),
-        do: {:reply, reply, state, :hibernate}
+      # `:hibernate` and timer helpers live in `Finitomata.Engine` (shared, testable); these
+      #   shims keep the call sites in the generated code unchanged. They run in the FSM
+      #   process, so `self()` inside the Engine helpers still refers to this FSM.
+      defp hibernate_noreply(state), do: Finitomata.Engine.hibernate_noreply(state)
+      defp hibernate_reply(reply, state), do: Finitomata.Engine.hibernate_reply(reply, state)
 
       @doc false
       @impl GenServer
@@ -1515,134 +1505,13 @@ defmodule Finitomata do
       defp history(current, history), do: Finitomata.Engine.history(current, history)
       defp event_payload(event), do: Finitomata.Engine.event_payload(event)
 
-      @spec transit({Transition.event(), Finitomata.event_payload()}, State.t()) ::
-              {:noreply, State.t()}
-              | {:noreply, State.t(), :hibernate}
-              | {:stop, :normal, State.t()}
-      defp transit({event, payload}, %State{} = state) do
-        with {:responds, true} <-
-               {:responds, Transition.responds?(@__config__.fsm, state.current, event)},
-             {:on_exit, :ok} <- {:on_exit, safe_on_exit(state.current, state)},
-             {:ok, new_current, new_payload} <-
-               safe_on_transition(state.name, state.current, event, payload, state.payload),
-             new_timer <- safe_cancel_timer(state.timer),
-             {:allowed, true} <-
-               {:allowed, Transition.allowed?(@__config__.fsm, state.current, new_current)},
-             new_history = history(state.current, state.history),
-             state = %{
-               state
-               | payload: new_payload,
-                 current: new_current,
-                 history: new_history,
-                 timer: safe_init_timer(new_timer)
-             },
-             {:on_enter, :ok} <- {:on_enter, safe_on_enter(new_current, state)} do
-          if @__config__.cache_state,
-            do: Finitomata.StateCache.put(state.finitomata_id, state.name, state.payload)
+      # `transit/2` and `fork/2` orchestration now lives in `Finitomata.Engine`; these shims
+      #   keep the generated `handle_continue`/`on_timer` call sites unchanged.
+      defp transit(event_payload, %State{} = state),
+        do: Finitomata.Engine.transit(__MODULE__, event_payload, state)
 
-          case new_current do
-            :* ->
-              {:stop, :normal, state}
-
-            hard when hard in @__config_hard_states__ ->
-              {:noreply, state,
-               {:continue, {:transition, event_payload(@__config__.hard[hard].event)}}}
-
-            fork when fork in @__config_fork_states__ ->
-              {:noreply, state, {:continue, {:fork, fork}}}
-
-            _ ->
-              hibernate_noreply(state)
-          end
-        else
-          {err, false} ->
-            Logger.warning(
-              "[⚐ ↹] transition from #{state.current} with #{event} does not exists or not allowed (:#{err})"
-            )
-
-            safe_on_failure(event, payload, state)
-            hibernate_noreply(state)
-
-          {err, :ok} ->
-            Logger.warning("[⚐ ↹] callback failed to return `:ok` (:#{err})")
-            safe_on_failure(event, payload, state)
-            hibernate_noreply(state)
-
-          err ->
-            state = %{
-              state
-              | last_error:
-                  Finitomata.Error.wrap(err,
-                    state: state.current,
-                    event: event,
-                    event_payload: payload
-                  )
-            }
-
-            cond do
-              event in @__config_soft_events__ ->
-                Logger.debug("[⚐ ↹] transition softly failed " <> inspect(err))
-                hibernate_noreply(state)
-
-              @__config__.fsm
-              |> Transition.allowed(state.current, event)
-              |> Enum.all?(&(&1 in @__config__.ensure_entry)) ->
-                {:noreply, state, {:continue, {:transition, event_payload({event, payload})}}}
-
-              true ->
-                Logger.warning("[⚐ ↹] transition failed " <> inspect(err))
-                safe_on_failure(event, payload, state)
-                hibernate_noreply(state)
-            end
-        end
-      end
-
-      @spec fork(Transition.state(), State.t()) ::
-              {:noreply, State.t()}
-              | {:noreply, State.t(), :hibernate}
-      defp fork(fork_state, %State{} = state) do
-        fork_data =
-          case state.payload do
-            %{fork_data: %{} = fork_data} -> fork_data
-            _ -> %{}
-          end
-
-        {object, fork_data} = Map.pop(fork_data, :object)
-        {id, fork_data} = Map.pop(fork_data, :id)
-
-        @__config__.forks
-        |> Keyword.fetch!(fork_state)
-        |> List.wrap()
-        |> safe_on_fork(fork_state, state)
-        |> case do
-          {:ok, fork_impl, event} ->
-            fsm_name = Finitomata.fsm_name(state)
-
-            Finitomata.start_fsm(
-              state.finitomata_id,
-              fork_impl,
-              {:fork, fork_state, fsm_name},
-              %{
-                owner: %{
-                  event: event,
-                  id: state.finitomata_id,
-                  name: fsm_name,
-                  pid: Finitomata.pid(state)
-                },
-                history: %{current: 0, steps: []},
-                steps: %{passed: 0, left: Transition.steps_handled(fork_impl.__config__(:fsm))},
-                object: object,
-                id: id,
-                data: fork_data
-              }
-            )
-
-          {:error, error} ->
-            Logger.warning("[⚐ ↹] fork from #{fork_state} failed (#{inspect(error)})")
-        end
-
-        hibernate_noreply(state)
-      end
+      defp fork(fork_state, %State{} = state),
+        do: Finitomata.Engine.fork(__MODULE__, fork_state, state)
 
       @impl GenServer
       @doc false
@@ -1692,28 +1561,10 @@ defmodule Finitomata do
         end
       end
 
-      @spec safe_cancel_timer(false | {reference(), pos_integer()}) ::
-              false | {nil, pos_integer()}
+      defp safe_cancel_timer(timer), do: Finitomata.Engine.safe_cancel_timer(timer)
+      defp safe_init_timer(timer), do: Finitomata.Engine.safe_init_timer(timer)
 
-      defp safe_cancel_timer({ref, timer}) when is_integer(timer) and timer > 0 do
-        if is_reference(ref), do: Process.cancel_timer(ref, async: true, info: false)
-        {nil, timer}
-      end
-
-      defp safe_cancel_timer(_false), do: false
-
-      @spec safe_init_timer(false | {nil | reference(), pos_integer()}) ::
-              false | {reference(), pos_integer()}
-      defp safe_init_timer(timer) do
-        case safe_cancel_timer(timer) do
-          {nil, timer} when is_integer(timer) and timer > 0 ->
-            {Process.send_after(self(), :on_timer, timer), timer}
-
-          _ ->
-            false
-        end
-      end
-
+      @doc false
       @spec safe_on_transition(
               Finitomata.fsm_name(),
               Transition.state(),
@@ -1727,21 +1578,32 @@ defmodule Finitomata do
       @telemetria level: telemetria_levels[:on_transition],
                   group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_transition)
-      defp safe_on_transition(name, current, event, event_payload, state_payload) do
+      def safe_on_transition(name, current, event, event_payload, state_payload) do
         current
         |> on_transition(event, event_payload, state_payload)
-        |> maybe_store(name, current, event, event_payload, state_payload)
-        |> tap(&maybe_pubsub(&1, name))
+        |> then(
+          &Finitomata.Engine.maybe_store(
+            __MODULE__,
+            &1,
+            name,
+            current,
+            event,
+            event_payload,
+            state_payload
+          )
+        )
+        |> tap(&Finitomata.Engine.maybe_pubsub(__MODULE__, &1, name))
       rescue
         err -> report_error(err, "on_transition/4")
       end
 
+      @doc false
       @spec safe_on_fork([module()], Transition.state(), State.t()) ::
               {:ok, module(), Transition.event()} | {:error, any()}
       @telemetria level: telemetria_levels[:on_fork],
                   group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_fork)
-      defp safe_on_fork(forks, fork_state, state) do
+      def safe_on_fork(forks, fork_state, state) do
         cond do
           function_exported?(__MODULE__, :on_fork, 2) ->
             case apply(__MODULE__, :on_fork, [fork_state, state.payload]) do
@@ -1775,11 +1637,12 @@ defmodule Finitomata do
           {:error, :on_fork_raised}
       end
 
+      @doc false
       @spec safe_on_failure(Transition.event(), Finitomata.event_payload(), State.t()) :: :ok
       @telemetria level: telemetria_levels[:on_failure],
                   group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_failure)
-      defp safe_on_failure(event, event_payload, state_payload) do
+      def safe_on_failure(event, event_payload, state_payload) do
         if function_exported?(__MODULE__, :on_failure, 3) do
           with other when other != :ok <-
                  apply(__MODULE__, :on_failure, [event, event_payload, state_payload]) do
@@ -1793,11 +1656,12 @@ defmodule Finitomata do
         err -> report_error(err, "on_failure/3")
       end
 
+      @doc false
       @spec safe_on_enter(Transition.state(), State.t()) :: :ok
       @telemetria level: telemetria_levels[:on_enter],
                   group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_enter)
-      defp safe_on_enter(state, state_payload) do
+      def safe_on_enter(state, state_payload) do
         if function_exported?(__MODULE__, :on_enter, 2) do
           with other when other != :ok <- apply(__MODULE__, :on_enter, [state, state_payload]) do
             Logger.info("[♻️] Unexpected return from a callback [#{inspect(other)}], must be :ok")
@@ -1810,11 +1674,12 @@ defmodule Finitomata do
         err -> report_error(err, "on_enter/2")
       end
 
+      @doc false
       @spec safe_on_exit(Transition.state(), State.t()) :: :ok
       @telemetria level: telemetria_levels[:on_exit],
                   group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_exit)
-      defp safe_on_exit(state, state_payload) do
+      def safe_on_exit(state, state_payload) do
         if function_exported?(__MODULE__, :on_exit, 2) do
           with other when other != :ok <- apply(__MODULE__, :on_exit, [state, state_payload]) do
             Logger.info("[♻️] Unexpected return from a callback [#{inspect(other)}], must be :ok")
@@ -1863,103 +1728,6 @@ defmodule Finitomata do
           err -> report_error(err, "on_timer/2")
         end
       end
-
-      @spec maybe_store(
-              Finitomata.transition_resolution(),
-              Finitomata.fsm_name(),
-              Transition.state(),
-              Transition.event(),
-              Finitomata.event_payload(),
-              State.payload()
-            ) :: Finitomata.transition_resolution()
-      case @__config__.persistency do
-        nil ->
-          defp maybe_store(result, _, _, _, _, _), do: result
-
-        module when is_atom(module) ->
-          defp maybe_store(
-                 {:error, reason},
-                 name,
-                 current,
-                 event,
-                 event_payload,
-                 state_payload
-               ) do
-            with true <- function_exported?(@__config__.persistency, :store_error, 4),
-                 info = %{
-                   from: current,
-                   to: nil,
-                   event: event,
-                   event_payload: event_payload,
-                   object: state_payload
-                 },
-                 {:error, persistency_error_reason} <-
-                   @__config__.persistency.store_error(name, state_payload, reason, info) do
-              {:error, transition: reason, persistency: persistency_error_reason}
-            else
-              _ ->
-                {:error, transition: reason}
-            end
-          end
-
-          defp maybe_store(
-                 {:ok, new_state, new_state_payload} = result,
-                 name,
-                 current,
-                 event,
-                 event_payload,
-                 state_payload
-               ) do
-            info = %{
-              from: current,
-              to: new_state,
-              event: event,
-              event_payload: event_payload,
-              object: state_payload
-            }
-
-            name
-            |> @__config__.persistency.store(new_state_payload, info)
-            |> case do
-              :ok -> result
-              {:ok, updated_state_payload} -> {:ok, new_state, updated_state_payload}
-              {:error, reason} -> {:error, persistency: reason}
-            end
-          end
-
-          defp maybe_store(result, _, _, _, _, _) do
-            {:error, transition: result}
-          end
-      end
-
-      @spec maybe_pubsub(Finitomata.transition_resolution(), Finitomata.fsm_name()) :: :ok
-      cond do
-        is_nil(@__config__.listener) ->
-          :ok
-
-        is_atom(@__config__.listener) and
-            function_exported?(@__config__.listener, :after_transition, 3) ->
-          defp maybe_pubsub({:ok, state, payload}, name) do
-            with some when some != :ok <-
-                   @__config__.listener.after_transition(name, state, payload) do
-              Logger.warning(
-                "[♻️] Listener ‹" <>
-                  inspect(Function.capture(@__config__.listener, :after_transition, 3)) <>
-                  "› returned unexpected ‹" <>
-                  inspect(some) <>
-                  "› when called with ‹" <> inspect([name, state, payload]) <> "›"
-              )
-            end
-          end
-
-        is_pid(@__config__.listener) or is_port(@__config__.listener) or
-          is_atom(@__config__.listener) or is_tuple(@__config__.listener) ->
-          defp maybe_pubsub({:ok, state, payload}, name) do
-            send(@__config__.listener, {:finitomata, {:transition, state, payload}})
-          end
-      end
-
-      defp maybe_pubsub(_, _), do: :ok
 
       @behaviour Finitomata
     end
