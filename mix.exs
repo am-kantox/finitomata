@@ -28,7 +28,7 @@ defmodule Finitomata.MixProject do
                  else: [{:enfiladex, "~> 0.1", only: [:dev, :test, :finitomata]}]
 
   @app :finitomata
-  @version "0.35.0"
+  @version "0.36.0"
 
   def lib?(lib), do: lib in Enum.map(@modern_libs, &elem(&1, 0))
 
@@ -56,7 +56,12 @@ defmodule Finitomata.MixProject do
         plt_add_apps: [:mix],
         list_unused_filters: true,
         ignore_warnings: ".dialyzer/ignore.exs"
-      ]
+      ],
+      # `--cover` is informational: the test suites are split (standard, distributed,
+      #   `:finitomata`, examples) and each exercises different code paths, so a single
+      #   run must not gate on the partial number. Raise the `summary` threshold only with
+      #   cross-suite aggregation.
+      test_coverage: [summary: [threshold: 0]]
     ]
   end
 
@@ -95,7 +100,7 @@ defmodule Finitomata.MixProject do
 
   defp aliases do
     [
-      test: ["test --exclude distributed", "test --exclude test include distributed"],
+      test: ["test --exclude distributed", "test --exclude test --include distributed"],
       quality: ["format", "credo --strict", "dialyzer --unmatched_returns"],
       "quality.ci": [
         "format --check-formatted",

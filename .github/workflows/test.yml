@@ -37,10 +37,11 @@ jobs:
       - name: "Start empd"
         run: |
           epmd -daemon
-      - name: "Compile and Test Library"
+      - name: "Compile and Test Library (with coverage)"
         run: |
           mix do deps.get, deps.compile, compile
-          mix test --exclude distributed --exclude finitomata
+          mix format --check-formatted
+          mix test --cover --exclude distributed --exclude finitomata
           mix test --exclude test --include distributed
       - name: "Test Library with itself in :finitomata env"
         run: |

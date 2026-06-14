@@ -9,7 +9,7 @@ defmodule Finitomata.Cache do
 
   The use-case for this implementation would be somewhat like a self-updated local replica
     of the remote data. Unlike typical cache implementations, this one might keep the cached
-    values up-to-date, configured by `ttl:` argument. Bsaed on processes (backed by `Finitomata`,)
+    values up-to-date, configured by `ttl:` argument. Based on processes (backed by `Finitomata`,)
     this implementation updates itself periodically, making the value retrieval almost instant.
 
   Consider a remote service supplying currency exchange rates by polling. One might instruct
@@ -24,7 +24,7 @@ defmodule Finitomata.Cache do
       [id: MyCache, ttl: 60_000, live?: true, type: Infinitomata, getter: &MyMod.getter/1]]}
   ```
 
-  Once the supervisor is started, the values might be retrieven as
+  Once the supervisor is started, the values might be retrieved as
 
   ```elixir
     Finitomata.Cache.get(MyCache, :my_key_1, live?: false) # use default getter

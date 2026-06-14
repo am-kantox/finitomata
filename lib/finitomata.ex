@@ -111,7 +111,8 @@ defmodule Finitomata do
       required: false,
       type: :boolean,
       default: Application.compile_env(:finitomata, :cache_state, true),
-      doc: "When `true`, the FSM state is cached in `:persistent_term`"
+      doc:
+        "When `true`, the FSM payload is cached for fast `state/3` reads (see `Finitomata.StateCache`; the backend defaults to `:ets` and is configurable via `config :finitomata, :cache_backend`)"
     ],
     hibernate: [
       required: false,
@@ -179,7 +180,7 @@ defmodule Finitomata do
   > - inject default implementations of optional callbacks specified with
   >   `impl_for:` keyword argument (default: `:all`)
   > - expose a bunch of functions to query _FSM_ which would be visible in docs
-  > - leaves `on_transition/4` mandatory callback to be implemeneted by
+  > - leaves `on_transition/4` mandatory callback to be implemented by
   >   the calling module and injects `before_compile` callback to validate
   >   the implementation (this option required `:finitomata` to be included
   >   in the list of compilers in `mix.exs`)
@@ -231,7 +232,7 @@ defmodule Finitomata do
 
   - `c:Finitomata.on_start/1` — returning anything but `:ignore` amends the inner state
     to the value returned (it might be `{:continue | :ok, Finitomata.State.payload()}`)
-  - `c:Finitomata.on_timer/2` — when `:ok` or `{:rescedule, non_neg_integer()}` is returned,
+  - `c:Finitomata.on_timer/2` — when `:ok` or `{:reschedule, non_neg_integer()}` is returned,
     this callback is pure, it’s potentially mutating otherwise
   - `c:Finitomata.on_transition/4` — as the main driving callback of the _FSM_, it’s
     definitively mutating, unless errored
@@ -351,9 +352,8 @@ defmodule Finitomata do
     @typedoc "The parent process for this particular FSM implementation"
     @type parent :: nil | pid()
 
-    @typedoc "The map that holds last error which happened on transition (at given state and event)."
-    @type last_error ::
-            %{state: Transition.state(), event: Transition.event(), error: any()} | nil
+    @typedoc "The last error which happened on transition; see `Finitomata.Error`."
+    @type last_error :: Finitomata.Error.t() | nil
 
     @typedoc "The internal representation of the FSM state"
     @type t :: %{
@@ -406,6 +406,15 @@ defmodule Finitomata do
     @doc false
     def errored?(%State{last_error: nil}), do: false
 
+    def errored?(%State{
+          last_error: %Finitomata.Error{reason: reason, state: state, event: event}
+        })
+        when is_atom(reason) and not is_nil(reason),
+        do: [{reason, %{state: state, event: event}}]
+
+    def errored?(%State{last_error: %Finitomata.Error{reason: reason}}), do: reason
+
+    # legacy shapes for states persisted before `Finitomata.Error` existed
     def errored?(%State{last_error: %{error: {:error, kind}} = error}),
       do: [{kind, Map.delete(error, :error)}]
 
@@ -474,6 +483,15 @@ defmodule Finitomata do
 
   @doc """
   This callback will be called from each transition processor.
+
+  > #### Auto-driven transitions reshape the payload {: .info}
+  >
+  > For transitions initiated by `Finitomata` itself — the initial entry transition,
+  > _hard_ (banged, e.g. `start!`) transitions, and `ensure_entry` retries — the
+  > `event_payload` is normalized into a map carrying a `__retries__` counter
+  > (a non-map payload `p` becomes `%{payload: p, __retries__: n}`). Handlers matching
+  > on those events should account for this shape. Payloads passed to a manual
+  > `transition/4` call are delivered to `on_transition/4` unchanged.
   """
   @callback on_transition(
               current_state :: Transition.state(),
@@ -582,6 +600,19 @@ defmodule Finitomata do
     do: do_start_fsm(id, name, impl, payload)
 
   def start_fsm(id, ni1, ni2, payload) when is_atom(ni1) and is_atom(ni2) do
+    if Application.get_env(:finitomata, :warn_ambiguous_start_fsm, true) do
+      Logger.warning(
+        "[⚐ ↹] `start_fsm/4` got two atoms (" <>
+          inspect(ni1) <>
+          ", " <>
+          inspect(ni2) <>
+          "); the name/implementation order is being guessed by probing which one is a " <>
+          "loadable module. This legacy disambiguation is deprecated and will be removed in " <>
+          "v1.0.0 — pass a non-atom FSM name (e.g. a string) to avoid the ambiguity, or set " <>
+          "`config :finitomata, warn_ambiguous_start_fsm: false` to silence this warning."
+      )
+    end
+
     case {Code.ensure_loaded?(ni1), Code.ensure_loaded?(ni2)} do
       {true, false} -> do_start_fsm(id, ni2, ni1, payload)
       {_, true} -> do_start_fsm(id, ni1, ni2, payload)
@@ -716,21 +747,23 @@ defmodule Finitomata do
       do: state(nil, target, reload?)
 
   def state(id, target, reload?),
-    do: id |> fqn(target) |> do_state(reload?)
+    do: do_state(id, fqn(id, target), reload?)
 
   @spec do_state(
+          id :: Finitomata.id(),
           fqn :: GenServer.name(),
           reload? :: :cached | :payload | :state | :full | (State.t() -> any())
         ) ::
           nil | State.t() | State.payload() | any()
-  defp do_state(fqn, :cached), do: :persistent_term.get({Finitomata, fqn}, nil)
+  defp do_state(id, fqn, :cached), do: Finitomata.StateCache.get(id, fqn)
 
-  defp do_state(fqn, :payload),
-    do: do_state(fqn, :cached) || fqn |> do_state(:full) |> then(&(&1 && &1.payload))
+  defp do_state(id, fqn, :payload),
+    do: do_state(id, fqn, :cached) || id |> do_state(fqn, :full) |> then(&(&1 && &1.payload))
 
-  defp do_state(fqn, :state), do: do_state(fqn, :full).current
+  defp do_state(id, fqn, :state), do: do_state(id, fqn, :full).current
 
-  defp do_state(fqn, full_or_fun) when full_or_fun == :full or is_function(full_or_fun, 1) do
+  defp do_state(id, fqn, full_or_fun)
+       when full_or_fun == :full or is_function(full_or_fun, 1) do
     pid = GenServer.whereis(fqn)
 
     case {pid, is_pid(pid) and Process.alive?(pid), full_or_fun} do
@@ -743,7 +776,7 @@ defmodule Finitomata do
       {pid, _, :full} when is_pid(pid) ->
         pid
         |> GenServer.call(:state, 1_000)
-        |> tap(&if &1.cache_state, do: :persistent_term.put({Finitomata, fqn}, &1.payload))
+        |> tap(&if &1.cache_state, do: Finitomata.StateCache.put(id, fqn, &1.payload))
 
       {pid, _, fun} when is_pid(pid) and is_function(fun, 1) ->
         GenServer.call(pid, {:state, fun}, 1_000)
@@ -1339,7 +1372,7 @@ defmodule Finitomata do
           |> put_current_state_if_loaded(lifecycle, state)
 
         if @__config__.cache_state,
-          do: :persistent_term.put({Finitomata, state.name}, state.payload)
+          do: Finitomata.StateCache.put(state.finitomata_id, state.name, state.payload)
 
         if lifecycle == :loaded,
           do: {:ok, state},
@@ -1352,53 +1385,41 @@ defmodule Finitomata do
 
       defp put_current_state_if_loaded(state, _, _fsm_state), do: state
 
+      # Append `:hibernate` to a `GenServer` reply/noreply tuple when the FSM is
+      #   configured to hibernate between messages, collapsing the otherwise
+      #   duplicated `%State{hibernate: false}` and catch-all clauses.
+      @spec hibernate_noreply(State.t()) ::
+              {:noreply, State.t()} | {:noreply, State.t(), :hibernate}
+      defp hibernate_noreply(%State{hibernate: false} = state), do: {:noreply, state}
+      defp hibernate_noreply(%State{} = state), do: {:noreply, state, :hibernate}
+
+      @spec hibernate_reply(term(), State.t()) ::
+              {:reply, term(), State.t()} | {:reply, term(), State.t(), :hibernate}
+      defp hibernate_reply(reply, %State{hibernate: false} = state),
+        do: {:reply, reply, state}
+
+      defp hibernate_reply(reply, %State{} = state),
+        do: {:reply, reply, state, :hibernate}
+
       @doc false
       @impl GenServer
-      def handle_call(:state, _from, %State{hibernate: false} = state),
-        do: {:reply, state, state}
-
-      def handle_call(:state, _from, state), do: {:reply, state, state, :hibernate}
-
-      def handle_call({:state, fun}, _from, %State{hibernate: false} = state)
-          when is_function(fun, 1),
-          do: {:reply, fun.(state), state}
+      def handle_call(:state, _from, %State{} = state),
+        do: hibernate_reply(state, state)
 
       def handle_call({:state, fun}, _from, %State{} = state) when is_function(fun, 1),
-        do: {:reply, fun.(state), state, :hibernate}
-
-      def handle_call(:current_state, _from, %State{hibernate: false} = state),
-        do: {:reply, state.current, state}
+        do: hibernate_reply(fun.(state), state)
 
       def handle_call(:current_state, _from, %State{} = state),
-        do: {:reply, state.current, state, :hibernate}
-
-      def handle_call(:name, _from, %State{hibernate: false} = state),
-        do: {:reply, State.human_readable_name(state, false), state}
+        do: hibernate_reply(state.current, state)
 
       def handle_call(:name, _from, %State{} = state),
-        do: {:reply, State.human_readable_name(state, false), state, :hibernate}
-
-      def handle_call({:allowed?, to}, _from, %State{hibernate: false} = state),
-        do: {:reply, Transition.allowed?(@__config__.fsm, state.current, to), state}
+        do: hibernate_reply(State.human_readable_name(state, false), state)
 
       def handle_call({:allowed?, to}, _from, %State{} = state),
-        do: {:reply, Transition.allowed?(@__config__.fsm, state.current, to), state, :hibernate}
+        do: hibernate_reply(Transition.allowed?(@__config__.fsm, state.current, to), state)
 
-      def handle_call({:responds?, event}, _from, %State{hibernate: false} = state),
-        do: {:reply, Transition.responds?(@__config__.fsm, state.current, event), state}
-
-      def handle_call({:responds?, event}, _from, state) do
-        {:reply, Transition.responds?(@__config__.fsm, state.current, event), state, :hibernate}
-      end
-
-      def handle_call(whatever, _from, %State{hibernate: false} = state) do
-        Logger.error(
-          "Unexpected `GenServer.call/2` with a message ‹#{inspect(whatever)}›. " <>
-            "`Finitomata` does not accept direct calls. Please use `on_transition/4` callback instead."
-        )
-
-        {:reply, :not_allowed, state}
-      end
+      def handle_call({:responds?, event}, _from, %State{} = state),
+        do: hibernate_reply(Transition.responds?(@__config__.fsm, state.current, event), state)
 
       def handle_call(whatever, _from, %State{} = state) do
         Logger.error(
@@ -1406,7 +1427,7 @@ defmodule Finitomata do
             "`Finitomata` does not accept direct calls. Please use `on_transition/4` callback instead."
         )
 
-        {:reply, :not_allowed, state, :hibernate}
+        hibernate_reply(:not_allowed, state)
       end
 
       @doc false
@@ -1424,9 +1445,7 @@ defmodule Finitomata do
             safe_init_timer(state.timer)
           end
 
-        if state.hibernate,
-          do: {:noreply, %{state | timer: timer}, :hibernate},
-          else: {:noreply, %{state | timer: timer}}
+        hibernate_noreply(%{state | timer: timer})
       end
 
       def handle_cast(whatever, %State{} = state) do
@@ -1435,9 +1454,7 @@ defmodule Finitomata do
             "`Finitomata` does not accept direct casts. Please use `on_transition/4` callback instead."
         )
 
-        if state.hibernate,
-          do: {:noreply, state, :hibernate},
-          else: {:noreply, state}
+        hibernate_noreply(state)
       end
 
       @doc false
@@ -1450,7 +1467,10 @@ defmodule Finitomata do
 
       @doc false
       @impl GenServer
-      def terminate(reason, %State{} = state) do
+      def terminate(_reason, %State{} = state) do
+        if @__config__.cache_state,
+          do: Finitomata.StateCache.delete(state.finitomata_id, state.name)
+
         safe_on_terminate(state)
       end
 
@@ -1464,9 +1484,7 @@ defmodule Finitomata do
             "`Finitomata` does not accept direct messages. Please use `on_transition/4` callback instead."
         )
 
-        if state.hibernate,
-          do: {:noreply, state, :hibernate},
-          else: {:noreply, state}
+        hibernate_noreply(state)
       end
 
       @doc false
@@ -1487,30 +1505,15 @@ defmodule Finitomata do
 
       @doc false
       @impl GenServer
-      def format_status(:normal, [pdict, state]), do: {:state, State.excerpt(state, false)}
-      def format_status(:terminate, [pdict, state]), do: {:state, State.excerpt(state, true)}
+      def format_status(%{state: %State{} = fsm_state} = status),
+        do: %{status | state: State.excerpt(fsm_state, Map.has_key?(status, :reason))}
 
-      @spec history(Transition.state(), [Transition.state()]) :: [Transition.state()]
-      defp history(current, history) do
-        history
-        |> case do
-          [^current | rest] -> [{current, 2} | rest]
-          [{^current, count} | rest] -> [{current, count + 1} | rest]
-          _ -> [current | history]
-        end
-        |> Enum.take(State.history_size())
-      end
+      def format_status(status), do: status
 
-      @spec event_payload(Transition.event() | {Transition.event(), Finitomata.event_payload()}) ::
-              {Transition.event(), Finitomata.event_payload()}
-      defp event_payload({event, %{} = payload}),
-        do: {event, Map.update(payload, :__retries__, 1, &(&1 + 1))}
-
-      defp event_payload({event, payload}),
-        do: event_payload({event, %{payload: payload}})
-
-      defp event_payload(event),
-        do: event_payload({event, %{}})
+      # The actual logic lives in `Finitomata.Engine` (shared and unit-testable); these
+      #   thin shims keep all existing call sites in the generated code unchanged.
+      defp history(current, history), do: Finitomata.Engine.history(current, history)
+      defp event_payload(event), do: Finitomata.Engine.event_payload(event)
 
       @spec transit({Transition.event(), Finitomata.event_payload()}, State.t()) ::
               {:noreply, State.t()}
@@ -1535,24 +1538,21 @@ defmodule Finitomata do
              },
              {:on_enter, :ok} <- {:on_enter, safe_on_enter(new_current, state)} do
           if @__config__.cache_state,
-            do: :persistent_term.put({Finitomata, state.name}, state.payload)
+            do: Finitomata.StateCache.put(state.finitomata_id, state.name, state.payload)
 
-          case {new_current, state.hibernate} do
-            {:*, _} ->
+          case new_current do
+            :* ->
               {:stop, :normal, state}
 
-            {hard, _} when hard in @__config_hard_states__ ->
+            hard when hard in @__config_hard_states__ ->
               {:noreply, state,
                {:continue, {:transition, event_payload(@__config__.hard[hard].event)}}}
 
-            {fork, _} when fork in @__config_fork_states__ ->
+            fork when fork in @__config_fork_states__ ->
               {:noreply, state, {:continue, {:fork, fork}}}
 
-            {_, false} ->
-              {:noreply, state}
-
-            {_, _} ->
-              {:noreply, state, :hibernate}
+            _ ->
+              hibernate_noreply(state)
           end
         else
           {err, false} ->
@@ -1561,20 +1561,28 @@ defmodule Finitomata do
             )
 
             safe_on_failure(event, payload, state)
-            if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
+            hibernate_noreply(state)
 
           {err, :ok} ->
             Logger.warning("[⚐ ↹] callback failed to return `:ok` (:#{err})")
             safe_on_failure(event, payload, state)
-            if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
+            hibernate_noreply(state)
 
           err ->
-            state = %{state | last_error: %{state: state.current, event: event, error: err}}
+            state = %{
+              state
+              | last_error:
+                  Finitomata.Error.wrap(err,
+                    state: state.current,
+                    event: event,
+                    event_payload: payload
+                  )
+            }
 
             cond do
               event in @__config_soft_events__ ->
                 Logger.debug("[⚐ ↹] transition softly failed " <> inspect(err))
-                if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
+                hibernate_noreply(state)
 
               @__config__.fsm
               |> Transition.allowed(state.current, event)
@@ -1584,7 +1592,7 @@ defmodule Finitomata do
               true ->
                 Logger.warning("[⚐ ↹] transition failed " <> inspect(err))
                 safe_on_failure(event, payload, state)
-                if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
+                hibernate_noreply(state)
             end
         end
       end
@@ -1633,7 +1641,7 @@ defmodule Finitomata do
             Logger.warning("[⚐ ↹] fork from #{fork_state} failed (#{inspect(error)})")
         end
 
-        if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
+        hibernate_noreply(state)
       end
 
       @impl GenServer
@@ -1644,14 +1652,13 @@ defmodule Finitomata do
           |> safe_on_timer(state)
           |> case do
             :ok ->
-              if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
+              hibernate_noreply(state)
 
             {:ok, state_payload} ->
               if @__config__.cache_state,
-                do: :persistent_term.put({Finitomata, state.name}, state_payload)
+                do: Finitomata.StateCache.put(state.finitomata_id, state.name, state_payload)
 
-              state = %{state | payload: state_payload}
-              if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
+              hibernate_noreply(%{state | payload: state_payload})
 
             {:transition, {event, event_payload}, state_payload} ->
               transit({event, event_payload}, %{state | payload: state_payload})
@@ -1661,17 +1668,15 @@ defmodule Finitomata do
 
             {:reschedule, value} ->
               timer = with {ref, _old_value} <- state.timer, do: {ref, value}
-              state = %{state | timer: timer}
-              if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
+              hibernate_noreply(%{state | timer: timer})
 
             weird ->
               Logger.warning("[⚑ ↹] on_timer returned a garbage " <> inspect(weird))
-              if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
+              hibernate_noreply(state)
           end
           |> then(fn
             {:noreply, %State{timer: timer} = state} ->
-              state = %{state | timer: safe_init_timer(timer)}
-              if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
+              hibernate_noreply(%{state | timer: safe_init_timer(timer)})
 
             other ->
               other
@@ -1683,7 +1688,7 @@ defmodule Finitomata do
             "[⚑ ↹] on_timer message received, but no `on_timer/2` callback is declared"
           )
 
-          if state.hibernate, do: {:noreply, state, :hibernate}, else: {:noreply, state}
+          hibernate_noreply(state)
         end
       end
 

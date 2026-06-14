@@ -315,6 +315,10 @@ defmodule Finitomata.Transition do
     |> Stream.flat_map(&do_loop(&1, transitions, [], []))
   end
 
+  # The maximum loop length is bounded heuristically to keep enumeration tractable: about
+  #   two hops, plus extra for small FSMs. As a consequence, loops longer than this bound
+  #   are not reported for FSMs with many (> ~24) transitions. This is a deliberate
+  #   performance/termination trade-off, not an exhaustive search.
   defp do_loop(state, transitions, path, paths) do
     count = 2 + div(24, count(:transitions, transitions))
     do_loop(state, transitions, path, paths, count)
@@ -477,6 +481,10 @@ defmodule Finitomata.Transition do
     do_path(from, to, transitions, [], [])
   end
 
+  # The search depth is bounded heuristically (a multiple of the number of states that
+  #   shrinks as the graph grows) so path enumeration terminates quickly on large or densely
+  #   connected FSMs. For such FSMs this may under-enumerate very long paths; it is a
+  #   deliberate performance/termination trade-off rather than an exhaustive search.
   defp do_path(from, to, transitions, path, paths) do
     state_count = count(:states, transitions)
 
@@ -530,7 +538,7 @@ defmodule Finitomata.Transition do
   end
 
   @doc ~S"""
-  Returns `true` if the state `from` hsa an outgoing transition with `event`, false otherwise.
+  Returns `true` if the state `from` has an outgoing transition with `event`, false otherwise.
 
       iex> {:ok, transitions} =
       ...>   Finitomata.PlantUML.parse("[*] --> s1 : foo\ns1 --> s2 : ok\ns2 --> [*] : ko")

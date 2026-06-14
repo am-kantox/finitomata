@@ -21,10 +21,25 @@ defmodule Infinitomata do
     def whois(_fini_id, id), do: HashRing.key_to_node(@ring, id)
   end
   ```
+
+  ## Consistency model
+
+  `Infinitomata` keeps a per-node view of the cluster-wide _FSM_ registry that is
+    **eventually consistent**. Membership changes are propagated via `:pg` and reconciled
+    by `synch/2`, which merges local and remote views (last writer wins per _FSM_ name).
+    A call addressed to an _FSM_ that has not propagated to the local view yet is retried;
+    on a failed remote call the node re-synchronizes and backs off before retrying. Tune
+    the retry behaviour via the `:infinitomata_attempts`, `:infinitomata_poll_interval`,
+    `:infinitomata_rpc_timeout`, `:infinitomata_backoff_base`, and `:infinitomata_backoff_max`
+    application config keys.
   """
   @moduledoc since: "0.15.0"
 
   @max_attempts Application.compile_env(:finitomata, :infinitomata_attempts, 1_000)
+  @rpc_timeout Application.compile_env(:finitomata, :infinitomata_rpc_timeout, 5_000)
+  @poll_interval Application.compile_env(:finitomata, :infinitomata_poll_interval, 1)
+  @backoff_base Application.compile_env(:finitomata, :infinitomata_backoff_base, 5)
+  @backoff_max Application.compile_env(:finitomata, :infinitomata_backoff_max, 1_000)
 
   require Logger
 
@@ -60,22 +75,33 @@ defmodule Infinitomata do
     case InfSup.get(id, target) do
       %{node: node} ->
         with {:badrpc, error} <-
-               :rpc.call(node, Finitomata, fun, [id, target | args]) do
+               :rpc.call(node, Finitomata, fun, [id, target | args], @rpc_timeout) do
           Logger.error(
             "[♻️] Distributed: " <> inspect(id: id, node: node, target: target, error: error)
           )
 
           :ok = synch(id)
+          backoff_sleep(attempts)
           do_distributed_call(this, fun, id, target, args, attempts - 1)
         end
 
       nil ->
-        Process.sleep(1)
+        Process.sleep(@poll_interval)
         do_distributed_call(this, fun, id, target, args, attempts - 1)
 
       _ ->
         {:error, :not_started}
     end
+  end
+
+  # Exponentially backs off (with jitter, capped at `@backoff_max`) between retries that
+  #   follow a failed RPC, so a struggling cluster is not hammered. The poll for a
+  #   not-yet-synced FSM (the `nil` branch above) stays a tight loop because local sync
+  #   usually completes near-instantly.
+  defp backoff_sleep(attempts) do
+    elapsed = max(0, @max_attempts - attempts)
+    base = min(@backoff_max, @backoff_base * Integer.pow(2, min(elapsed, 16)))
+    Process.sleep(base + :rand.uniform(max(1, div(base, 2))))
   end
 
   @doc since: "0.16.0"
@@ -149,10 +175,16 @@ defmodule Infinitomata do
   @spec do_start_fsm(boolean(), node(), Finitomata.id(), Finitomata.fsm_name(), module(), any()) ::
           DynamicSupervisor.on_start_child()
   defp do_start_fsm(false, node, id, target, implementation, payload) do
-    case :rpc.block_call(node, Finitomata, :start_fsm, [id, target, implementation, payload]) do
+    case :rpc.block_call(
+           node,
+           Finitomata,
+           :start_fsm,
+           [id, target, implementation, payload],
+           @rpc_timeout
+         ) do
       {:ok, pid} ->
         # local_pid = :rpc.call(node, :erlang, :list_to_pid, [:erlang.pid_to_list(pid)]).
-        :ok = :rpc.block_call(node, :pg, :join, [InfSup.group(id), pid])
+        :ok = :rpc.block_call(node, :pg, :join, [InfSup.group(id), pid], @rpc_timeout)
         {:ok, pid}
 
       {:error, {:already_started, pid}} ->

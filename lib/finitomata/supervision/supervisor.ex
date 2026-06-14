@@ -1,7 +1,7 @@
 defmodule Finitomata.Supervisor do
   @moduledoc since: "0.26.0"
   @moduledoc """
-  THe behaviour for actual _FSM_ implementations across _Finitomata_ framework.
+  The behaviour for actual _FSM_ implementations across _Finitomata_ framework.
 
   It ships with two predefined implementations, `Finitomata` for local
     applications and `Infinitomata` for distributed ones.
@@ -66,6 +66,7 @@ defmodule Finitomata.Supervisor do
       [
         {Registry,
          keys: :unique, name: registry_name(id), partitions: System.schedulers_online()},
+        {Finitomata.StateCache, id},
         {Finitomata.Manager, name: manager_name(id)}
       ]
 
@@ -91,6 +92,10 @@ defmodule Finitomata.Supervisor do
   @doc false
   @spec throttler_name(Finitomata.id()) :: module()
   def throttler_name(id \\ nil), do: id |> fq_module(Throttler, true) |> uninfinitomata()
+
+  @doc false
+  @spec state_cache_name(Finitomata.id()) :: module()
+  def state_cache_name(id \\ nil), do: id |> fq_module(StateCache, true) |> uninfinitomata()
 
   @spec fq_module(id :: any(), who :: any(), atomize? :: boolean()) :: module() | [any()]
   defp fq_module(id, who, false) when is_atom(id) and is_atom(who), do: [Finitomata, id, who]

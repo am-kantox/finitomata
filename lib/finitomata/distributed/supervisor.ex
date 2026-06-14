@@ -5,13 +5,16 @@ defmodule Finitomata.Distributed.Supervisor do
 
   use Supervisor
 
+  @rpc_timeout Application.compile_env(:finitomata, :infinitomata_rpc_timeout, 5_000)
+
   def start_link(id, nodes \\ Node.list()) do
     __MODULE__
     |> Supervisor.start_link(id, name: sup_name(id))
     |> then(fn
       {:ok, pid} when is_pid(pid) ->
         Enum.each(nodes, fn node ->
-          with {:badrpc, error} <- :rpc.block_call(node, __MODULE__, :start_link, [id, []]) do
+          with {:badrpc, error} <-
+                 :rpc.block_call(node, __MODULE__, :start_link, [id, []], @rpc_timeout) do
             Logger.error(
               "[♻️] Remote start: " <>
                 inspect(id: id, name: sup_name(id), node: node, error: error)
@@ -81,7 +84,7 @@ defmodule Finitomata.Distributed.Supervisor do
 
       Enum.reduce(nodes, domestic, fn node, acc ->
         node
-        |> :rpc.block_call(Infinitomata, :all, [id])
+        |> :rpc.block_call(Infinitomata, :all, [id], @rpc_timeout)
         |> call_handler.(id, node)
         |> Map.new(&fix_pid(&1, known_processes_alive))
         |> Map.merge(acc, merger)
@@ -134,6 +137,11 @@ defmodule Finitomata.Distributed.Supervisor do
     Agent.update(agent(id), &Map.put(&1, name, data))
   end
 
+  # Reconciles a pid obtained from a remote node against the pids `:pg` reports locally.
+  #   A pid's textual form is `<nodeId.number.serial>`; `skip_node/1` drops the leading
+  #   `nodeId.` so the same process can be matched across nodes by its `number.serial` tail.
+  #   NOTE: this relies on the textual pid representation and assumes the tail is unique among
+  #   the candidate pids; it is a pragmatic heuristic rather than a guaranteed mapping.
   defp skip_node(nil), do: nil
   defp skip_node(pid) when is_pid(pid), do: pid |> :erlang.pid_to_list() |> skip_node()
   defp skip_node([?. | tail]), do: tail

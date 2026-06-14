@@ -5,7 +5,7 @@ defmodule Finitomata.Persistency do
     to `use Finitomata`.)
 
   Once declared, the initial state would attempt to load the current state from
-    the storage using `load/1` funtcion which should return the `{state, payload}`
+    the storage using `load/1` function which should return the `{state, payload}`
     tuple.
   """
 

@@ -1,26 +1,6 @@
-major = System.otp_release()
-
-otp_version =
-  try do
-    {:ok, contents} = File.read(Path.join([:code.root_dir(), "releases", major, "OTP_VERSION"]))
-    String.split(contents, "\n", trim: true)
-  else
-    [full] -> full
-    _ -> major
-  catch
-    :error, _ -> major
-  end
-  |> String.split("-")
-  |> hd()
-  |> String.split(".")
-  |> case do
-    [major] -> [major, 0, 0]
-    [major, minor] -> [major, minor, 0]
-    [major, minor, patch | _] -> [major, minor, patch]
-  end
-  |> Enum.join(".")
-
-if Version.compare(otp_version, "25.1.0") == :lt do
+# `:pg.monitor/1` (introduced in OTP 25.1) lets us subscribe to process group
+# membership changes directly; on older runtimes we fall back to periodic polling.
+if not (Code.ensure_loaded?(:pg) and function_exported?(:pg, :monitor, 1)) do
   defmodule Finitomata.Distributed.GroupMonitor do
     @moduledoc false
     use GenServer
