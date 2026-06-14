@@ -28,7 +28,7 @@ defmodule Finitomata.MixProject do
                  else: [{:enfiladex, "~> 0.1", only: [:dev, :test, :finitomata]}]
 
   @app :finitomata
-  @version "0.37.1"
+  @version "0.38.0"
 
   def lib?(lib), do: lib in Enum.map(@modern_libs, &elem(&1, 0))
 
@@ -154,6 +154,8 @@ defmodule Finitomata.MixProject do
         ],
         Persistence: [
           Finitomata.Persistency,
+          Finitomata.Persistency.ETS,
+          Finitomata.Persistency.DETS,
           Finitomata.Persistency.Persistable,
           Finitomata.Persistency.Protocol
         ]
