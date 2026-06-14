@@ -78,10 +78,10 @@ defmodule Finitomata.Engine do
   end
 
   @doc false
-  @spec safe_cancel_timer(false | {reference(), pos_integer()}) ::
+  @spec safe_cancel_timer(false | {nil | reference(), pos_integer()}) ::
           false | {nil, pos_integer()}
   def safe_cancel_timer({ref, timer}) when is_integer(timer) and timer > 0 do
-    if is_reference(ref), do: Process.cancel_timer(ref, async: true, info: false)
+    _ = if is_reference(ref), do: Process.cancel_timer(ref, async: true, info: false)
     {nil, timer}
   end
 
@@ -208,36 +208,38 @@ defmodule Finitomata.Engine do
     {object, fork_data} = Map.pop(fork_data, :object)
     {id, fork_data} = Map.pop(fork_data, :id)
 
-    module.__config__(:forks)
-    |> Keyword.fetch!(fork_state)
-    |> List.wrap()
-    |> module.safe_on_fork(fork_state, state)
-    |> case do
-      {:ok, fork_impl, event} ->
-        fsm_name = Finitomata.fsm_name(state)
+    # [TODO] [AM] Match the outcome and log it
+    _ =
+      module.__config__(:forks)
+      |> Keyword.fetch!(fork_state)
+      |> List.wrap()
+      |> module.safe_on_fork(fork_state, state)
+      |> case do
+        {:ok, fork_impl, event} ->
+          fsm_name = Finitomata.fsm_name(state)
 
-        Finitomata.start_fsm(
-          state.finitomata_id,
-          fork_impl,
-          {:fork, fork_state, fsm_name},
-          %{
-            owner: %{
-              event: event,
-              id: state.finitomata_id,
-              name: fsm_name,
-              pid: Finitomata.pid(state)
-            },
-            history: %{current: 0, steps: []},
-            steps: %{passed: 0, left: Transition.steps_handled(fork_impl.__config__(:fsm))},
-            object: object,
-            id: id,
-            data: fork_data
-          }
-        )
+          Finitomata.start_fsm(
+            state.finitomata_id,
+            fork_impl,
+            {:fork, fork_state, fsm_name},
+            %{
+              owner: %{
+                event: event,
+                id: state.finitomata_id,
+                name: fsm_name,
+                pid: Finitomata.pid(state)
+              },
+              history: %{current: 0, steps: []},
+              steps: %{passed: 0, left: Transition.steps_handled(fork_impl.__config__(:fsm))},
+              object: object,
+              id: id,
+              data: fork_data
+            }
+          )
 
-      {:error, error} ->
-        Logger.warning("[⚐ ↹] fork from #{fork_state} failed (#{inspect(error)})")
-    end
+        {:error, error} ->
+          Logger.warning("[⚐ ↹] fork from #{fork_state} failed (#{inspect(error)})")
+      end
 
     hibernate_noreply(state)
   end
@@ -395,8 +397,8 @@ defmodule Finitomata.Engine do
   def handle_cast(_module, {:reset_timer, tick?, _new_value}, %State{} = state) do
     timer =
       if tick? do
-        safe_cancel_timer(state.timer)
-        Process.send(self(), :on_timer, [])
+        _ = safe_cancel_timer(state.timer)
+        :ok = Process.send(self(), :on_timer, [])
         state.timer
       else
         safe_init_timer(state.timer)

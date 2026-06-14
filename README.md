@@ -1,4 +1,4 @@
-# ![Finitomata](https://raw.githubusercontent.com/am-kantox/finitomata/master/stuff/finitomata-48x48.png) Finitomata    [![Kantox ❤ OSS](https://img.shields.io/badge/❤-kantox_oss-informational.svg)](https://kantox.com/)  ![Test](https://github.com/am-kantox/finitomata/workflows/Test/badge.svg)  ![Dialyzer](https://github.com/am-kantox/finitomata/workflows/Dialyzer/badge.svg)
+# ![Finitomata](https://raw.githubusercontent.com/am-kantox/finitomata/master/stuff/finitomata-48x48.png) Finitomata    [![Kantox ❤ OSS](https://img.shields.io/badge/❤-kantox_oss-informational.svg)](https://kantox.com/)  [![CI](https://github.com/am-kantox/finitomata/actions/workflows/ci.yml/badge.svg)](https://github.com/am-kantox/finitomata/actions/workflows/ci.yml)
 
 **The FSM boilerplate based on callbacks**
 

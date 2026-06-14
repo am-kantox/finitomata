@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish to Hex.pm and create a GitHub release
+    runs-on: ubuntu-latest
+    # Default MIX_ENV (:dev) is used on purpose: `mix hex.publish` builds the docs
+    #   with `ex_doc`, which is a `only: [:dev]` dependency.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.19"
+          otp-version: "28"
+      - name: Restore dependencies cache
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: ${{ runner.os }}-mix-release-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-release-
+      - name: Install dependencies
+        run: mix deps.get
+      - name: Resolve version
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$(grep -m1 '@version' mix.exs | cut -d'"' -f2)"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+      - name: Publish package and docs to Hex.pm
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+        run: mix hex.publish --yes
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          body: |
+            Published to Hex.pm: https://hex.pm/packages/finitomata/${{ steps.version.outputs.version }}
+            Documentation: https://hexdocs.pm/finitomata/${{ steps.version.outputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -230,7 +230,7 @@ defmodule Mix.Tasks.Compile.Finitomata do
   defp cover([{f, _, _}, {e, _, _}, _, _], {from, event}, guards, acc),
     do: cover({f, e}, {from, event}, guards, acc)
 
-  # TODO [AM] more cases with pattern matching etc
+  # [TODO] [AM] more cases with pattern matching etc
   defp cover(_, _, _guards, acc), do: acc
 
   @spec covered?(

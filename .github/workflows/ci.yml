@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # The full library test suite runs across many Elixir/OTP pairs.
+  test:
+    name: Test (Elixir ${{ matrix.pair.elixir }} / OTP ${{ matrix.pair.otp }})
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+    strategy:
+      fail-fast: false
+      matrix:
+        pair:
+          - { elixir: "1.14", otp: "25" }
+          - { elixir: "1.15", otp: "26" }
+          - { elixir: "1.16", otp: "26" }
+          - { elixir: "1.17", otp: "27" }
+          - { elixir: "1.18", otp: "27" }
+          - { elixir: "1.19", otp: "28" }
+          - { elixir: "1.20.1", otp: "29" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ matrix.pair.elixir }}
+          otp-version: ${{ matrix.pair.otp }}
+      - name: Restore dependencies cache
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: ${{ runner.os }}-mix-${{ matrix.pair.otp }}-${{ matrix.pair.elixir }}-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-${{ matrix.pair.otp }}-${{ matrix.pair.elixir }}-
+      - name: Start epmd (for the distributed suite)
+        run: epmd -daemon
+      - name: Install and compile
+        run: mix do deps.get, deps.compile, compile
+      - name: Run the test suite (local + distributed, with coverage)
+        run: |
+          mix test --cover --exclude distributed --exclude finitomata
+          mix test --exclude test --include distributed
+      - name: Run the library against itself (:finitomata env)
+        run: |
+          MIX_ENV=finitomata mix do deps.get, deps.compile, compile
+          MIX_ENV=finitomata mix test --exclude test --include finitomata
+
+  # The bundled examples are exercised once, on the modern toolchain.
+  examples:
+    name: Examples (Elixir 1.19 / OTP 28)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ecto_integration_repo
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.19"
+          otp-version: "28"
+      - name: Compile and test the examples
+        run: |
+          for example in ecto_integration caches ex_unit_testing telemetria; do
+            echo "== examples/${example} =="
+            (cd "examples/${example}" && mix do deps.get, deps.compile, compile && mix test)
+          done
+
+  # Formatting, Credo and (cached) Dialyzer run on the modern toolchain only.
+  static:
+    name: Static analysis (format, credo, dialyzer)
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.19"
+          otp-version: "28"
+      - name: Restore dependencies cache
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: ${{ runner.os }}-mix-ci-1.19-28-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-ci-1.19-28-
+      - name: Restore Dialyzer PLT cache
+        uses: actions/cache@v4
+        with:
+          path: .dialyzer
+          key: ${{ runner.os }}-plt-1.19-28-${{ hashFiles('**/mix.lock', '.dialyzer/ignore.exs') }}
+          restore-keys: ${{ runner.os }}-plt-1.19-28-
+      - name: Install and compile
+        run: mix do deps.get, deps.compile, compile
+      - name: Format, Credo and Dialyzer
+        run: mix quality.ci
+
+  # Single required status that aggregates the matrix and analysis jobs.
+  quality:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    needs: [test, examples, static]
+    if: always()
+    steps:
+      - name: Verify all checks passed
+        run: |
+          if [ "${{ needs.test.result }}" != "success" ] || \
+             [ "${{ needs.examples.result }}" != "success" ] || \
+             [ "${{ needs.static.result }}" != "success" ]; then
+            echo "Quality gate failed (test=${{ needs.test.result }}, examples=${{ needs.examples.result }}, static=${{ needs.static.result }})"
+            exit 1
+          fi
+          echo "Quality gate passed"

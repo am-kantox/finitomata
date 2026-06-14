@@ -28,6 +28,8 @@ finitomata-*.tar
 # Dialyzer’s PLT
 /.dialyzer/*.plt*
 
+/.erl.history/
+
 # Elixir LS
 /.elixir_ls/
 /.elixir-tools/
