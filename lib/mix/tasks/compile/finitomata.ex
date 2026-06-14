@@ -4,8 +4,8 @@ defmodule Mix.Tasks.Compile.Finitomata do
 
   use Mix.Task.Compiler
 
-  alias Mix.Task.Compiler
   alias Finitomata.{Hook, Mix.Events, Transition}
+  alias Mix.Task.Compiler
 
   @preferred_cli_env :dev
   @manifest_events "finitomata"

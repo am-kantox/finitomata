@@ -356,4 +356,253 @@ defmodule Finitomata.Engine do
   end
 
   defp do_maybe_pubsub(_listener, _result, _name), do: :ok
+
+  @doc false
+  @spec handle_call(module(), term(), State.t()) ::
+          {:reply, term(), State.t()} | {:reply, term(), State.t(), :hibernate}
+  def handle_call(_module, :state, %State{} = state), do: hibernate_reply(state, state)
+
+  def handle_call(_module, {:state, fun}, %State{} = state) when is_function(fun, 1),
+    do: hibernate_reply(fun.(state), state)
+
+  def handle_call(_module, :current_state, %State{} = state),
+    do: hibernate_reply(state.current, state)
+
+  def handle_call(_module, :name, %State{} = state),
+    do: hibernate_reply(State.human_readable_name(state, false), state)
+
+  def handle_call(module, {:allowed?, to}, %State{} = state),
+    do: hibernate_reply(Transition.allowed?(module.__config__(:fsm), state.current, to), state)
+
+  def handle_call(module, {:responds?, event}, %State{} = state),
+    do:
+      hibernate_reply(Transition.responds?(module.__config__(:fsm), state.current, event), state)
+
+  def handle_call(_module, whatever, %State{} = state) do
+    Logger.error(
+      "Unexpected `GenServer.call/2` with a message ‹#{inspect(whatever)}›. " <>
+        "`Finitomata` does not accept direct calls. Please use `on_transition/4` callback instead."
+    )
+
+    hibernate_reply(:not_allowed, state)
+  end
+
+  @doc false
+  @spec handle_cast(module(), term(), State.t()) ::
+          {:noreply, State.t()}
+          | {:noreply, State.t(), :hibernate}
+          | {:noreply, State.t(), {:continue, term()}}
+  def handle_cast(_module, {:reset_timer, tick?, _new_value}, %State{} = state) do
+    timer =
+      if tick? do
+        safe_cancel_timer(state.timer)
+        Process.send(self(), :on_timer, [])
+        state.timer
+      else
+        safe_init_timer(state.timer)
+      end
+
+    hibernate_noreply(%{state | timer: timer})
+  end
+
+  def handle_cast(_module, {event, payload}, %State{} = state),
+    do: {:noreply, state, {:continue, {:transition, {event, payload}}}}
+
+  def handle_cast(_module, whatever, %State{} = state) do
+    Logger.error(
+      "Unexpected `GenServer.cast/2` with a message ‹#{inspect(whatever)}›. " <>
+        "`Finitomata` does not accept direct casts. Please use `on_transition/4` callback instead."
+    )
+
+    hibernate_noreply(state)
+  end
+
+  @doc false
+  @spec handle_continue(module(), term(), State.t()) ::
+          {:noreply, State.t()}
+          | {:noreply, State.t(), :hibernate}
+          | {:stop, :normal, State.t()}
+  def handle_continue(module, {:transition, {event, payload}}, %State{} = state),
+    do: transit(module, {event, payload}, state)
+
+  def handle_continue(module, {:fork, fork_state}, %State{} = state),
+    do: fork(module, fork_state, state)
+
+  @doc false
+  @spec terminate(module(), term(), State.t()) :: term()
+  def terminate(module, _reason, %State{} = state) do
+    if module.__config__(:cache_state),
+      do: Finitomata.StateCache.delete(state.finitomata_id, state.name)
+
+    module.safe_on_terminate(state)
+  end
+
+  @doc false
+  @spec handle_info(module(), term(), State.t()) ::
+          {:noreply, State.t()} | {:noreply, State.t(), :hibernate}
+  def handle_info(_module, whatever, %State{} = state)
+      when not is_tuple(state.timer) or not is_integer(elem(state.timer, 1)) or
+             whatever != :on_timer do
+    Logger.error(
+      "Unexpected message ‹#{inspect(whatever)}› received by #{inspect(State.human_readable_name(state))}. " <>
+        "`Finitomata` does not accept direct messages. Please use `on_transition/4` callback instead."
+    )
+
+    hibernate_noreply(state)
+  end
+
+  def handle_info(module, :on_timer, %State{} = state) do
+    if module.__config__(:timer),
+      do: do_on_timer(module, state),
+      else: on_timer_undeclared(state)
+  end
+
+  defp on_timer_undeclared(%State{} = state) do
+    Logger.warning("[⚑ ↹] on_timer message received, but no `on_timer/2` callback is declared")
+    hibernate_noreply(state)
+  end
+
+  defp do_on_timer(module, %State{} = state) do
+    state.current
+    |> module.safe_on_timer(state)
+    |> case do
+      :ok ->
+        hibernate_noreply(state)
+
+      {:ok, state_payload} ->
+        if module.__config__(:cache_state),
+          do: Finitomata.StateCache.put(state.finitomata_id, state.name, state_payload)
+
+        hibernate_noreply(%{state | payload: state_payload})
+
+      {:transition, {event, event_payload}, state_payload} ->
+        transit(module, {event, event_payload}, %{state | payload: state_payload})
+
+      {:transition, event, state_payload} ->
+        transit(module, {event, nil}, %{state | payload: state_payload})
+
+      {:reschedule, value} ->
+        timer = with {ref, _old_value} <- state.timer, do: {ref, value}
+        hibernate_noreply(%{state | timer: timer})
+
+      weird ->
+        Logger.warning("[⚑ ↹] on_timer returned a garbage " <> inspect(weird))
+        hibernate_noreply(state)
+    end
+    |> then(fn
+      {:noreply, %State{timer: timer} = state} ->
+        hibernate_noreply(%{state | timer: safe_init_timer(timer)})
+
+      other ->
+        other
+    end)
+  end
+
+  @doc false
+  @spec init(module(), map()) ::
+          {:ok, State.t()} | {:ok, State.t(), {:continue, term()}} | {:stop, keyword()}
+  def init(
+        module,
+        %{
+          finitomata_id: id,
+          name: name,
+          parent: parent,
+          payload: payload,
+          with_persistency: persistency
+        } = state
+      )
+      when not is_nil(name) and not is_nil(persistency) do
+    {lifecycle, {state, payload}} =
+      case payload do
+        mod when is_atom(mod) ->
+          persistency.load({payload, id: name})
+
+        %struct{} = payload ->
+          persistency.load({struct, payload |> Map.from_struct() |> Map.put_new(:id, name)})
+
+        %{type: type, id: id} ->
+          persistency.load({type, %{id => name}})
+
+        other ->
+          Logger.warning(
+            "Loading from persisted for ‹#{inspect(state)}› failed; wrong payload: " <>
+              inspect(other)
+          )
+
+          {:failed, {nil, other}}
+      end
+
+    init(module, %{
+      name: name,
+      finitomata_id: id,
+      parent: parent,
+      state: state,
+      payload: payload,
+      lifecycle: lifecycle,
+      persistency: persistency
+    })
+  end
+
+  def init(module, %{payload: payload} = init_arg) do
+    lifecycle = Map.get(init_arg, :lifecycle, :unknown)
+    {state, init_arg} = Map.pop(init_arg, :state)
+
+    init_state =
+      if is_nil(state) or lifecycle in [:failed, :created] do
+        init_arg
+        |> module.safe_on_start(payload)
+        |> case do
+          {:stop, reason} -> {:stop, :on_start, reason}
+          {:ok, payload} -> {nil, payload}
+          {:continue, payload} -> {nil, payload}
+          _ -> {nil, payload}
+        end
+      else
+        {state, payload}
+      end
+
+    do_init(module, init_state, init_arg)
+  end
+
+  @spec do_init(module(), tuple(), map()) ::
+          {:ok, State.t()} | {:ok, State.t(), {:continue, term()}} | {:stop, keyword()}
+  defp do_init(_module, {:stop, :on_start, reason}, init_arg),
+    do: {:stop, reason: reason, init_arg: init_arg}
+
+  defp do_init(
+         module,
+         {state, payload},
+         %{finitomata_id: id, name: name, parent: parent} = init_arg
+       ) do
+    lifecycle = Map.get(init_arg, :lifecycle, :unknown)
+    timer = safe_init_timer({nil, module.__config__(:timer)})
+
+    state =
+      %State{
+        name: name,
+        finitomata_id: id,
+        parent: parent,
+        lifecycle: lifecycle,
+        persistency: Map.get(init_arg, :persistency, nil),
+        timer: timer,
+        cache_state: module.__config__(:cache_state),
+        hibernate: module.__config__(:hibernate),
+        payload: payload
+      }
+      |> put_current_state_if_loaded(lifecycle, state)
+
+    if module.__config__(:cache_state),
+      do: Finitomata.StateCache.put(state.finitomata_id, state.name, state.payload)
+
+    if lifecycle == :loaded,
+      do: {:ok, state},
+      else:
+        {:ok, state, {:continue, {:transition, event_payload({module.__config__(:entry), nil})}}}
+  end
+
+  defp put_current_state_if_loaded(state, :loaded, fsm_state)
+       when not is_nil(fsm_state),
+       do: Map.put(state, :current, fsm_state)
+
+  defp put_current_state_if_loaded(state, _, _fsm_state), do: state
 end

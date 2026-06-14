@@ -1,6 +1,8 @@
 # `:pg.monitor/1` (introduced in OTP 25.1) lets us subscribe to process group
 # membership changes directly; on older runtimes we fall back to periodic polling.
-if not (Code.ensure_loaded?(:pg) and function_exported?(:pg, :monitor, 1)) do
+pg_native? = Code.ensure_loaded?(:pg) and function_exported?(:pg, :monitor, 1)
+
+unless pg_native? do
   defmodule Finitomata.Distributed.GroupMonitor do
     @moduledoc false
     use GenServer
@@ -53,7 +55,9 @@ if not (Code.ensure_loaded?(:pg) and function_exported?(:pg, :monitor, 1)) do
     @impl GenServer
     def handle_call(:count, _from, {count, members}), do: {:reply, count, {count, members}}
   end
-else
+end
+
+if pg_native? do
   defmodule Finitomata.Distributed.GroupMonitor do
     @moduledoc false
     use GenServer

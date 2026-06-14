@@ -1,6 +1,8 @@
+# This module is a code-generating macro: the `use Finitomata` quote is necessarily long and
+#   `ast/2`'s compile-time option parsing is necessarily branchy. The runtime logic (and its
+#   nesting) now lives in `Finitomata.Engine`, so only these two checks remain disabled here.
 # credo:disable-for-this-file Credo.Check.Refactor.LongQuoteBlocks
 # credo:disable-for-this-file Credo.Check.Refactor.CyclomaticComplexity
-# credo:disable-for-this-file Credo.Check.Refactor.Nesting
 
 defmodule Finitomata do
   @doc false
@@ -1257,225 +1259,50 @@ defmodule Finitomata do
 
       @doc false
       @impl GenServer
-      def init(
-            %{
-              finitomata_id: id,
-              name: name,
-              parent: parent,
-              payload: payload,
-              with_persistency: persistency
-            } = state
-          )
-          when not is_nil(name) and not is_nil(persistency) do
-        {lifecycle, {state, payload}} =
-          case payload do
-            module when is_atom(module) ->
-              persistency.load({payload, id: name})
+      def init(init_arg), do: Finitomata.Engine.init(__MODULE__, init_arg)
 
-            %struct{} = payload ->
-              persistency.load({struct, payload |> Map.from_struct() |> Map.put_new(:id, name)})
-
-            %{type: type, id: id} ->
-              persistency.load({type, %{id => name}})
-
-            other ->
-              Logger.warning(
-                "Loading from persisted for ‹#{inspect(state)}› failed; wrong payload: " <>
-                  inspect(other)
-              )
-
-              {:failed, {nil, other}}
-          end
-
-        init(%{
-          name: name,
-          finitomata_id: id,
-          parent: parent,
-          state: state,
-          payload: payload,
-          lifecycle: lifecycle,
-          persistency: persistency
-        })
-      end
-
-      def init(%{payload: payload} = init_arg) do
-        lifecycle = Map.get(init_arg, :lifecycle, :unknown)
-        {state, init_arg} = Map.pop(init_arg, :state)
-
-        # @spec safe_on_start(state :: :loaded | State.t(), payload :: State.payload()) ::
-        #         {:stop, term()}
-        #         | {:continue, State.payload()}
-        #         | {:ok, State.payload()}
-        #         | :ignore
-        # @telemetria level: telemetria_levels[:on_start],
-        #             group: __MODULE__,
-        #             if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_start)
-        safe_on_start = fn
-          :loaded, payload ->
-            {:ok, payload}
-
-          _state, payload ->
-            try do
-              if function_exported?(__MODULE__, :on_start, 1),
-                do: apply(__MODULE__, :on_start, [payload]),
-                else: :ignore
-            rescue
-              err ->
-                report_error(err, "on_start/1")
-                {:stop, err}
-            end
-        end
-
-        init_state =
-          if is_nil(state) or lifecycle in [:failed, :created] do
-            init_arg
-            |> safe_on_start.(payload)
-            |> case do
-              {:stop, reason} -> {:stop, :on_start, reason}
-              {:ok, payload} -> {nil, payload}
-              {:continue, payload} -> {nil, payload}
-              _ -> {nil, payload}
-            end
-          else
-            {state, payload}
-          end
-
-        do_init(init_state, init_arg)
-      end
-
-      defp do_init({:stop, :on_start, reason}, init_arg),
-        do: {:stop, reason: reason, init_arg: init_arg}
-
-      defp do_init(
-             {state, payload},
-             %{
-               finitomata_id: id,
-               name: name,
-               parent: parent
-             } = init_arg
-           ) do
-        lifecycle = Map.get(init_arg, :lifecycle, :unknown)
-        timer = safe_init_timer({nil, @__config__.timer})
-
-        state =
-          %State{
-            name: name,
-            finitomata_id: id,
-            parent: parent,
-            lifecycle: lifecycle,
-            persistency: Map.get(init_arg, :persistency, nil),
-            timer: timer,
-            cache_state: @__config__.cache_state,
-            hibernate: @__config__.hibernate,
-            payload: payload
-          }
-          |> put_current_state_if_loaded(lifecycle, state)
-
-        if @__config__.cache_state,
-          do: Finitomata.StateCache.put(state.finitomata_id, state.name, state.payload)
-
-        if lifecycle == :loaded,
-          do: {:ok, state},
-          else: {:ok, state, {:continue, {:transition, event_payload({@__config__.entry, nil})}}}
-      end
-
-      defp put_current_state_if_loaded(state, :loaded, fsm_state)
-           when not is_nil(fsm_state),
-           do: Map.put(state, :current, fsm_state)
-
-      defp put_current_state_if_loaded(state, _, _fsm_state), do: state
-
-      # `:hibernate` and timer helpers live in `Finitomata.Engine` (shared, testable); these
-      #   shims keep the call sites in the generated code unchanged. They run in the FSM
-      #   process, so `self()` inside the Engine helpers still refers to this FSM.
-      defp hibernate_noreply(state), do: Finitomata.Engine.hibernate_noreply(state)
-      defp hibernate_reply(reply, state), do: Finitomata.Engine.hibernate_reply(reply, state)
-
+      # `safe_on_start` stays here (rather than in `Finitomata.Engine`) because it invokes the
+      #   per-module `on_start/1` callback and the `report_error` macro. The Engine calls it via
+      #   the passed-in module.
       @doc false
-      @impl GenServer
-      def handle_call(:state, _from, %State{} = state),
-        do: hibernate_reply(state, state)
+      @spec safe_on_start(:loaded | map(), State.payload()) ::
+              {:stop, term()} | {:continue, State.payload()} | {:ok, State.payload()} | :ignore
+      def safe_on_start(:loaded, payload), do: {:ok, payload}
 
-      def handle_call({:state, fun}, _from, %State{} = state) when is_function(fun, 1),
-        do: hibernate_reply(fun.(state), state)
-
-      def handle_call(:current_state, _from, %State{} = state),
-        do: hibernate_reply(state.current, state)
-
-      def handle_call(:name, _from, %State{} = state),
-        do: hibernate_reply(State.human_readable_name(state, false), state)
-
-      def handle_call({:allowed?, to}, _from, %State{} = state),
-        do: hibernate_reply(Transition.allowed?(@__config__.fsm, state.current, to), state)
-
-      def handle_call({:responds?, event}, _from, %State{} = state),
-        do: hibernate_reply(Transition.responds?(@__config__.fsm, state.current, event), state)
-
-      def handle_call(whatever, _from, %State{} = state) do
-        Logger.error(
-          "Unexpected `GenServer.call/2` with a message ‹#{inspect(whatever)}›. " <>
-            "`Finitomata` does not accept direct calls. Please use `on_transition/4` callback instead."
-        )
-
-        hibernate_reply(:not_allowed, state)
+      def safe_on_start(_state, payload) do
+        if function_exported?(__MODULE__, :on_start, 1),
+          do: apply(__MODULE__, :on_start, [payload]),
+          else: :ignore
+      rescue
+        err ->
+          report_error(err, "on_start/1")
+          {:stop, err}
       end
 
       @doc false
       @impl GenServer
-      def handle_cast({event, payload}, %State{} = state),
-        do: {:noreply, state, {:continue, {:transition, {event, payload}}}}
-
-      def handle_cast({:reset_timer, tick?, new_value}, %State{} = state) do
-        timer =
-          if tick? do
-            safe_cancel_timer(state.timer)
-            Process.send(self(), :on_timer, [])
-            state.timer
-          else
-            safe_init_timer(state.timer)
-          end
-
-        hibernate_noreply(%{state | timer: timer})
-      end
-
-      def handle_cast(whatever, %State{} = state) do
-        Logger.error(
-          "Unexpected `GenServer.cast/2` with a message ‹#{inspect(whatever)}›. " <>
-            "`Finitomata` does not accept direct casts. Please use `on_transition/4` callback instead."
-        )
-
-        hibernate_noreply(state)
-      end
+      def handle_call(msg, _from, %State{} = state),
+        do: Finitomata.Engine.handle_call(__MODULE__, msg, state)
 
       @doc false
       @impl GenServer
-      def handle_continue({:transition, {event, payload}}, %State{} = state),
-        do: transit({event, payload}, state)
-
-      def handle_continue({:fork, fork_state}, %State{} = state),
-        do: fork(fork_state, state)
+      def handle_cast(msg, %State{} = state),
+        do: Finitomata.Engine.handle_cast(__MODULE__, msg, state)
 
       @doc false
       @impl GenServer
-      def terminate(_reason, %State{} = state) do
-        if @__config__.cache_state,
-          do: Finitomata.StateCache.delete(state.finitomata_id, state.name)
-
-        safe_on_terminate(state)
-      end
+      def handle_continue(continuation, %State{} = state),
+        do: Finitomata.Engine.handle_continue(__MODULE__, continuation, state)
 
       @doc false
       @impl GenServer
-      def handle_info(whatever, %State{} = state)
-          when not is_tuple(state.timer) or not is_integer(elem(state.timer, 1)) or
-                 whatever != :on_timer do
-        Logger.error(
-          "Unexpected message ‹#{inspect(whatever)}› received by #{inspect(State.human_readable_name(state))}. " <>
-            "`Finitomata` does not accept direct messages. Please use `on_transition/4` callback instead."
-        )
+      def terminate(reason, %State{} = state),
+        do: Finitomata.Engine.terminate(__MODULE__, reason, state)
 
-        hibernate_noreply(state)
-      end
+      @doc false
+      @impl GenServer
+      def handle_info(msg, %State{} = state),
+        do: Finitomata.Engine.handle_info(__MODULE__, msg, state)
 
       @doc false
       @impl GenServer
@@ -1499,70 +1326,6 @@ defmodule Finitomata do
         do: %{status | state: State.excerpt(fsm_state, Map.has_key?(status, :reason))}
 
       def format_status(status), do: status
-
-      # The actual logic lives in `Finitomata.Engine` (shared and unit-testable); these
-      #   thin shims keep all existing call sites in the generated code unchanged.
-      defp history(current, history), do: Finitomata.Engine.history(current, history)
-      defp event_payload(event), do: Finitomata.Engine.event_payload(event)
-
-      # `transit/2` and `fork/2` orchestration now lives in `Finitomata.Engine`; these shims
-      #   keep the generated `handle_continue`/`on_timer` call sites unchanged.
-      defp transit(event_payload, %State{} = state),
-        do: Finitomata.Engine.transit(__MODULE__, event_payload, state)
-
-      defp fork(fork_state, %State{} = state),
-        do: Finitomata.Engine.fork(__MODULE__, fork_state, state)
-
-      @impl GenServer
-      @doc false
-      if @__config__.timer do
-        def handle_info(:on_timer, %State{} = state) do
-          state.current
-          |> safe_on_timer(state)
-          |> case do
-            :ok ->
-              hibernate_noreply(state)
-
-            {:ok, state_payload} ->
-              if @__config__.cache_state,
-                do: Finitomata.StateCache.put(state.finitomata_id, state.name, state_payload)
-
-              hibernate_noreply(%{state | payload: state_payload})
-
-            {:transition, {event, event_payload}, state_payload} ->
-              transit({event, event_payload}, %{state | payload: state_payload})
-
-            {:transition, event, state_payload} ->
-              transit({event, nil}, %{state | payload: state_payload})
-
-            {:reschedule, value} ->
-              timer = with {ref, _old_value} <- state.timer, do: {ref, value}
-              hibernate_noreply(%{state | timer: timer})
-
-            weird ->
-              Logger.warning("[⚑ ↹] on_timer returned a garbage " <> inspect(weird))
-              hibernate_noreply(state)
-          end
-          |> then(fn
-            {:noreply, %State{timer: timer} = state} ->
-              hibernate_noreply(%{state | timer: safe_init_timer(timer)})
-
-            other ->
-              other
-          end)
-        end
-      else
-        def handle_info(:on_timer, %State{} = state) do
-          Logger.warning(
-            "[⚑ ↹] on_timer message received, but no `on_timer/2` callback is declared"
-          )
-
-          hibernate_noreply(state)
-        end
-      end
-
-      defp safe_cancel_timer(timer), do: Finitomata.Engine.safe_cancel_timer(timer)
-      defp safe_init_timer(timer), do: Finitomata.Engine.safe_init_timer(timer)
 
       @doc false
       @spec safe_on_transition(
@@ -1692,11 +1455,12 @@ defmodule Finitomata do
         err -> report_error(err, "on_exit/2")
       end
 
+      @doc false
       @spec safe_on_terminate(State.t()) :: :ok
       @telemetria level: telemetria_levels[:on_terminate],
                   group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_terminate)
-      defp safe_on_terminate(state) do
+      def safe_on_terminate(state) do
         if function_exported?(__MODULE__, :on_terminate, 1) do
           with other when other != :ok <- apply(__MODULE__, :on_terminate, [state]) do
             Logger.warning(
@@ -1711,6 +1475,7 @@ defmodule Finitomata do
       end
 
       if @__config__.timer do
+        @doc false
         @spec safe_on_timer(Transition.state(), State.t()) ::
                 :ok
                 | {:ok, State.t()}
@@ -1720,7 +1485,7 @@ defmodule Finitomata do
         @telemetria level: telemetria_levels[:on_timer],
                     group: __MODULE__,
                     if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_timer)
-        defp safe_on_timer(state, state_payload) do
+        def safe_on_timer(state, state_payload) do
           if function_exported?(__MODULE__, :on_timer, 2),
             do: apply(__MODULE__, :on_timer, [state, state_payload]),
             else: :ok
@@ -1749,7 +1514,7 @@ defmodule Finitomata do
       Enum.count(parsed, &match?({:transition, ["[*]", _, _]}, &1)) != 1 ->
         {:error, :initial_state}
 
-      Enum.count(parsed, &match?({:transition, [_, "[*]", _]}, &1)) < 1 ->
+      not Enum.any?(parsed, &match?({:transition, [_, "[*]", _]}, &1)) ->
         {:error, :final_state}
 
       from_states -- to_states != [] ->
