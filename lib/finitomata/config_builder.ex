@@ -170,30 +170,34 @@ defmodule Finitomata.ConfigBuilder do
   end
 
   @spec def_mock(Macro.Env.t(), module()) :: module()
-  defp def_mock(env, reporter) do
-    with {:error, error} <- Code.ensure_compiled(Mox) do
-      reporter.info([
-        [:yellow, "expectation: ", :reset],
-        "to be able to use ",
-        [:blue, ":mox", :reset],
-        " listener in tests with ",
-        [:blue, "`Finitomata.ExUnit`", :reset],
-        ", please add ",
-        [:blue, "`{:mox, \"~> 1.0\", only: [:test]}`", :reset],
-        " as a dependency to your ",
-        [:blue, "`mix.exs`", :reset],
-        " project file (got: ",
-        [:yellow, inspect(error), :reset],
-        ")"
-      ])
-    end
+  case Code.ensure_compiled(Mox) do
+    {:error, error} ->
+      defp def_mock(env, reporter) do
+        reporter.info([
+          [:yellow, "expectation: ", :reset],
+          "to be able to use ",
+          [:blue, ":mox", :reset],
+          " listener in tests with ",
+          [:blue, "`Finitomata.ExUnit`", :reset],
+          ", please add ",
+          [:blue, "`{:mox, \"~> 1.0\", only: [:test]}`", :reset],
+          " as a dependency to your ",
+          [:blue, "`mix.exs`", :reset],
+          " project file (got: ",
+          [:yellow, inspect(unquote(error)), :reset],
+          ")"
+        ])
+      end
 
-    [env.module, Mox]
-    |> Module.concat()
-    |> tap(fn mox_mod ->
-      Mox.defmock(mox_mod, for: Finitomata.Listener)
-      Code.ensure_compiled!(mox_mod)
-    end)
+    {:module, _} ->
+      defp def_mock(env, _reporter) do
+        [env.module, Mox]
+        |> Module.concat()
+        |> tap(fn mox_mod ->
+          Mox.defmock(mox_mod, for: Finitomata.Listener)
+          Code.ensure_compiled!(mox_mod)
+        end)
+      end
   end
 
   @spec impl_for(:all | :none | atom() | [atom()]) :: [atom()]
