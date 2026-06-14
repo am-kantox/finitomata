@@ -640,6 +640,20 @@ defmodule Finitomata.ExUnit do
     [require_ast, init_ast]
   end
 
+  @doc false
+  # Resolves the `%{fsm: …}` map from the test context. Kept as a function (rather than an
+  #   inline `case` in the macros) so the match is analysed here, with an untyped argument,
+  #   instead of at the call site — where the context type is narrowed and would make the
+  #   fallback clause look unreachable to the compiler.
+  @spec fetch_fsm!(term(), String.t()) :: term()
+  def fetch_fsm!(%{finitomata: %{fsm: fsm}}, _macro), do: fsm
+
+  def fetch_fsm!(_ctx, macro) do
+    raise Finitomata.TestTransitionError,
+      message:
+        "in order to use `#{macro}` one should declare the _FSM_ in a `setup_finitomata/1` callback"
+  end
+
   @doc """
   Convenience macro to assert a transition initiated by `event_payload`
     argument on the _FSM_ defined by the test context previously setup
@@ -682,16 +696,7 @@ defmodule Finitomata.ExUnit do
   """
   defmacro assert_transition(ctx, event_payload, do: block) do
     quote do
-      fsm =
-        case unquote(ctx) do
-          %{finitomata: %{fsm: fsm}} ->
-            fsm
-
-          _other ->
-            raise Finitomata.TestTransitionError,
-              message:
-                "in order to use `assert_transition/3` one should declare _FSM_ in `setup_finitomata/1` callback"
-        end
+      fsm = Finitomata.ExUnit.fetch_fsm!(unquote(ctx), "assert_transition/3")
 
       assert_transition(fsm.id, fsm.implementation, fsm.name, unquote(event_payload),
         do: unquote(block)
@@ -720,16 +725,7 @@ defmodule Finitomata.ExUnit do
   """
   defmacro assert_no_transition(ctx, event_payload, do: block) do
     quote generated: true, location: :keep do
-      fsm =
-        case unquote(ctx) do
-          %{finitomata: %{fsm: fsm}} ->
-            fsm
-
-          _other ->
-            raise Finitomata.TestTransitionError,
-              message:
-                "in order to use `assert_no_transition/3` one should declare _FSM_ in `setup_finitomata/1` callback"
-        end
+      fsm = Finitomata.ExUnit.fetch_fsm!(unquote(ctx), "assert_no_transition/3")
 
       fsm_name = {:via, Registry, {Finitomata.Supervisor.registry_name(fsm.id), fsm.name}}
 
