@@ -174,6 +174,10 @@ defmodule Infinitomata do
 
   @spec do_start_fsm(boolean(), node(), Finitomata.id(), Finitomata.fsm_name(), module(), any()) ::
           DynamicSupervisor.on_start_child()
+  # NOTE: `:rpc.block_call/5` is used deliberately (not `:erpc.call/5`). `block_call` runs the
+  #   MFA in the callee's long-lived `rex` process, so a remotely started/linked `Finitomata`
+  #   supervision tree survives the call; `:erpc` runs in a transient process that would take the
+  #   freshly linked processes down with it.
   defp do_start_fsm(false, node, id, target, implementation, payload) do
     case :rpc.block_call(
            node,
@@ -183,7 +187,6 @@ defmodule Infinitomata do
            @rpc_timeout
          ) do
       {:ok, pid} ->
-        # local_pid = :rpc.call(node, :erlang, :list_to_pid, [:erlang.pid_to_list(pid)]).
         :ok = :rpc.block_call(node, :pg, :join, [InfSup.group(id), pid], @rpc_timeout)
         {:ok, pid}
 

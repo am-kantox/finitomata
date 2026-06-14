@@ -3,6 +3,23 @@ name: Test
 on: [push, pull_request]
 
 jobs:
+  quality:
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: ci
+    name: Quality (format + credo)
+    steps:
+      - uses: actions/checkout@v2
+      - uses: erlef/setup-elixir@v1
+        with:
+          otp-version: "28"
+          elixir-version: "1.19.4"
+      - name: "Format check and Credo"
+        run: |
+          mix do deps.get, deps.compile, compile
+          mix format --check-formatted
+          mix credo --strict
+
   test:
     runs-on: ubuntu-latest
     env:
@@ -40,7 +57,6 @@ jobs:
       - name: "Compile and Test Library (with coverage)"
         run: |
           mix do deps.get, deps.compile, compile
-          mix format --check-formatted
           mix test --cover --exclude distributed --exclude finitomata
           mix test --exclude test --include distributed
       - name: "Test Library with itself in :finitomata env"

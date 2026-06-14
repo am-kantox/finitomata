@@ -157,6 +157,7 @@ end
 ```
 
 ## Changelog
+- `0.37.1` — [UPD] graph search-depth caps in `Finitomata.Transition` are now configurable (defaults unchanged), `mix credo --strict` runs on push CI; [DOC] documented why `Infinitomata` keeps `:rpc.block_call` rather than `:erpc`
 - `0.37.0` — [UPD] completed `Finitomata.Engine` extraction: the transition lifecycle, `init/1`, and all `GenServer` callbacks now live in a shared, unit-testable module, leaving each generated FSM as thin delegations plus per-module telemetry wrappers (no public API change); [FIX] credo cleanups, `Credo.Check.Refactor.Nesting` no longer suppressed
 - `0.36.0` — [UPD] ETS-backed state cache (configurable via `:cache_backend`), `Finitomata.Error` struct in `last_error`, `Finitomata.Engine` seam, `Infinitomata` RPC timeouts + backoff; [FIX] `mix test` alias, `format_status/1` for OTP25+, OTP detection via `:pg.monitor/1`; deprecation warning for ambiguous `start_fsm/4`
 - `0.30.0` — [UPD] `Finitomata.Flow`, backport `Infinitomata` to OTP25-, tons of tiny improvements

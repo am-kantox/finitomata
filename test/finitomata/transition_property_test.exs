@@ -63,4 +63,15 @@ defmodule Finitomata.TransitionPropertyTest do
       assert Enum.count(paths) == branches
     end
   end
+
+  property "steps_handled/3 counts the handled hops of a linear chain (no hard transitions)" do
+    check all n <- integer(2..8) do
+      states = for i <- 1..n, do: :"s#{i}"
+      assert {:ok, transitions} = states |> chain_fsm() |> Finitomata.Mermaid.parse()
+
+      # the shortest handled path :* -> :* drops the implicit __start__/__end__ edges,
+      #   leaving the n - 1 inter-state hops of the chain
+      assert Transition.steps_handled(transitions, :*, :*) == n - 1
+    end
+  end
 end

@@ -315,12 +315,22 @@ defmodule Finitomata.Transition do
     |> Stream.flat_map(&do_loop(&1, transitions, [], []))
   end
 
+  # Heuristic search-depth caps for loop/path enumeration. The defaults preserve historical
+  #   behaviour; they can be tuned via config for unusually large or densely connected FSMs.
+  @loop_search_extra Application.compile_env(:finitomata, :loop_search_extra, 2)
+  @loop_search_budget Application.compile_env(:finitomata, :loop_search_budget, 24)
+  @path_search_sparse_limit Application.compile_env(:finitomata, :path_search_sparse_limit, 12)
+  @path_search_dense_limit Application.compile_env(:finitomata, :path_search_dense_limit, 24)
+  @path_search_sparse_factor Application.compile_env(:finitomata, :path_search_sparse_factor, 3)
+  @path_search_medium_factor Application.compile_env(:finitomata, :path_search_medium_factor, 2)
+  @path_search_dense_factor Application.compile_env(:finitomata, :path_search_dense_factor, 1)
+
   # The maximum loop length is bounded heuristically to keep enumeration tractable: about
-  #   two hops, plus extra for small FSMs. As a consequence, loops longer than this bound
-  #   are not reported for FSMs with many (> ~24) transitions. This is a deliberate
+  #   `@loop_search_extra` hops, plus more for small FSMs. As a consequence, loops longer than
+  #   this bound are not reported for FSMs with many transitions. This is a deliberate
   #   performance/termination trade-off, not an exhaustive search.
   defp do_loop(state, transitions, path, paths) do
-    count = 2 + div(24, count(:transitions, transitions))
+    count = @loop_search_extra + div(@loop_search_budget, count(:transitions, transitions))
     do_loop(state, transitions, path, paths, count)
   end
 
@@ -490,9 +500,9 @@ defmodule Finitomata.Transition do
 
     count =
       case count(:transitions, transitions) do
-        few when few < 12 -> state_count * 3
-        avg when avg < 24 -> state_count * 2
-        _ -> state_count
+        few when few < @path_search_sparse_limit -> state_count * @path_search_sparse_factor
+        avg when avg < @path_search_dense_limit -> state_count * @path_search_medium_factor
+        _ -> state_count * @path_search_dense_factor
       end
 
     do_path(from, to, transitions, path, paths, count)
