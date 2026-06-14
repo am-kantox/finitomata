@@ -607,4 +607,171 @@ defmodule Finitomata.Engine do
        do: Map.put(state, :current, fsm_state)
 
   defp put_current_state_if_loaded(state, _, _fsm_state), do: state
+
+  # Per-callback wrappers. Each generated FSM module keeps a thin, `@telemetria`-annotated
+  #   `safe_on_*` shim (so telemetry events stay grouped by the consumer module) that
+  #   delegates here. Centralizing the bodies keeps the `use Finitomata` quote small while
+  #   preserving the exact callback-resolution, error-wrapping, and return semantics.
+
+  @doc false
+  @spec safe_on_start(module(), :loaded | map(), State.payload()) ::
+          {:stop, term()} | {:continue, State.payload()} | {:ok, State.payload()} | :ignore
+  def safe_on_start(_module, :loaded, payload), do: {:ok, payload}
+
+  def safe_on_start(module, _state, payload) do
+    if function_exported?(module, :on_start, 1),
+      do: module.on_start(payload),
+      else: :ignore
+  rescue
+    err ->
+      _ = report_error(err, __STACKTRACE__, "on_start/1")
+      {:stop, err}
+  end
+
+  @doc false
+  @spec safe_on_transition(
+          module(),
+          Finitomata.fsm_name(),
+          Transition.state(),
+          Transition.event(),
+          Finitomata.event_payload(),
+          State.payload()
+        ) :: Finitomata.transition_resolution() | {:error, :on_transition_raised}
+  def safe_on_transition(module, name, current, event, event_payload, state_payload) do
+    module.on_transition(current, event, event_payload, state_payload)
+    |> then(&maybe_store(module, &1, name, current, event, event_payload, state_payload))
+    |> tap(&maybe_pubsub(module, &1, name))
+  rescue
+    err -> report_error(err, __STACKTRACE__, "on_transition/4")
+  end
+
+  @doc false
+  @spec safe_on_fork(module(), [module()], Transition.state(), State.t()) ::
+          {:ok, module(), Transition.event()} | {:error, any()}
+  def safe_on_fork(module, forks, fork_state, state) do
+    cond do
+      function_exported?(module, :on_fork, 2) ->
+        case module.on_fork(fork_state, state.payload) do
+          {:ok, fork_impl} ->
+            case Enum.find(forks, &match?({_event, ^fork_impl}, &1)) do
+              nil -> {:error, :unknown_fork_resolution}
+              {event, ^fork_impl} -> {:ok, fork_impl, event}
+            end
+
+          :ok ->
+            case forks do
+              [{event, fork_impl}] -> {:ok, fork_impl, event}
+              [] -> {:error, :missing_fork_resolution}
+              _ -> {:error, :multiple_fork_resolutions}
+            end
+
+          _other ->
+            {:error, :bad_fork_resolution}
+        end
+
+      match?([_fork], forks) ->
+        [{event, fork_impl}] = forks
+        {:ok, fork_impl, event}
+
+      true ->
+        {:error, :missing_fork_resolution}
+    end
+  rescue
+    err ->
+      _ = report_error(err, __STACKTRACE__, "on_fork/2")
+      {:error, :on_fork_raised}
+  end
+
+  @doc false
+  @spec safe_on_failure(module(), Transition.event(), Finitomata.event_payload(), State.t()) ::
+          :ok
+  def safe_on_failure(module, event, event_payload, state_payload) do
+    if function_exported?(module, :on_failure, 3) do
+      with other when other != :ok <-
+             module.on_failure(event, event_payload, state_payload) do
+        Logger.info("[♻️] Unexpected return from a callback [#{inspect(other)}], must be :ok")
+        :ok
+      end
+    else
+      :ok
+    end
+  rescue
+    err -> report_error(err, __STACKTRACE__, "on_failure/3")
+  end
+
+  @doc false
+  @spec safe_on_enter(module(), Transition.state(), State.t()) :: :ok
+  def safe_on_enter(module, state, state_payload) do
+    if function_exported?(module, :on_enter, 2) do
+      with other when other != :ok <- module.on_enter(state, state_payload) do
+        Logger.info("[♻️] Unexpected return from a callback [#{inspect(other)}], must be :ok")
+        :ok
+      end
+    else
+      :ok
+    end
+  rescue
+    err -> report_error(err, __STACKTRACE__, "on_enter/2")
+  end
+
+  @doc false
+  @spec safe_on_exit(module(), Transition.state(), State.t()) :: :ok
+  def safe_on_exit(module, state, state_payload) do
+    if function_exported?(module, :on_exit, 2) do
+      with other when other != :ok <- module.on_exit(state, state_payload) do
+        Logger.info("[♻️] Unexpected return from a callback [#{inspect(other)}], must be :ok")
+        :ok
+      end
+    else
+      :ok
+    end
+  rescue
+    err -> report_error(err, __STACKTRACE__, "on_exit/2")
+  end
+
+  @doc false
+  @spec safe_on_terminate(module(), State.t()) :: :ok
+  def safe_on_terminate(module, state) do
+    if function_exported?(module, :on_terminate, 1) do
+      with other when other != :ok <- module.on_terminate(state) do
+        Logger.warning(
+          "[♻️] Unexpected return from `on_terminate/1` [#{inspect(other)}], must be :ok"
+        )
+      end
+    else
+      :ok
+    end
+  rescue
+    err -> report_error(err, __STACKTRACE__, "on_terminate/1")
+  end
+
+  @doc false
+  @spec safe_on_timer(module(), Transition.state(), State.t()) ::
+          :ok
+          | {:ok, State.t()}
+          | {:transition, {Transition.state(), Finitomata.event_payload()}, State.payload()}
+          | {:transition, Transition.state(), State.payload()}
+          | {:reschedule, pos_integer()}
+  def safe_on_timer(module, state, state_payload) do
+    if function_exported?(module, :on_timer, 2),
+      do: module.on_timer(state, state_payload),
+      else: :ok
+  rescue
+    err -> report_error(err, __STACKTRACE__, "on_timer/2")
+  end
+
+  @spec report_error(term(), Exception.stacktrace(), String.t()) :: {:error, term()}
+  defp report_error(err, stacktrace, from) do
+    case err do
+      %{__exception__: true} ->
+        {ex, st} = Exception.blame(:error, err, stacktrace)
+        Logger.warning(Exception.format(:error, ex, st))
+        {:error, Exception.message(err)}
+
+      _ ->
+        Logger.warning("[⚑ ↹] #{from} raised: " <> inspect(err) <> "\n" <> inspect(stacktrace))
+
+        {:error, :on_transition_raised}
+    end
+  end
 end

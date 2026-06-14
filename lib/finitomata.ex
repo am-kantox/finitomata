@@ -1,9 +1,3 @@
-# This module is a code-generating macro: the `use Finitomata` quote is necessarily long and
-#   `ast/2`'s compile-time option parsing is necessarily branchy. The runtime logic (and its
-#   nesting) now lives in `Finitomata.Engine`, so only these two checks remain disabled here.
-# credo:disable-for-this-file Credo.Check.Refactor.LongQuoteBlocks
-# credo:disable-for-this-file Credo.Check.Refactor.CyclomaticComplexity
-
 defmodule Finitomata do
   @doc false
   def behaviour(value, funs \\ [])
@@ -901,262 +895,26 @@ defmodule Finitomata do
       @on_definition Finitomata.Hook
       @before_compile Finitomata.Hook
 
-      reporter = if Code.ensure_loaded?(Mix), do: Mix.shell(), else: Logger
-
-      telemetria_levels =
-        case Keyword.fetch!(options, :telemetria_levels) do
-          :none ->
-            []
-
-          some ->
-            case Keyword.split(some, [:all]) do
-              {[], levels} ->
-                levels
-
-              {[all: level], levels} ->
-                [
-                  on_transition: level,
-                  on_failure: level,
-                  on_fork: level,
-                  on_enter: level,
-                  on_exit: level,
-                  on_start: level,
-                  on_terminate: level,
-                  on_timer: level
-                ]
-                |> Keyword.merge(levels)
-            end
-        end
-
-      syntax = Keyword.fetch!(options, :syntax)
-
-      if syntax in [Finitomata.Mermaid, Finitomata.PlantUML] do
-        reporter.info([
-          [:yellow, "deprecated: ", :reset],
-          "using built-in modules as syntax names is deprecated, please use ",
-          [:blue, ":flowchart", :reset],
-          " and/or ",
-          [:blue, ":state_diagram", :reset],
-          " instead"
-        ])
-      end
-
-      syntax =
-        case syntax do
-          :flowchart -> Finitomata.Mermaid
-          :state_diagram -> Finitomata.PlantUML
-          module when is_atom(module) -> module
-        end
-
       shutdown = Keyword.fetch!(options, :shutdown)
-      forks = Keyword.fetch!(options, :forks)
-      auto_terminate = Keyword.fetch!(options, :auto_terminate)
-      hibernate = Keyword.fetch!(options, :hibernate)
-      cache_state = Keyword.fetch!(options, :cache_state)
-      persistency = Keyword.fetch!(options, :persistency)
-      listener = Keyword.fetch!(options, :listener)
 
-      def_mock = fn ->
-        with {:error, error} <- Code.ensure_compiled(Mox) do
-          reporter.info([
-            [:yellow, "expectation: ", :reset],
-            "to be able to use ",
-            [:blue, ":mox", :reset],
-            " listener in tests with ",
-            [:blue, "`Finitomata.ExUnit`", :reset],
-            ", please add ",
-            [:blue, "`{:mox, \"~> 1.0\", only: [:test]}`", :reset],
-            " as a dependency to your ",
-            [:blue, "`mix.exs`", :reset],
-            " project file (got: ",
-            [:yellow, inspect(error), :reset],
-            ")"
-          ])
-        end
-
-        [__MODULE__, Mox]
-        |> Module.concat()
-        |> tap(fn mox_mod ->
-          Mox.defmock(mox_mod, for: Finitomata.Listener)
-          Code.ensure_compiled!(mox_mod)
-        end)
-      end
-
-      mox_envs = options |> Keyword.fetch!(:mox_envs) |> List.wrap()
-
-      listener =
-        case listener do
-          :mox -> if Mix.env() in mox_envs, do: def_mock.()
-          {:mox, listener} -> if Mix.env() in mox_envs, do: def_mock.(), else: listener
-          {listener, :mox} -> if Mix.env() in mox_envs, do: def_mock.(), else: listener
-          listener -> listener
-        end
-
-      use GenServer, restart: :transient, shutdown: shutdown
-
-      impls =
-        ~w|on_transition on_failure on_fork on_enter on_exit on_start on_terminate on_timer|a
-
-      impl_for =
-        case Keyword.fetch!(options, :impl_for) do
-          :all -> impls
-          :none -> []
-          transition when is_atom(transition) -> [transition]
-          list when is_list(list) -> list
-        end
-
-      if impl_for -- impls != [] do
-        raise CompileError,
-          description:
-            "allowed `impl_for:` values are: `:all`, `:none`, or any combination of `#{inspect(impls)}`"
-      end
-
-      dsl = options[:fsm]
-      env = __ENV__
-
-      fsm =
-        case syntax.parse(dsl, env) do
-          {:ok, result} ->
-            result
-
-          {:error, description, snippet, _context, {file, line, column}, _offset} ->
-            raise SyntaxError,
-              file: file,
-              line: line,
-              column: column,
-              description: description,
-              snippet: snippet
-
-          {:error, error} ->
-            raise TokenMissingError,
-              file: env.file,
-              line: env.line,
-              column: 0,
-              opening_delimiter: ~s|"""|,
-              description: "description is incomplete, error: #{inspect(error)}",
-              snippet: dsl |> String.split("\n", parts: 2) |> hd()
-        end
-
-      hard =
-        fsm
-        |> Transition.determined()
-        |> Enum.filter(fn
-          {state, :__end__} ->
-            case auto_terminate do
-              ^state -> true
-              true -> true
-              list when is_list(list) -> state in list
-              _ -> false
-            end
-
-          {state, event} ->
-            event
-            |> to_string()
-            |> String.ends_with?("!")
-        end)
-
-      [Transition.hard(fsm), hard]
-      |> Enum.map(fn h -> h |> Enum.map(&elem(&1, 1)) |> Enum.uniq() end)
-      |> Enum.reduce(&Kernel.--/2)
-      |> unless do
-        raise CompileError,
-          description:
-            "transitions marked as `:hard` must be determined, non-determined found: #{inspect(Transition.hard(fsm) -- hard)}"
-      end
-
-      hard =
-        Enum.map(hard, fn {from, event} ->
-          tos =
-            fsm
-            |> Enum.filter(&match?(%Transition{from: ^from, event: ^event}, &1))
-            |> Enum.map(& &1.to)
-
-          {from, %Transition{from: from, event: event, to: tos}}
-        end)
-
-      soft =
-        Enum.filter(fsm, fn
-          %Transition{event: event} ->
-            event
-            |> to_string()
-            |> String.ends_with?("?")
-        end)
-
-      ensure_entry =
-        options
-        |> Keyword.fetch!(:ensure_entry)
-        |> case do
-          list when is_list(list) -> list
-          true -> [Transition.entry(fsm)]
-          _ -> []
-        end
-
+      # `timer`'s `Application.compile_env/3` default must be captured in this (the consuming
+      #   module's) compile-time context, so it is resolved here and passed to the builder.
       timer =
-        options
-        |> Keyword.fetch!(:timer)
-        |> case do
+        case Keyword.fetch!(options, :timer) do
           value when is_integer(value) and value >= 0 -> value
           true -> Application.compile_env(:finitomata, :timer, 5_000)
           _ -> false
         end
 
-      @__config__ %{
-        syntax: syntax,
-        fsm: fsm,
-        dsl: dsl,
-        impl_for: impl_for,
-        forks: forks,
-        persistency: persistency,
-        listener: listener,
-        auto_terminate: auto_terminate,
-        hibernate: hibernate,
-        cache_state: cache_state,
-        ensure_entry: ensure_entry,
-        states: Transition.states(fsm),
-        events: Transition.events(fsm),
-        paths: Transition.straight_paths(fsm),
-        loops: Transition.loops(fsm),
-        entry: Transition.entry(:transition, fsm).event,
-        hard: hard,
-        hard_states: Keyword.keys(hard),
-        soft: soft,
-        soft_events: Enum.map(soft, & &1.event),
-        fork_states: Keyword.keys(forks),
-        timer: timer
-      }
+      {config, telemetria_levels} = Finitomata.ConfigBuilder.build(options, __ENV__, timer)
+
+      @__config__ config
       @__config_keys__ Map.keys(@__config__)
 
+      use GenServer, restart: :transient, shutdown: shutdown
+
       if @moduledoc != false do
-        @moduledoc """
-                   The instance of _FSM_ backed up by `Finitomata`.
-
-                   - _entry event_ → `:#{@__config__.entry}`
-                   - _forks_ → `#{if [] == @__config__.forks, do: "✗", else: inspect(@__config__.forks)}`
-                   - _persistency_ → `#{if @__config__.persistency, do: inspect(@__config__.persistency), else: "✗"}`
-                   - _listener_ → `#{if @__config__.listener, do: inspect(@__config__.listener), else: "✗"}`
-                   - _timer_ → `#{@__config__.timer || "✗"}`
-                   - _hibernate_ → `#{@__config__.hibernate || "✗"}`
-                   - _cache_state_ → `#{if @__config__.cache_state, do: "✓", else: "✗"}`
-
-                   ## FSM representation
-
-                   ```#{@__config__.syntax |> Module.split() |> List.last() |> Macro.underscore()}
-                   #{@__config__.syntax.lint(@__config__.dsl)}
-                   ```
-
-                   ### FSM paths
-
-                   ```elixir
-                   #{Enum.map_join(@__config__.paths, "\n", &inspect/1)}
-                   ```
-
-                   ### FSM loops
-
-                   ```elixir
-                   #{if [] != @__config__.loops, do: Enum.map_join(@__config__.loops, "\n", &inspect/1), else: "no loops"}
-                   ```
-
-                   """ <> if(is_nil(@moduledoc), do: "", else: "\n---\n" <> @moduledoc)
+        @moduledoc Finitomata.ConfigBuilder.moduledoc(@__config__, @moduledoc)
       end
 
       @doc """
@@ -1239,45 +997,15 @@ defmodule Finitomata do
           end
       end
 
-      defmacrop report_error(err, from \\ "Finitomata") do
-        quote generated: true, location: :keep, bind_quoted: [err: err, from: from] do
-          case err do
-            %{__exception__: true} ->
-              {ex, st} = Exception.blame(:error, err, __STACKTRACE__)
-              Logger.warning(Exception.format(:error, ex, st))
-              {:error, Exception.message(err)}
-
-            _ ->
-              Logger.warning(
-                "[⚑ ↹] #{from} raised: " <> inspect(err) <> "\n" <> inspect(__STACKTRACE__)
-              )
-
-              {:error, :on_transition_raised}
-          end
-        end
-      end
-
       @doc false
       @impl GenServer
       def init(init_arg), do: Finitomata.Engine.init(__MODULE__, init_arg)
 
-      # `safe_on_start` stays here (rather than in `Finitomata.Engine`) because it invokes the
-      #   per-module `on_start/1` callback and the `report_error` macro. The Engine calls it via
-      #   the passed-in module.
       @doc false
       @spec safe_on_start(:loaded | map(), State.payload()) ::
               {:stop, term()} | {:continue, State.payload()} | {:ok, State.payload()} | :ignore
-      def safe_on_start(:loaded, payload), do: {:ok, payload}
-
-      def safe_on_start(_state, payload) do
-        if function_exported?(__MODULE__, :on_start, 1),
-          do: apply(__MODULE__, :on_start, [payload]),
-          else: :ignore
-      rescue
-        err ->
-          report_error(err, "on_start/1")
-          {:stop, err}
-      end
+      def safe_on_start(state, payload),
+        do: Finitomata.Engine.safe_on_start(__MODULE__, state, payload)
 
       @doc false
       @impl GenServer
@@ -1341,24 +1069,16 @@ defmodule Finitomata do
       @telemetria level: telemetria_levels[:on_transition],
                   group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_transition)
-      def safe_on_transition(name, current, event, event_payload, state_payload) do
-        current
-        |> on_transition(event, event_payload, state_payload)
-        |> then(
-          &Finitomata.Engine.maybe_store(
+      def safe_on_transition(name, current, event, event_payload, state_payload),
+        do:
+          Finitomata.Engine.safe_on_transition(
             __MODULE__,
-            &1,
             name,
             current,
             event,
             event_payload,
             state_payload
           )
-        )
-        |> tap(&Finitomata.Engine.maybe_pubsub(__MODULE__, &1, name))
-      rescue
-        err -> report_error(err, "on_transition/4")
-      end
 
       @doc false
       @spec safe_on_fork([module()], Transition.state(), State.t()) ::
@@ -1366,113 +1086,40 @@ defmodule Finitomata do
       @telemetria level: telemetria_levels[:on_fork],
                   group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_fork)
-      def safe_on_fork(forks, fork_state, state) do
-        cond do
-          function_exported?(__MODULE__, :on_fork, 2) ->
-            case apply(__MODULE__, :on_fork, [fork_state, state.payload]) do
-              {:ok, fork_impl} ->
-                case Enum.find(forks, &match?({_event, ^fork_impl}, &1)) do
-                  nil -> {:error, :unknown_fork_resolution}
-                  {event, ^fork_impl} -> {:ok, fork_impl, event}
-                end
-
-              :ok ->
-                case forks do
-                  [{event, fork_impl}] -> {:ok, fork_impl, event}
-                  [] -> {:error, :missing_fork_resolution}
-                  _ -> {:error, :multiple_fork_resolutions}
-                end
-
-              other ->
-                {:error, :bad_fork_resolution}
-            end
-
-          match?([_fork], forks) ->
-            [{event, fork_impl}] = forks
-            {:ok, fork_impl, event}
-
-          true ->
-            {:error, :missing_fork_resolution}
-        end
-      rescue
-        err ->
-          report_error(err, "on_fork/2")
-          {:error, :on_fork_raised}
-      end
+      def safe_on_fork(forks, fork_state, state),
+        do: Finitomata.Engine.safe_on_fork(__MODULE__, forks, fork_state, state)
 
       @doc false
       @spec safe_on_failure(Transition.event(), Finitomata.event_payload(), State.t()) :: :ok
       @telemetria level: telemetria_levels[:on_failure],
                   group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_failure)
-      def safe_on_failure(event, event_payload, state_payload) do
-        if function_exported?(__MODULE__, :on_failure, 3) do
-          with other when other != :ok <-
-                 apply(__MODULE__, :on_failure, [event, event_payload, state_payload]) do
-            Logger.info("[♻️] Unexpected return from a callback [#{inspect(other)}], must be :ok")
-            :ok
-          end
-        else
-          :ok
-        end
-      rescue
-        err -> report_error(err, "on_failure/3")
-      end
+      def safe_on_failure(event, event_payload, state_payload),
+        do: Finitomata.Engine.safe_on_failure(__MODULE__, event, event_payload, state_payload)
 
       @doc false
       @spec safe_on_enter(Transition.state(), State.t()) :: :ok
       @telemetria level: telemetria_levels[:on_enter],
                   group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_enter)
-      def safe_on_enter(state, state_payload) do
-        if function_exported?(__MODULE__, :on_enter, 2) do
-          with other when other != :ok <- apply(__MODULE__, :on_enter, [state, state_payload]) do
-            Logger.info("[♻️] Unexpected return from a callback [#{inspect(other)}], must be :ok")
-            :ok
-          end
-        else
-          :ok
-        end
-      rescue
-        err -> report_error(err, "on_enter/2")
-      end
+      def safe_on_enter(state, state_payload),
+        do: Finitomata.Engine.safe_on_enter(__MODULE__, state, state_payload)
 
       @doc false
       @spec safe_on_exit(Transition.state(), State.t()) :: :ok
       @telemetria level: telemetria_levels[:on_exit],
                   group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_exit)
-      def safe_on_exit(state, state_payload) do
-        if function_exported?(__MODULE__, :on_exit, 2) do
-          with other when other != :ok <- apply(__MODULE__, :on_exit, [state, state_payload]) do
-            Logger.info("[♻️] Unexpected return from a callback [#{inspect(other)}], must be :ok")
-            :ok
-          end
-        else
-          :ok
-        end
-      rescue
-        err -> report_error(err, "on_exit/2")
-      end
+      def safe_on_exit(state, state_payload),
+        do: Finitomata.Engine.safe_on_exit(__MODULE__, state, state_payload)
 
       @doc false
       @spec safe_on_terminate(State.t()) :: :ok
       @telemetria level: telemetria_levels[:on_terminate],
                   group: __MODULE__,
                   if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_terminate)
-      def safe_on_terminate(state) do
-        if function_exported?(__MODULE__, :on_terminate, 1) do
-          with other when other != :ok <- apply(__MODULE__, :on_terminate, [state]) do
-            Logger.warning(
-              "[♻️] Unexpected return from `on_terminate/1` [#{inspect(other)}], must be :ok"
-            )
-          end
-        else
-          :ok
-        end
-      rescue
-        err -> report_error(err, "on_terminate/1")
-      end
+      def safe_on_terminate(state),
+        do: Finitomata.Engine.safe_on_terminate(__MODULE__, state)
 
       if @__config__.timer do
         @doc false
@@ -1485,13 +1132,8 @@ defmodule Finitomata do
         @telemetria level: telemetria_levels[:on_timer],
                     group: __MODULE__,
                     if: Telemetria.Wrapper.telemetria?(__MODULE__, :on_timer)
-        def safe_on_timer(state, state_payload) do
-          if function_exported?(__MODULE__, :on_timer, 2),
-            do: apply(__MODULE__, :on_timer, [state, state_payload]),
-            else: :ok
-        rescue
-          err -> report_error(err, "on_timer/2")
-        end
+        def safe_on_timer(state, state_payload),
+          do: Finitomata.Engine.safe_on_timer(__MODULE__, state, state_payload)
       end
 
       @behaviour Finitomata

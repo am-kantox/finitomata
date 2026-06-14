@@ -157,6 +157,7 @@ end
 ```
 
 ## Changelog
+- `0.39.0` — [UPD] extracted the `use Finitomata` compile-time option parsing into `Finitomata.ConfigBuilder` and moved the `safe_on_*` callback wrappers' bodies into `Finitomata.Engine`, shrinking the generated macro (cyclomatic complexity 97 → 37); the file-level Credo suppressions on `lib/finitomata.ex` are gone and the thresholds were lowered (no public API change)
 - `0.38.0` — [UPD] built-in dependency-free persistence adapters `Finitomata.Persistency.ETS` (in-memory, survives FSM restart) and `Finitomata.Persistency.DETS` (disk-durable across node restart); [DOC] corrected the `Finitomata.Persistency` `load/1` contract (it receives a `{type, fields}` descriptor and returns `{lifecycle, {state, payload}}`)
 - `0.37.1` — [UPD] graph search-depth caps in `Finitomata.Transition` are now configurable (defaults unchanged), `mix credo --strict` runs on push CI; [DOC] documented why `Infinitomata` keeps `:rpc.block_call` rather than `:erpc`
 - `0.37.0` — [UPD] completed `Finitomata.Engine` extraction: the transition lifecycle, `init/1`, and all `GenServer` callbacks now live in a shared, unit-testable module, leaving each generated FSM as thin delegations plus per-module telemetry wrappers (no public API change); [FIX] credo cleanups, `Credo.Check.Refactor.Nesting` no longer suppressed

@@ -121,9 +121,12 @@
           #
           {Credo.Check.Refactor.Apply, []},
           {Credo.Check.Refactor.CondStatements, []},
-          {Credo.Check.Refactor.CyclomaticComplexity, max_complexity: 42},
+          # `Finitomata.ast/2` (the `use Finitomata` code-gen quote) and the
+          #   `mix finitomata.generate` task are the binding cases at ~37/36.
+          {Credo.Check.Refactor.CyclomaticComplexity, max_complexity: 38},
           {Credo.Check.Refactor.FunctionArity, []},
-          {Credo.Check.Refactor.LongQuoteBlocks, [max_line_count: 300]},
+          # the `use Finitomata` quote generates a full `GenServer` and is the binding case
+          {Credo.Check.Refactor.LongQuoteBlocks, [max_line_count: 260]},
           {Credo.Check.Refactor.MatchInCondition, []},
           {Credo.Check.Refactor.MapJoin, []},
           {Credo.Check.Refactor.NegatedConditionsInUnless, []},
