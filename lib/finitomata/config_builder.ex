@@ -15,8 +15,6 @@ defmodule Finitomata.ConfigBuilder do
   #   because its `Application.compile_env/3` default must be captured in the consumer's
   #   context rather than this module's.
 
-  require Logger
-
   alias Finitomata.Transition
 
   @impls ~w|on_transition on_failure on_fork on_enter on_exit on_start on_terminate on_timer|a

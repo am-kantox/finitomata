@@ -28,7 +28,7 @@ defmodule Finitomata.MixProject do
                  else: [{:enfiladex, "~> 0.1", only: [:dev, :test, :finitomata]}]
 
   @app :finitomata
-  @version "0.39.0"
+  @version "0.40.0"
 
   def lib?(lib), do: lib in Enum.map(@modern_libs, &elem(&1, 0))
 
@@ -140,7 +140,7 @@ defmodule Finitomata.MixProject do
       extras: ~w[README.md stuff/fsm.md stuff/compiler.md stuff/cheatsheet.md],
       groups_for_modules: [
         FSM: [Finitomata, Infinitomata, Finitomata.Flow],
-        Test: [Finitomata.ExUnit],
+        Test: [Finitomata.ExUnit, Finitomata.ExUnit.Listener],
         Goods: [Finitomata.Throttler, Finitomata.Pool, Finitomata.Cache, Finitomata.Accessible],
         Internals: [
           Finitomata.Listener,

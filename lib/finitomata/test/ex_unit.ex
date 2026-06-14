@@ -55,7 +55,7 @@ defmodule Finitomata.ExUnit do
     def on_transition(:closed, :coin_in, _payload, state) do
       {:ok, :opened, state}
     end
-    def on_transition(:closed, :off, _payload, state) do
+    def on_transition(:closed, :switch_off, _payload, state) do
       {:ok, :switched_off, state}
     end
   end
@@ -79,10 +79,10 @@ defmodule Finitomata.ExUnit do
     Finitomata.start_fsm(Turnstile, fini_name, %{data: %{passengers: 0}})
 
     Finitomata.transition(fini_name, :coin_in)
-    assert %{data: %{passengers: 0}}} = Finitomata.state(Turnstile, "Turnstile_1", :payload)
+    assert %{data: %{passengers: 0}} = Finitomata.state(Turnstile, "Turnstile_1", :payload)
 
     Finitomata.transition(fini_name, :walk_in)
-    assert %{data: %{passengers: 1}}} = Finitomata.state(Turnstile, "Turnstile_1", :payload)
+    assert %{data: %{passengers: 1}} = Finitomata.state(Turnstile, "Turnstile_1", :payload)
 
     Finitomata.transition(fini_name, :switch_off)
 
@@ -121,11 +121,11 @@ defmodule Finitomata.ExUnit do
 
     Finitomata.transition(fini_name, :coin_in)
     assert_receive {:on_transition, ^fsm_name, :opened, %{data: %{passengers: 0}}}
-    # assert %{data: %{passengers: 0}}} = Finitomata.state(Turnstile, "Turnstile_1", :payload)
+    # assert %{data: %{passengers: 0}} = Finitomata.state(Turnstile, "Turnstile_1", :payload)
 
     Finitomata.transition(fini_name, :walk_in)
     assert_receive {:on_transition, ^fsm_name, :closed, %{data: %{passengers: 1}}}
-    # assert %{data: %{passengers: 1}}} = Finitomata.state(Turnstile, "Turnstile_1", :payload)
+    # assert %{data: %{passengers: 1}} = Finitomata.state(Turnstile, "Turnstile_1", :payload)
 
     Finitomata.transition(fini_name, :switch_off)
     assert_receive {:on_transition, ^fsm_name, :switched_off, %{data: %{passengers: 1}}}
@@ -145,7 +145,7 @@ defmodule Finitomata.ExUnit do
       initial_passengers = 42
 
       [
-        fsm: [implementation: Turnstile, payload: %{data: %{passengers: initial_passengers}})],
+        fsm: [implementation: Turnstile, payload: %{data: %{passengers: initial_passengers}}],
         context: [passengers: initial_passengers]
       ]
     end
@@ -209,9 +209,84 @@ defmodule Finitomata.ExUnit do
   > besides the mandatory `--module ModuleWithUseFinitomata` argument, it also accepts
   > `--dir` and `--file` arguments (defaulted to `test/finitomata` and
   > `Macro.underscore(module) <> "_test.exs`) respectively.)
+
+  ## Testing without `Mox`
+
+  If you’d rather not depend on `Mox`, declare the _FSM_ with the built-in
+    `Finitomata.ExUnit.Listener` instead of `:mox`:
+
+  ```elixir
+  use Finitomata, fsm: @fsm, listener: Finitomata.ExUnit.Listener
+  # or, test-only:
+  # @listener if Mix.env() == :test, do: Finitomata.ExUnit.Listener
+  # use Finitomata, fsm: @fsm, listener: @listener
+  ```
+
+  Everything else (`setup_finitomata/1`, `test_path/3`, `assert_transition/3`,
+    `assert_state/2`, `assert_payload/1`) works exactly the same — just drop `import Mox`.
+    See `Finitomata.ExUnit.Listener` for details.
+
+  ## Matching the payload
+
+  `assert_payload/1` matches the carried payload with the `~>` operator, whose left-hand
+    side is a (possibly nested) path resolved with `get_in/2`. The payload therefore has to
+    implement the `Access` behaviour — the easiest way is to declare it with `defstate/1`
+    (which builds an `Estructura.Nested`), or to use a struct that derives `Access`. A plain
+    map works out of the box.
+
+  ## Asserting failures
+
+  A failed transition (a soft `event?`, an `{:error, _}` from `on_transition/4`, or a raise)
+    does not notify the listener, so there is nothing to `assert_receive`. Use
+    `assert_no_transition/3` to assert that the _FSM_ stayed put and to inspect the error:
+
+  ```elixir
+  assert_no_transition ctx, :reject? do
+    assert %Finitomata.Error{reason: :rejected} = last_error
+    assert :started = state.current
+  end
+  ```
+
+  Inside the block, `state` (the whole `t:Finitomata.State.t/0`), `payload`, and `last_error`
+    are bound for plain assertions.
+
+  ## Timer transitions
+
+  In `test_path/3`, the `:_` clause stands for a timer tick (`Finitomata.timer_tick/2`); the
+    payload is read straight from the running _FSM_, so timer-driven `on_timer/2` callbacks
+    can be asserted just like regular transitions:
+
+  ```elixir
+  test_path "ticking", _ctx do
+    :_ ->
+      assert_state :processing do
+        assert_payload do: processing ~> true
+      end
+  end
+  ```
+
+  ## Configurable timeouts
+
+  The `assert_receive` timeout used while awaiting transition notifications (default `1_000`
+    ms), the `refute_receive` timeout used by `assert_no_transition/3` (default `100` ms),
+    and the message-flush timeout (default `100` ms) are all configurable:
+
+  ```elixir
+  config :finitomata,
+    ex_unit_assert_receive_timeout: 5_000,
+    ex_unit_refute_receive_timeout: 200,
+    ex_unit_flush_timeout: 200
+  ```
+
+  ## Property-based testing
+
+  `event_generator/1` returns a `StreamData` generator over the _FSM_’s events, which can be
+    combined with `ExUnitProperties` to fuzz event sequences and assert global invariants
+    (for instance, that the _FSM_ never crashes and always rests in a valid state).
   """
 
   require Logger
+  alias Finitomata.ExUnit.Listener
   alias Finitomata.TestTransitionError
 
   @doc false
@@ -258,7 +333,9 @@ defmodule Finitomata.ExUnit do
             transition_count: [
               required: false,
               type: :non_neg_integer,
-              doc: "The expected by `Mox` number of transitions to handle."
+              doc:
+                "When given, the exact `Mox.expect/4` count of transitions to handle; " <>
+                  "by default a `Mox.stub/3` is installed and the count is not asserted."
             ]
           ]
         ]
@@ -298,7 +375,8 @@ defmodule Finitomata.ExUnit do
   def assert_state(state, do_block \\ []) do
     _ = state
     _ = do_block
-    raise(%UndefinedFunctionError{module: __MODULE__, function: :assert_state, arity: 2})
+
+    raise "`assert_state/2` may only be used inside a `test_path/3` or `assert_transition/3` block"
   end
 
   @doc """
@@ -314,7 +392,8 @@ defmodule Finitomata.ExUnit do
   @dialyzer {:no_return, {:assert_payload, 1}}
   def assert_payload(do_block) do
     _ = do_block
-    raise(%UndefinedFunctionError{module: __MODULE__, function: :assert_payload, arity: 1})
+
+    raise "`assert_payload/1` may only be used inside a `test_path/3` or `assert_transition/3` block"
   end
 
   @doc false
@@ -323,11 +402,48 @@ defmodule Finitomata.ExUnit do
     receive do
       msg -> do_flush([msg | messages])
     after
-      100 ->
+      flush_timeout() ->
         messages
         |> Enum.map(fn {:on_transition, _fsm, state, payload} -> {state, payload} end)
         |> Enum.reverse()
     end
+  end
+
+  @doc false
+  @spec assert_receive_timeout() :: timeout()
+  def assert_receive_timeout,
+    do: Application.get_env(:finitomata, :ex_unit_assert_receive_timeout, 1_000)
+
+  @doc false
+  @spec refute_receive_timeout() :: timeout()
+  def refute_receive_timeout,
+    do: Application.get_env(:finitomata, :ex_unit_refute_receive_timeout, 100)
+
+  @doc false
+  @spec flush_timeout() :: timeout()
+  def flush_timeout,
+    do: Application.get_env(:finitomata, :ex_unit_flush_timeout, 100)
+
+  @doc """
+  Returns a `StreamData` generator yielding the externally-triggerable events of the _FSM_
+    implemented by `impl`, for property-based fuzzing of event sequences.
+
+  The internal `:__start__`/`:__end__` events are excluded.
+
+  ```elixir
+  property "never crashes" do
+    check all events <- list_of(Finitomata.ExUnit.event_generator(MyFSM), min_length: 1) do
+      # drive `events` against a running FSM and assert your invariants
+    end
+  end
+  ```
+  """
+  @spec event_generator(Finitomata.implementation()) ::
+          StreamData.t(Finitomata.Transition.event())
+  def event_generator(impl) do
+    impl.__config__(:events)
+    |> Kernel.--([:__start__, :__end__])
+    |> StreamData.member_of()
   end
 
   @doc false
@@ -421,61 +537,104 @@ defmodule Finitomata.ExUnit do
   - `name` — the name of the _FSM_
   - `payload` — the initial payload for this _FSM_
   - `options` — the options to control the test, such as
-    - `transition_count` — the number of expectations to declare (defaults to number of states)
+    - `transition_count` — when given, the exact `Mox.expect/4` count for the listener;
+      by default a `Mox.stub/3` is installed instead, so the number of transitions is not
+      asserted (only ignored when the _FSM_ uses `Finitomata.ExUnit.Listener`)
 
-  Once called, this macro will start `Finitomata.Suprevisor` with the `id` given,
-    define a mox for `impl` unless already efined,
-    `Mox.allow/3` the _FSM_ to call testing process,
-    and expectations as a listener to `after_transition/3` callback,
-    sending a message of a shape `{:on_transition, id, state, payload}` to test process.
+  Once called, this macro will start `Finitomata.Suprevisor` with the `id` given and start
+    the _FSM_, ensuring it has entered `Finitomata.Transition.entry/2` state.
 
-  Then it’ll start _FSM_ and ensure it has entered `Finitomata.Transition.entry/2` state.
+  When the _FSM_ uses `listener: Finitomata.ExUnit.Listener` the test process is registered
+    to receive transition notifications directly (no `Mox` involved). Otherwise a mox for
+    `impl` is defined (unless already defined), `Mox.allow/3`-ed to be called from the _FSM_,
+    and stubbed/expected on `after_transition/3` to send `{:on_transition, id, state, payload}`
+    to the test process.
   """
   @doc deprecated: "Use `setup_finitomata/1` instead"
 
   defmacro init_finitomata(id \\ nil, impl, name, payload, options \\ [], mocks \\ []) do
     require_ast = quote generated: true, location: :keep, do: require(unquote(impl))
 
+    # Resolve the listener at compile time so that a Mox-free _FSM_ never has `Mox` calls
+    #   generated into its test (and therefore does not require `Mox` to be available).
+    listener =
+      case Macro.expand(impl, __CALLER__) do
+        module when is_atom(module) ->
+          if Code.ensure_loaded?(module) and function_exported?(module, :__config__, 1),
+            do: module.__config__(:listener),
+            else: nil
+
+        _other ->
+          nil
+      end
+
     init_ast =
-      quote generated: true,
-            location: :keep,
-            bind_quoted: [
-              id: id,
-              impl: impl,
-              name: name,
-              payload: payload,
-              options: options,
-              mocks: mocks
-            ] do
-        mocker = &Module.concat(&1, "Mox")
+      if listener == Listener do
+        quote generated: true,
+              location: :keep,
+              bind_quoted: [id: id, impl: impl, name: name, payload: payload] do
+          fsm_name = {:via, Registry, {Finitomata.Supervisor.registry_name(id), name}}
 
-        mock =
-          if is_map(payload),
-            do: Map.get_lazy(payload, :mock, fn -> mocker.(impl) end),
-            else: mocker.(impl)
+          start_supervised({Finitomata.Supervisor, id: id})
+          Listener.register(fsm_name)
 
-        fsm_name = {:via, Registry, {Finitomata.Supervisor.registry_name(id), name}}
-        transition_count = Keyword.get(options, :transition_count, Enum.count(impl.states()))
+          {:ok, _fsm_pid} = Finitomata.start_fsm(id, impl, name, payload)
 
-        parent = self()
+          entry_state = impl.entry()
 
-        unless Code.ensure_loaded?(mock),
-          do: raise("Listener mock must be defined for `Finitomata` to use `ex_unit` extensions")
+          assert_receive {:on_transition, ^fsm_name, ^entry_state, ^payload},
+                         Finitomata.ExUnit.assert_receive_timeout()
+        end
+      else
+        quote generated: true,
+              location: :keep,
+              bind_quoted: [
+                id: id,
+                impl: impl,
+                name: name,
+                payload: payload,
+                options: options,
+                mocks: mocks
+              ] do
+          mocker = &Module.concat(&1, "Mox")
 
-        start_supervised({Finitomata.Supervisor, id: id})
+          mock =
+            if is_map(payload),
+              do: Map.get_lazy(payload, :mock, fn -> mocker.(impl) end),
+              else: mocker.(impl)
 
-        Enum.each(mocks, &allow(&1, parent, fn -> GenServer.whereis(fsm_name) end))
+          fsm_name = {:via, Registry, {Finitomata.Supervisor.registry_name(id), name}}
+          parent = self()
 
-        mock
-        |> allow(parent, fn -> GenServer.whereis(fsm_name) end)
-        |> expect(:after_transition, transition_count, fn id, state, payload ->
-          parent |> send({:on_transition, id, state, payload}) |> then(fn _ -> :ok end)
-        end)
+          unless Code.ensure_loaded?(mock),
+            do:
+              raise("Listener mock must be defined for `Finitomata` to use `ex_unit` extensions")
 
-        {:ok, _fsm_pid} = Finitomata.start_fsm(id, impl, name, payload)
+          start_supervised({Finitomata.Supervisor, id: id})
 
-        entry_state = impl.entry()
-        assert_receive {:on_transition, ^fsm_name, ^entry_state, ^payload}, 1_000
+          Enum.each(mocks, &allow(&1, parent, fn -> GenServer.whereis(fsm_name) end))
+
+          listener_fun = fn id, state, payload ->
+            parent |> send({:on_transition, id, state, payload}) |> then(fn _ -> :ok end)
+          end
+
+          mock = allow(mock, parent, fn -> GenServer.whereis(fsm_name) end)
+
+          case Keyword.fetch(options, :transition_count) do
+            {:ok, transition_count} ->
+              expect(mock, :after_transition, transition_count, listener_fun)
+
+            :error ->
+              stub(mock, :after_transition, listener_fun)
+          end
+
+          {:ok, _fsm_pid} = Finitomata.start_fsm(id, impl, name, payload)
+
+          entry_state = impl.entry()
+
+          assert_receive {:on_transition, ^fsm_name, ^entry_state, ^payload},
+                         Finitomata.ExUnit.assert_receive_timeout()
+        end
       end
 
     [require_ast, init_ast]
@@ -541,6 +700,53 @@ defmodule Finitomata.ExUnit do
   end
 
   @doc """
+  Asserts that `event_payload` does **not** transition the _FSM_ defined by the test context
+    (set up with `setup_finitomata/1`), and exposes the resulting error for inspection.
+
+  A failed transition (a soft `event?`, an `{:error, _}` returned from `on_transition/4`, or
+    a raise) does not notify the listener, so it cannot be awaited with `assert_receive/3`.
+    This macro drives the event, asserts that no transition notification arrives (within
+    `Finitomata.ExUnit.refute_receive_timeout/0`), and binds `state` (the whole
+    `t:Finitomata.State.t/0`), `payload`, and `last_error` for plain assertions in the block:
+
+  ```elixir
+  test "rejects", ctx do
+    assert_no_transition ctx, :reject? do
+      assert %Finitomata.Error{reason: :rejected} = last_error
+      assert :started = state.current
+    end
+  end
+  ```
+  """
+  defmacro assert_no_transition(ctx, event_payload, do: block) do
+    quote generated: true, location: :keep do
+      fsm =
+        case unquote(ctx) do
+          %{finitomata: %{fsm: fsm}} ->
+            fsm
+
+          _other ->
+            raise Finitomata.TestTransitionError,
+              message:
+                "in order to use `assert_no_transition/3` one should declare _FSM_ in `setup_finitomata/1` callback"
+        end
+
+      fsm_name = {:via, Registry, {Finitomata.Supervisor.registry_name(fsm.id), fsm.name}}
+
+      Finitomata.transition(fsm.id, fsm.name, unquote(event_payload))
+
+      refute_receive {:on_transition, ^fsm_name, _state, _payload},
+                     Finitomata.ExUnit.refute_receive_timeout()
+
+      var!(state) = :sys.get_state(fsm_name)
+      var!(payload) = var!(state).payload
+      var!(last_error) = var!(state).last_error
+
+      unquote(block)
+    end
+  end
+
+  @doc """
   Convenience macro to assert a transition initiated by `event_payload`
     argument on the _FSM_ defined by first three arguments.
 
@@ -576,32 +782,7 @@ defmodule Finitomata.ExUnit do
       |> Enum.map(fn {:->, meta, [[state], conditions]} ->
         line = Keyword.get(meta, :line, caller.line)
         file = Keyword.get(meta, :file, caller.file)
-
-        assertions =
-          conditions
-          |> unblock()
-          |> Enum.flat_map(fn
-            :ok ->
-              []
-
-            {:assert_payload, _meta, [[do: matches]]} ->
-              do_handle_matches(matches)
-
-            {:assert_payload, _meta, [assertion]} ->
-              [do_handle_matches_with_guards(assertion)]
-
-            {:refute_receive, _, _} = ast ->
-              [ast]
-
-            {:assert_receive, _, _} = ast ->
-              [ast]
-
-            other ->
-              content = other |> Macro.to_string() |> String.split("\n")
-              raise TestTransitionError, message: format_assertion(line, file, content)
-          end)
-
-        {state, assertions}
+        {state, clause_assertions(conditions, line, file)}
       end)
 
     if Enum.empty?(states_with_assertions) do
@@ -611,66 +792,6 @@ defmodule Finitomata.ExUnit do
     end
 
     states = Keyword.keys(states_with_assertions)
-
-    guard_ast =
-      quote generated: true,
-            location: :keep,
-            bind_quoted: [impl: impl, event_name: event_name(event_payload), states: states] do
-        [state | continuation] = states
-
-        transitions =
-          :fsm
-          |> impl.__config__()
-          |> Enum.filter(&match?(%Finitomata.Transition{to: ^state, event: ^event_name}, &1))
-
-        case states -- impl.__config__(:states) do
-          [] ->
-            :ok
-
-          some ->
-            IO.warn(
-              TestTransitionError.message(%TestTransitionError{
-                message: nil,
-                transition: transitions,
-                unknown_states: some
-              })
-            )
-        end
-
-        expected_continuation =
-          impl.__config__(:hard)
-          |> Keyword.values()
-          |> Enum.flat_map(&Finitomata.Transition.flatten/1)
-
-        expected_continuations =
-          :transitions
-          |> Finitomata.Transition.continuation(state, expected_continuation)
-          |> Enum.map(&Enum.map(&1, fn %Finitomata.Transition{to: to} -> to end))
-
-        shortened_expected_continuations =
-          expected_continuations
-          |> Enum.map(fn expected_continuation ->
-            case Enum.chunk_by(expected_continuation, &(&1 == state)) do
-              [] -> []
-              [_] -> []
-              [_before | _rest] = chunks -> List.last(chunks)
-            end
-          end)
-          |> Enum.reject(&(&1 == []))
-
-        expected = Enum.uniq([[] | expected_continuations ++ shortened_expected_continuations])
-
-        if continuation not in expected do
-          IO.warn(
-            TestTransitionError.message(%TestTransitionError{
-              message: nil,
-              transition: transitions,
-              missing_states: expected -- continuation,
-              unknown_states: continuation -- expected
-            })
-          )
-        end
-      end
 
     init_ast =
       quote generated: true, location: :keep do
@@ -682,51 +803,151 @@ defmodule Finitomata.ExUnit do
       states_with_assertions
       |> Enum.with_index()
       |> Enum.map(fn {{to_state, ast}, idx} ->
-        transition_ast =
-          cond do
-            idx == 0 and is_nil(matches) ->
-              quote do: Finitomata.transition(unquote(id), unquote(name), unquote(event_payload))
-
-            matches == :__timer_event__ ->
-              quote do: Finitomata.timer_tick(unquote(id), unquote(name))
-
-            true ->
-              []
-          end
-
-        action_ast =
-          case matches do
-            nil ->
-              quote generated: true, location: :keep do
-                to_state = unquote(to_state)
-                assert_receive({:on_transition, ^fsm_name, ^to_state, payload}, 1_000)
-                unquote(ast)
-              end
-
-            :__timer_event__ ->
-              quote generated: true, location: :keep do
-                payload = :sys.get_state(fsm_name).payload
-                unquote(ast)
-              end
-
-            _ ->
-              quote generated: true, location: :keep do
-                to_state = unquote(to_state)
-                payload = Keyword.get(unquote(matches), to_state)
-                unquote(ast)
-              end
-          end
-
-        quote generated: true, location: :keep do
-          unquote(transition_ast)
-          unquote(action_ast)
-        end
+        transition_assertion_ast(to_state, ast, idx, id, name, event_payload, matches)
       end)
 
     quote generated: true, location: :keep do
       unquote(init_ast)
-      unquote(guard_ast)
+      unquote(coverage_guard_ast(impl, event_payload, states))
       unquote(assertion_ast)
+    end
+  end
+
+  # Parses the right-hand side of an `assert_transition` clause into the list of inner
+  #   assertion ASTs (`assert_payload`, `assert_receive`, `refute_receive`, or `:ok`).
+  defp clause_assertions(conditions, line, file) do
+    conditions
+    |> unblock()
+    |> Enum.flat_map(fn
+      :ok ->
+        []
+
+      {:assert_payload, _meta, [[do: matches]]} ->
+        do_handle_matches(matches)
+
+      {:assert_payload, _meta, [assertion]} ->
+        [do_handle_matches_with_guards(assertion)]
+
+      {:refute_receive, _, _} = ast ->
+        [ast]
+
+      {:assert_receive, _, _} = ast ->
+        [ast]
+
+      other ->
+        content = other |> Macro.to_string() |> String.split("\n")
+        raise TestTransitionError, message: format_assertion(line, file, content)
+    end)
+  end
+
+  # Builds the compile-time path-coverage check that warns (via `IO.warn/1`) when the
+  #   asserted continuation diverges from the states reachable for the transition.
+  defp coverage_guard_ast(impl, event_payload, states) do
+    quote generated: true,
+          location: :keep,
+          bind_quoted: [impl: impl, event_name: event_name(event_payload), states: states] do
+      [state | continuation] = states
+
+      transitions =
+        :fsm
+        |> impl.__config__()
+        |> Enum.filter(&match?(%Finitomata.Transition{to: ^state, event: ^event_name}, &1))
+
+      case states -- impl.__config__(:states) do
+        [] ->
+          :ok
+
+        some ->
+          IO.warn(
+            TestTransitionError.message(%TestTransitionError{
+              message: nil,
+              transition: transitions,
+              unknown_states: some
+            })
+          )
+      end
+
+      expected_continuation =
+        impl.__config__(:hard)
+        |> Keyword.values()
+        |> Enum.flat_map(&Finitomata.Transition.flatten/1)
+
+      expected_continuations =
+        :transitions
+        |> Finitomata.Transition.continuation(state, expected_continuation)
+        |> Enum.map(&Enum.map(&1, fn %Finitomata.Transition{to: to} -> to end))
+
+      shortened_expected_continuations =
+        expected_continuations
+        |> Enum.map(fn expected_continuation ->
+          case Enum.chunk_by(expected_continuation, &(&1 == state)) do
+            [] -> []
+            [_] -> []
+            [_before | _rest] = chunks -> List.last(chunks)
+          end
+        end)
+        |> Enum.reject(&(&1 == []))
+
+      expected = Enum.uniq([[] | expected_continuations ++ shortened_expected_continuations])
+
+      if continuation not in expected do
+        IO.warn(
+          TestTransitionError.message(%TestTransitionError{
+            message: nil,
+            transition: transitions,
+            missing_states: expected -- continuation,
+            unknown_states: continuation -- expected
+          })
+        )
+      end
+    end
+  end
+
+  # Builds the drive-the-transition plus assert-the-result AST for a single clause.
+  defp transition_assertion_ast(to_state, ast, idx, id, name, event_payload, matches) do
+    transition_ast =
+      cond do
+        idx == 0 and is_nil(matches) ->
+          quote do: Finitomata.transition(unquote(id), unquote(name), unquote(event_payload))
+
+        matches == :__timer_event__ ->
+          quote do: Finitomata.timer_tick(unquote(id), unquote(name))
+
+        true ->
+          []
+      end
+
+    action_ast =
+      case matches do
+        nil ->
+          quote generated: true, location: :keep do
+            to_state = unquote(to_state)
+
+            assert_receive(
+              {:on_transition, ^fsm_name, ^to_state, payload},
+              Finitomata.ExUnit.assert_receive_timeout()
+            )
+
+            unquote(ast)
+          end
+
+        :__timer_event__ ->
+          quote generated: true, location: :keep do
+            payload = :sys.get_state(fsm_name).payload
+            unquote(ast)
+          end
+
+        _ ->
+          quote generated: true, location: :keep do
+            to_state = unquote(to_state)
+            payload = Keyword.get(unquote(matches), to_state)
+            unquote(ast)
+          end
+      end
+
+    quote generated: true, location: :keep do
+      unquote(transition_ast)
+      unquote(action_ast)
     end
   end
 
