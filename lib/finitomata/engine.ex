@@ -259,7 +259,6 @@ defmodule Finitomata.Engine do
     {object, fork_data} = Map.pop(fork_data, :object)
     {id, fork_data} = Map.pop(fork_data, :id)
 
-    # [TODO] [AM] Match the outcome and log it
     _ =
       module.__config__(:forks)
       |> Keyword.fetch!(fork_state)
@@ -290,6 +289,7 @@ defmodule Finitomata.Engine do
 
         {:error, error} ->
           Logger.warning("[⚐ ↹] fork from #{fork_state} failed (#{inspect(error)})")
+          maybe_pubsub_fork_error(module, state.name, fork_state, error)
       end
 
     hibernate_noreply(state)
@@ -409,6 +409,45 @@ defmodule Finitomata.Engine do
   end
 
   defp do_maybe_pubsub(_listener, _result, _name), do: :ok
+
+  @doc false
+  @spec maybe_pubsub_fork_error(module(), Finitomata.fsm_name(), Transition.state(), any()) :: :ok
+  def maybe_pubsub_fork_error(module, name, fork_state, error),
+    do: do_maybe_pubsub_fork_error(module.__config__(:listener), name, fork_state, error)
+
+  defp do_maybe_pubsub_fork_error(nil, _name, _fork_state, _error), do: :ok
+
+  defp do_maybe_pubsub_fork_error(listener, name, fork_state, error) do
+    cond do
+      is_atom(listener) and function_exported?(listener, :after_transition, 3) ->
+        notify_fork_failure(listener, name, fork_state, error)
+
+      is_pid(listener) or is_port(listener) or is_atom(listener) or is_tuple(listener) ->
+        send(listener, {:finitomata, {:fork_error, fork_state, error}})
+        :ok
+
+      true ->
+        :ok
+    end
+  end
+
+  # `listener` is a `Finitomata.Listener` behaviour module; `after_fork_failure/3` is optional,
+  #   so notify only when it is implemented, otherwise stay silent (do not message the module).
+  defp notify_fork_failure(listener, name, fork_state, error) do
+    if function_exported?(listener, :after_fork_failure, 3) do
+      with some when some != :ok <- listener.after_fork_failure(name, fork_state, error) do
+        Logger.warning(
+          "[♻️] Listener ‹" <>
+            inspect(Function.capture(listener, :after_fork_failure, 3)) <>
+            "› returned unexpected ‹" <>
+            inspect(some) <>
+            "› when called with ‹" <> inspect([name, fork_state, error]) <> "›"
+        )
+      end
+    end
+
+    :ok
+  end
 
   @doc false
   @spec handle_call(module(), term(), State.t()) ::

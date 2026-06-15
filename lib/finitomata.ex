@@ -6,7 +6,8 @@ defmodule Finitomata do
     with {:module, ^behaviour} <- Code.ensure_compiled(behaviour),
          true <- function_exported?(behaviour, :behaviour_info, 1),
          funs when is_list(funs) <- behaviour.behaviour_info(:callbacks) do
-      behaviour(value, funs)
+      # only the mandatory callbacks must be implemented; optional ones may be omitted
+      behaviour(value, funs -- behaviour_optional_callbacks(behaviour))
     else
       _ ->
         {:error, "The behaviour specified is invalid ‹" <> inspect(value) <> "›"}
@@ -28,6 +29,13 @@ defmodule Finitomata do
       {:error, error} ->
         {:error, "Cannot find the requested module ‹" <> inspect(value) <> "› (#{error})"}
     end
+  end
+
+  @spec behaviour_optional_callbacks(module()) :: [{atom(), arity()}]
+  defp behaviour_optional_callbacks(behaviour) do
+    behaviour.behaviour_info(:optional_callbacks)
+  rescue
+    _ -> []
   end
 
   using_schema = [

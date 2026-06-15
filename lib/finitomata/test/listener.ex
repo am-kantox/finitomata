@@ -6,7 +6,8 @@ defmodule Finitomata.ExUnit.Listener do
     drive and assert transitions **without `Mox`**. On every successful transition it
     forwards a `{:on_transition, fsm_name, state, payload}` message — the exact shape the
     `Finitomata.ExUnit` assertions expect — to the test process that registered itself for
-    that _FSM_.
+    that _FSM_. A failed `c:Finitomata.on_fork/2` resolution is forwarded the same way as
+    `{:on_fork_failure, fsm_name, fork_state, error}`.
 
   The test process is looked up through the per-id `Finitomata` `Registry` that
     `setup_finitomata/1` (via `init_finitomata/6`) already starts, so no extra process or
@@ -68,6 +69,16 @@ defmodule Finitomata.ExUnit.Listener do
     with {:via, Registry, {registry, name}} <- id,
          [{pid, _value} | _] <- safe_lookup(registry, {@key, name}) do
       send(pid, {:on_transition, id, state, payload})
+    end
+
+    :ok
+  end
+
+  @impl Finitomata.Listener
+  def after_fork_failure(id, state, error) do
+    with {:via, Registry, {registry, name}} <- id,
+         [{pid, _value} | _] <- safe_lookup(registry, {@key, name}) do
+      send(pid, {:on_fork_failure, id, state, error})
     end
 
     :ok
