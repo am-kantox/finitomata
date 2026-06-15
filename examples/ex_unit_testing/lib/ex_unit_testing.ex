@@ -18,7 +18,7 @@ defmodule ExUnitTesting do
 
   09:25:40.577 [debug] [→ ↹] [state: [current: :idle, previous: :*]]
   09:25:40.577 [debug] [← ↹] [state: [current: :started, previous: :idle]]
- 
+
   iex|💧|4 ▸ Finitomata.transition Foo, "FSM", :do
   :ok
 

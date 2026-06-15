@@ -172,7 +172,7 @@ defmodule Finitomata.ConfigBuilder do
   @spec def_mock(Macro.Env.t(), module()) :: module()
   case Code.ensure_compiled(Mox) do
     {:error, error} ->
-      defp def_mock(env, reporter) do
+      defp def_mock(_env, reporter) do
         reporter.info([
           [:yellow, "expectation: ", :reset],
           "to be able to use ",
