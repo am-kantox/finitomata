@@ -138,8 +138,18 @@ defmodule Finitomata.MixProject do
       source_url: "https://github.com/am-kantox/#{@app}",
       assets: %{"stuff/images" => "assets"},
       extras: ~w[README.md stuff/fsm.md stuff/compiler.md stuff/cheatsheet.md],
+      # These modules/functions are intentionally `@moduledoc false`/`@doc false` yet are
+      #   referenced by name in the docs; skip autolinking to avoid "references ... but it is
+      #   hidden" warnings from `mix docs` while keeping the inline monospace text.
+      skip_code_autolink_to: [
+        "Finitomata.Engine",
+        "Finitomata.ConfigBuilder",
+        "Finitomata.StateCache",
+        "Finitomata.timer_tick/2",
+        "Finitomata.ExUnit.refute_receive_timeout/0"
+      ],
       groups_for_modules: [
-        FSM: [Finitomata, Infinitomata, Finitomata.Flow],
+        FSM: [Finitomata, Infinitomata, Finitomata.Flow, Finitomata.Error],
         Test: [Finitomata.ExUnit, Finitomata.ExUnit.Listener],
         Goods: [Finitomata.Throttler, Finitomata.Pool, Finitomata.Cache, Finitomata.Accessible],
         Internals: [

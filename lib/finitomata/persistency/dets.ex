@@ -94,11 +94,11 @@ defmodule Finitomata.Persistency.DETS do
     do: Snapshot.store_error(:dets, table(), name, payload, reason, info)
 
   @doc "Reads the snapshot stored for `name`, or `nil`"
-  @spec get(Finitomata.fsm_name()) :: Snapshot.snapshot() | nil
+  @spec get(Finitomata.fsm_name()) :: Finitomata.Persistency.snapshot() | nil
   def get(name), do: Snapshot.get(:dets, table(), name)
 
   @doc "Reads the last persisted failure for `name`, or `nil`"
-  @spec last_error(Finitomata.fsm_name()) :: Snapshot.error() | nil
+  @spec last_error(Finitomata.fsm_name()) :: Finitomata.Persistency.error() | nil
   def last_error(name), do: Snapshot.last_error(:dets, table(), name)
 
   @doc "Removes the snapshot and the last error stored for `name`"

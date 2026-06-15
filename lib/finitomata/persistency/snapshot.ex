@@ -18,18 +18,12 @@ defmodule Finitomata.Persistency.Snapshot do
   #   These coincide whenever the FSM name equals the entity id, which is the
   #   documented usage pattern (see `Finitomata.Persistency`).
 
-  alias Finitomata.{State, Transition}
+  alias Finitomata.State
 
   @error_tag :__finitomata_error__
 
   @typedoc "The storage kind backing an adapter"
   @type kind :: :ets | :dets
-
-  @typedoc "A persisted FSM snapshot: the current state and the carried payload"
-  @type snapshot :: {Transition.state() | nil, State.payload()}
-
-  @typedoc "A persisted transition failure"
-  @type error :: %{reason: any(), info: map(), payload: State.payload()}
 
   @doc "Normalizes a (possibly registered) FSM name into the bare storage key"
   @spec idfy(Finitomata.fsm_name()) :: term()
@@ -43,7 +37,7 @@ defmodule Finitomata.Persistency.Snapshot do
     `{:created, {nil, fresh_payload}}` where `fresh_payload` is reconstructed from the
     start payload. The first snapshot is written by the entry transition.
   """
-  @spec load(kind(), atom(), term()) :: {:loaded | :created, snapshot()}
+  @spec load(kind(), atom(), term()) :: {:loaded | :created, Finitomata.Persistency.snapshot()}
   def load(kind, table, {_type, _fields} = arg) do
     case safe_lookup(kind, table, load_key(arg)) do
       [{_key, {_state, _payload} = snapshot}] -> {:loaded, snapshot}
@@ -73,7 +67,7 @@ defmodule Finitomata.Persistency.Snapshot do
   end
 
   @doc "Reads the snapshot stored for `name`, or `nil`"
-  @spec get(kind(), atom(), Finitomata.fsm_name()) :: snapshot() | nil
+  @spec get(kind(), atom(), Finitomata.fsm_name()) :: Finitomata.Persistency.snapshot() | nil
   def get(kind, table, name) do
     case safe_lookup(kind, table, idfy(name)) do
       [{_key, {_state, _payload} = snapshot}] -> snapshot
@@ -82,7 +76,7 @@ defmodule Finitomata.Persistency.Snapshot do
   end
 
   @doc "Reads the last persisted failure for `name`, or `nil`"
-  @spec last_error(kind(), atom(), Finitomata.fsm_name()) :: error() | nil
+  @spec last_error(kind(), atom(), Finitomata.fsm_name()) :: Finitomata.Persistency.error() | nil
   def last_error(kind, table, name) do
     case safe_lookup(kind, table, {@error_tag, idfy(name)}) do
       [{_key, %{} = error}] -> error

@@ -47,6 +47,12 @@ defmodule Finitomata.Persistency do
           object: State.payload()
         }
 
+  @typedoc "A persisted FSM snapshot: the current state and the carried payload"
+  @type snapshot :: {Transition.state() | nil, State.payload()}
+
+  @typedoc "A persisted transition failure"
+  @type error :: %{reason: any(), info: map(), payload: State.payload()}
+
   @doc """
   The function to be called from `init/1` callback upon FSM start to load the state and
     payload from the persistent storage.
