@@ -114,7 +114,8 @@ defmodule Finitomata do
       required: false,
       type: {:or, [:boolean, :atom, {:list, :atom}]},
       default: Application.compile_env(:finitomata, :hibernate, false),
-      doc: "When `true`, the FSM process is hibernated between transitions"
+      doc:
+        "When `true`, the FSM process is hibernated between transitions; pass a `state()` or `[state()]` to hibernate only when the FSM rests in (one of) the given state(s)"
     ],
     ensure_entry: [
       required: false,
@@ -364,7 +365,7 @@ defmodule Finitomata do
             payload: payload(),
             timer: false | {reference(), pos_integer()},
             cache_state: boolean(),
-            hibernate: boolean() | [Transition.state()],
+            hibernate: boolean() | Transition.state() | [Transition.state()],
             history: [Transition.state()],
             last_error: last_error()
           }

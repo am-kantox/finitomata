@@ -38,6 +38,7 @@ defmodule Finitomata.ConfigBuilder do
 
     hard = hard(fsm, auto_terminate)
     soft = soft(fsm)
+    hibernate = hibernate(Keyword.fetch!(options, :hibernate), fsm)
 
     config = %{
       syntax: syntax,
@@ -54,7 +55,7 @@ defmodule Finitomata.ConfigBuilder do
           reporter
         ),
       auto_terminate: auto_terminate,
-      hibernate: Keyword.fetch!(options, :hibernate),
+      hibernate: hibernate,
       cache_state: Keyword.fetch!(options, :cache_state),
       ensure_entry: ensure_entry(Keyword.fetch!(options, :ensure_entry), fsm),
       states: Transition.states(fsm),
@@ -89,7 +90,7 @@ defmodule Finitomata.ConfigBuilder do
     - _persistency_ → `#{if config.persistency, do: inspect(config.persistency), else: "✗"}`
     - _listener_ → `#{if config.listener, do: inspect(config.listener), else: "✗"}`
     - _timer_ → `#{config.timer || "✗"}`
-    - _hibernate_ → `#{config.hibernate || "✗"}`
+    - _hibernate_ → `#{if config.hibernate, do: inspect(config.hibernate), else: "✗"}`
     - _cache_state_ → `#{if config.cache_state, do: "✓", else: "✗"}`
 
     ## FSM representation
@@ -290,6 +291,27 @@ defmodule Finitomata.ConfigBuilder do
       |> to_string()
       |> String.ends_with?("?")
     end)
+  end
+
+  @spec hibernate(boolean() | atom() | [atom()], [Transition.t()]) ::
+          boolean() | atom() | [atom()]
+  defp hibernate(hibernate, fsm) do
+    states =
+      case hibernate do
+        bool when is_boolean(bool) -> []
+        state when is_atom(state) -> [state]
+        list when is_list(list) -> list
+      end
+
+    case states -- Transition.states(fsm) do
+      [] ->
+        hibernate
+
+      unknown ->
+        raise CompileError,
+          description:
+            "states given to `hibernate:` must be declared in the FSM, unknown: #{inspect(unknown)}"
+    end
   end
 
   @spec ensure_entry(boolean() | [atom()], [Transition.t()]) :: [atom()]

@@ -17,6 +17,22 @@ defmodule Finitomata.HibernateTest do
       do: {:ok, :done, state}
   end
 
+  defmodule HibStatesFSM do
+    @moduledoc false
+    @fsm """
+    idle --> |go| busy
+    busy --> |finish| done
+    """
+    use Finitomata, fsm: @fsm, auto_terminate: true, hibernate: [:busy]
+
+    @impl Finitomata
+    def on_transition(:idle, :go, _payload, state),
+      do: {:ok, :busy, Map.put(state, :went, true)}
+
+    def on_transition(:busy, :finish, _payload, state),
+      do: {:ok, :done, state}
+  end
+
   @id Finitomata.HibernateTest.Tree
 
   setup do
@@ -43,5 +59,23 @@ defmodule Finitomata.HibernateTest do
     Finitomata.transition(@id, "H", :finish)
     Process.sleep(150)
     refute Finitomata.alive?(@id, "H")
+  end
+
+  test "transitions work with a per-state `hibernate: [state()]`" do
+    Finitomata.start_fsm(@id, HibStatesFSM, "HS", %{})
+    Process.sleep(50)
+
+    assert %Finitomata.State{current: :idle, hibernate: [:busy]} =
+             Finitomata.state(@id, "HS", :full)
+
+    Finitomata.transition(@id, "HS", :go)
+    Process.sleep(50)
+
+    assert %Finitomata.State{current: :busy, hibernate: [:busy], payload: %{went: true}} =
+             Finitomata.state(@id, "HS", :full)
+
+    Finitomata.transition(@id, "HS", :finish)
+    Process.sleep(150)
+    refute Finitomata.alive?(@id, "HS")
   end
 end

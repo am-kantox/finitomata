@@ -103,14 +103,29 @@ defmodule Finitomata.Engine do
   @doc false
   @spec hibernate_noreply(State.t()) ::
           {:noreply, State.t()} | {:noreply, State.t(), :hibernate}
-  def hibernate_noreply(%State{hibernate: false} = state), do: {:noreply, state}
-  def hibernate_noreply(%State{} = state), do: {:noreply, state, :hibernate}
+  def hibernate_noreply(%State{} = state) do
+    if hibernate?(state), do: {:noreply, state, :hibernate}, else: {:noreply, state}
+  end
 
   @doc false
   @spec hibernate_reply(term(), State.t()) ::
           {:reply, term(), State.t()} | {:reply, term(), State.t(), :hibernate}
-  def hibernate_reply(reply, %State{hibernate: false} = state), do: {:reply, reply, state}
-  def hibernate_reply(reply, %State{} = state), do: {:reply, reply, state, :hibernate}
+  def hibernate_reply(reply, %State{} = state) do
+    if hibernate?(state), do: {:reply, reply, state, :hibernate}, else: {:reply, reply, state}
+  end
+
+  # Decides whether the FSM should hibernate after settling in `state.current`. The
+  #   `hibernate:` option may be `false` (never), `true` (always), a single `state()`, or a
+  #   `[state()]`; the latter two hibernate only when the FSM rests in (one of) those states.
+  #   `true`/`false` are atoms, hence the clause order below matters.
+  @spec hibernate?(State.t()) :: boolean()
+  defp hibernate?(%State{hibernate: false}), do: false
+  defp hibernate?(%State{hibernate: true}), do: true
+
+  defp hibernate?(%State{hibernate: states, current: current}) when is_list(states),
+    do: current in states
+
+  defp hibernate?(%State{hibernate: state, current: current}), do: current == state
 
   @doc false
   @spec transit(module(), {Transition.event(), Finitomata.event_payload()}, State.t()) ::
