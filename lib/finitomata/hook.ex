@@ -153,6 +153,13 @@ defmodule Finitomata.Hook do
         end
       end
 
+      if :on_rollback in @__config__[:impl_for] do
+        @impl Finitomata
+        def on_rollback(event, payload, state) do
+          Logger.warning("[↩ ↹] " <> inspect(state: state, event: event, event_payload: payload))
+        end
+      end
+
       if :on_fork in @__config__[:impl_for] do
         @impl Finitomata
         def on_fork(forking, state) do

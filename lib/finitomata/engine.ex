@@ -139,8 +139,22 @@ defmodule Finitomata.Engine do
          {:on_exit, :ok} <- {:on_exit, module.safe_on_exit(state.current, state)},
          {:ok, new_current, new_payload} <-
            module.safe_on_transition(state.name, state.current, event, payload, state.payload),
-         new_timer <- safe_cancel_timer(state.timer),
-         {:allowed, true} <- {:allowed, Transition.allowed?(fsm, state.current, new_current)},
+         {:allowed, true, _} <-
+           {:allowed, Transition.allowed?(fsm, state.current, new_current), new_current},
+         # the target is valid — only now commit the persistency/listener side effects
+         stored =
+           maybe_store(
+             module,
+             {:ok, new_current, new_payload},
+             state.name,
+             state.current,
+             event,
+             payload,
+             state.payload
+           ),
+         {:ok, new_current, new_payload} <- stored,
+         _ = maybe_pubsub(module, stored, state.name),
+         new_timer = safe_cancel_timer(state.timer),
          new_history = history(state.current, state.history),
          state = %{
            state
@@ -168,6 +182,28 @@ defmodule Finitomata.Engine do
           hibernate_noreply(state)
       end
     else
+      {:allowed, false, rejected} ->
+        # `on_transition/4` resolved to a state that is not reachable from the current one;
+        #   persistency/listener were not committed, so let the consumer roll back its own
+        #   side effects before we keep the FSM in place.
+        state = %{
+          state
+          | last_error:
+              Finitomata.Error.wrap({:error, {:not_allowed, state.current, rejected}},
+                state: state.current,
+                event: event,
+                event_payload: payload
+              )
+        }
+
+        Logger.warning(
+          "[⚐ ↹] transition from #{state.current} with #{event} to #{rejected} is not allowed; rolling back"
+        )
+
+        safe_on_rollback(module, event, payload, state)
+        module.safe_on_failure(event, payload, state)
+        hibernate_noreply(state)
+
       {err, false} ->
         Logger.warning(
           "[⚐ ↹] transition from #{state.current} with #{event} does not exists or not allowed (:#{err})"
@@ -652,10 +688,19 @@ defmodule Finitomata.Engine do
           Finitomata.event_payload(),
           State.payload()
         ) :: Finitomata.transition_resolution() | {:error, :on_transition_raised}
+  # A *successful* resolution is returned verbatim: persisting it (`store`) and notifying the
+  #   listener (`after_transition`) is deferred to `transit/3`, which only commits them once
+  #   the resolved target has passed the `:allowed?` guard — so a rejected transition never
+  #   reaches the storage or the listener. A *failed* resolution is still persisted here via
+  #   `store_error/4` (when a persistency is configured), preserving the historic behaviour.
   def safe_on_transition(module, name, current, event, event_payload, state_payload) do
-    module.on_transition(current, event, event_payload, state_payload)
-    |> then(&maybe_store(module, &1, name, current, event, event_payload, state_payload))
-    |> tap(&maybe_pubsub(module, &1, name))
+    case module.on_transition(current, event, event_payload, state_payload) do
+      {:ok, _new_current, _new_payload} = ok ->
+        ok
+
+      other ->
+        maybe_store(module, other, name, current, event, event_payload, state_payload)
+    end
   rescue
     err -> report_error(err, __STACKTRACE__, "on_transition/4")
   end
@@ -712,6 +757,23 @@ defmodule Finitomata.Engine do
     end
   rescue
     err -> report_error(err, __STACKTRACE__, "on_failure/3")
+  end
+
+  @doc false
+  @spec safe_on_rollback(module(), Transition.event(), Finitomata.event_payload(), State.t()) ::
+          :ok
+  def safe_on_rollback(module, event, event_payload, state_payload) do
+    if function_exported?(module, :on_rollback, 3) do
+      with other when other != :ok <-
+             module.on_rollback(event, event_payload, state_payload) do
+        Logger.info("[♻️] Unexpected return from a callback [#{inspect(other)}], must be :ok")
+        :ok
+      end
+    else
+      :ok
+    end
+  rescue
+    err -> report_error(err, __STACKTRACE__, "on_rollback/3")
   end
 
   @doc false

@@ -17,7 +17,7 @@ defmodule Finitomata.ConfigBuilder do
 
   alias Finitomata.Transition
 
-  @impls ~w|on_transition on_failure on_fork on_enter on_exit on_start on_terminate on_timer|a
+  @impls ~w|on_transition on_failure on_rollback on_fork on_enter on_exit on_start on_terminate on_timer|a
 
   @doc """
   Builds the compiled-in `@__config__` map from validated `use Finitomata` `options` in the

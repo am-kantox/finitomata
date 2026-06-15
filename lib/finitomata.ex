@@ -64,10 +64,10 @@ defmodule Finitomata do
         {:or,
          [
            {:in,
-            ~w|all none on_transition on_failure on_fork on_enter on_exit on_start on_terminate on_timer|a},
+            ~w|all none on_transition on_failure on_rollback on_fork on_enter on_exit on_start on_terminate on_timer|a},
            {:list,
             {:in,
-             ~w|on_transition on_failure on_fork on_enter on_exit on_start on_terminate on_timer|a}}
+             ~w|on_transition on_failure on_rollback on_fork on_enter on_exit on_start on_terminate on_timer|a}}
          ]},
       default: Application.compile_env(:finitomata, :impl_for, :all),
       doc: "The list of transitions to inject default implementation for."
@@ -215,10 +215,14 @@ defmodule Finitomata do
     the state entered (the atom) and the whole `t:Finitomata.State.t/0`
   - `c:Finitomata.on_exit/2` — called when the new state is exited; receives
     the state entered (the atom) and the whole `t:Finitomata.State.t/0`
-  - `c:Finitomata.on_failure/3` — called when the transition had failed and the target
+  - `c:Finitomata.on_failure/3` — called when the transition had failed and the target
     state has not been reached; receives the event (the atom), the event payload, and
     the whole `t:Finitomata.State.t/0`
-  - `c:Finitomata.on_fork/2` — called when the `Finitomata.Fork` has been requested;
+  - `c:Finitomata.on_rollback/3` — called when `on_transition/4` resolved to a state that
+    is not allowed from the current one, to let the consumer compensate the side effects
+    of the rejected transition; receives the event (the atom), the event payload, and
+    the whole `t:Finitomata.State.t/0` (with `last_error` set)
+  - `c:Finitomata.on_fork/2` — called when the `Finitomata.Fork` has been requested;
     receives the current state (the atom) and the payload `t:Finitomata.State.payload/0`
   - `c:Finitomata.on_terminate/1` — called when the finitomata is about to terminate;
     receives the whole `t:Finitomata.State.t/0`
@@ -530,6 +534,27 @@ defmodule Finitomata do
             ) :: :ok
 
   @doc """
+  This callback will be called when `on_transition/4` succeeded yet resolved to a target
+  state that is not allowed from the current one, so the transition is rejected and the
+  FSM stays put.
+
+  It lets the consumer compensate (roll back) any side effects performed inside
+  `on_transition/4` for the now-rejected transition. The `state` carries the original
+  (pre-transition) payload and a `t:Finitomata.Error.t/0` in `:last_error` whose `:reason`
+  is `{:not_allowed, from, rejected_to}`. `c:Finitomata.on_failure/3` is still invoked
+  afterwards.
+
+  Because the `:allowed?` guard runs before the persistency and the listener are touched,
+  a rejected transition is **not** persisted and does **not** notify the listener.
+  """
+  @doc since: "0.41.0"
+  @callback on_rollback(
+              event :: Transition.event(),
+              event_payload :: event_payload(),
+              state :: State.t()
+            ) :: :ok
+
+  @doc """
   This callback will be called on entering the state.
   """
   @callback on_enter(current_state :: Transition.state(), state :: State.t()) :: :ok
@@ -563,6 +588,7 @@ defmodule Finitomata do
 
   @optional_callbacks on_start: 1,
                       on_failure: 3,
+                      on_rollback: 3,
                       on_enter: 2,
                       on_exit: 2,
                       on_terminate: 1,

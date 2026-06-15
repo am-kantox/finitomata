@@ -22,7 +22,7 @@ defmodule Finitomata.Error do
   alias Finitomata.Transition
 
   @typedoc "The stage of the FSM lifecycle the error originated from"
-  @type stage :: :on_transition | :persistency | :unknown
+  @type stage :: :on_transition | :persistency | :not_allowed | :unknown
 
   @type t :: %__MODULE__{
           stage: stage(),
@@ -76,6 +76,8 @@ defmodule Finitomata.Error do
         else: {:on_transition, kw, %{}}
     end
   end
+
+  defp classify_reason({:not_allowed, _from, _to} = reason), do: {:not_allowed, reason, %{}}
 
   defp classify_reason(reason), do: {:on_transition, reason, %{}}
 end
