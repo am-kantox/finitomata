@@ -1049,7 +1049,10 @@ defmodule Finitomata do
       end
 
       @doc false
-      @impl GenServer
+      if Version.compare(System.version(), "1.15.9") == :gt do
+        @impl GenServer
+      end
+
       def format_status(%{state: %State{} = fsm_state} = status),
         do: %{status | state: State.excerpt(fsm_state, Map.has_key?(status, :reason))}
 
