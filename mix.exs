@@ -90,7 +90,7 @@ defmodule Finitomata.MixProject do
       # dev / test
       {:nimble_ownership, "~> 1.0", only: [:dev, :test, :ci, :finitomata]},
       {:mox, "~> 1.2", only: [:dev, :test, :ci, :finitomata]},
-      {:stream_data, "~> 1.0", only: [:dev, :test, :finitomata]},
+      {:stream_data, "~> 1.0", only: [:dev, :test, :finitomata, :ci]},
       {:observer_cli, "~> 1.5", only: [:dev]},
       {:credo, "~> 1.0", only: [:dev, :ci]},
       {:dialyxir, "~> 1.0", only: [:dev, :ci], runtime: false},
