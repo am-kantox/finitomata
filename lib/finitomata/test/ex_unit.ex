@@ -424,26 +424,28 @@ defmodule Finitomata.ExUnit do
   def flush_timeout,
     do: Application.get_env(:finitomata, :ex_unit_flush_timeout, 100)
 
-  @doc """
-  Returns a `StreamData` generator yielding the externally-triggerable events of the _FSM_
-    implemented by `impl`, for property-based fuzzing of event sequences.
+  if Code.ensure_loaded?(StreamData) do
+    @doc """
+    Returns a `StreamData` generator yielding the externally-triggerable events of the _FSM_
+      implemented by `impl`, for property-based fuzzing of event sequences.
 
-  The internal `:__start__`/`:__end__` events are excluded.
+    The internal `:__start__`/`:__end__` events are excluded.
 
-  ```elixir
-  property "never crashes" do
-    check all events <- list_of(Finitomata.ExUnit.event_generator(MyFSM), min_length: 1) do
-      # drive `events` against a running FSM and assert your invariants
+    ```elixir
+    property "never crashes" do
+      check all events <- list_of(Finitomata.ExUnit.event_generator(MyFSM), min_length: 1) do
+        # drive `events` against a running FSM and assert your invariants
+      end
     end
-  end
-  ```
-  """
-  @spec event_generator(Finitomata.implementation()) ::
-          StreamData.t(Finitomata.Transition.event())
-  def event_generator(impl) do
-    impl.__config__(:events)
-    |> Kernel.--([:__start__, :__end__])
-    |> StreamData.member_of()
+    ```
+    """
+    @spec event_generator(Finitomata.implementation()) ::
+            StreamData.t(Finitomata.Transition.event())
+    def event_generator(impl) do
+      impl.__config__(:events)
+      |> Kernel.--([:__start__, :__end__])
+      |> StreamData.member_of()
+    end
   end
 
   @doc false

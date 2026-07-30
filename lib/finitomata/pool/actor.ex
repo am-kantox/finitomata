@@ -3,7 +3,7 @@ defmodule Finitomata.Pool.Actor do
   The behaviour specifying the actor in the pool.
   """
 
-  alias Finitomata.{Pool, Pool.Actor, State}
+  alias Finitomata.{Pool, State}
 
   @doc """
   The function which would be invoked in `Finitomata.Pool.run/3`,
@@ -37,23 +37,25 @@ defmodule Finitomata.Pool.Actor do
 
   @optional_callbacks on_result: 2, on_error: 2
 
-  @doc """
-  `StreamData` helper to produce `on_error/2` and `on_result/2` handlers
-  """
-  def handler, do: handler(:result)
-  def handler(:error), do: do_handler(error: true)
-  def handler(:result), do: do_handler(error: false)
-  def handler(f) when is_function(f, 2), do: do_handler(handler: f)
+  if Code.ensure_loaded?(StreamData) do
+    @doc """
+    `StreamData` helper to produce `on_error/2` and `on_result/2` handlers
+    """
+    def handler, do: handler(:result)
+    def handler(:error), do: do_handler(error: true)
+    def handler(:result), do: do_handler(error: false)
+    def handler(f) when is_function(f, 2), do: do_handler(handler: f)
 
-  defp do_handler(options) when is_list(options) do
-    default = fn ->
-      if Keyword.get(options, :error, false),
-        do: &Actor.error_logger/2,
-        else: &Actor.result_logger/2
+    defp do_handler(options) when is_list(options) do
+      default = fn ->
+        if Keyword.get(options, :error, false),
+          do: &__MODULE__.error_logger/2,
+          else: &__MODULE__.result_logger/2
+      end
+
+      handler = Keyword.get_lazy(options, :handler, default)
+      StreamData.constant(handler)
     end
-
-    handler = Keyword.get_lazy(options, :handler, default)
-    StreamData.constant(handler)
   end
 
   @doc false

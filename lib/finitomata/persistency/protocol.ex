@@ -11,15 +11,18 @@ defmodule Finitomata.Persistency.Protocol do
   def load(data, opts \\ []), do: Persistable.load(data, opts)
 
   @impl Persistency
-  def store(_id, %_{} = data, info), do: Persistable.store(data, info)
-  def store(_id, _any, _info), do: :ok
-
-  @impl Persistency
-  def store_error(_id, %_{} = data, reason, info) do
-    Persistable.store_error(data, reason, info)
+  def store(_id, data, info) do
+    Persistable.store(data, info)
+  rescue
+    Protocol.UndefinedError -> :ok
   end
 
-  def store_error(_id, _any, _reason, _info), do: :ok
+  @impl Persistency
+  def store_error(_id, data, reason, info) do
+    Persistable.store_error(data, reason, info)
+  rescue
+    Protocol.UndefinedError -> :ok
+  end
 
   def idfy({:via, Registry, {_, name}}), do: name
   def idfy(name), do: name

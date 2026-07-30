@@ -25,19 +25,7 @@ defprotocol Finitomata.Persistency.Persistable do
 end
 
 defimpl Finitomata.Persistency.Persistable,
-  for: [
-    Any,
-    Atom,
-    BitString,
-    Float,
-    Function,
-    Integer,
-    List,
-    Map,
-    PID,
-    Port,
-    Reference
-  ] do
+  for: [Atom, BitString, Float, Function, Integer, List, PID, Port, Reference] do
   @dialyzer {:no_return, {:load, 1}}
   @dialyzer {:no_return, {:load, 2}}
   def load(data, _opts \\ []) do
@@ -71,20 +59,25 @@ defimpl Finitomata.Persistency.Persistable, for: Tuple do
       |> Keyword.values() == [0, 1]
     end
 
+    # Elixir names a protocol impl as Protocol.StructModule, so we look it up
+    # directly instead of going through `impl_for/1`. This avoids static-analysis
+    # false positives: the type checker sees `impl_for(struct)` as always nil
+    # because no struct impls are visible at compile time, but at runtime the
+    # consolidated protocol module contains all implementations.
     with {:module, ^module} <- Code.ensure_compiled(module),
          {:struct, true} <- {:struct, defines_struct?.(module)},
          %^module{} = result <- struct(module, fields),
-         impl when not is_nil(impl) <- Proto.impl_for(result) do
-      case result do
-        %^module{id: _id} ->
-          Proto.load(result, opts)
+         impl = Module.concat(Proto, module),
+         true <- Code.ensure_loaded?(impl) and function_exported?(impl, :load, 2) do
+      id = Keyword.get_lazy(opts, :id, fn -> Map.get(fields, :id) end)
 
-        %^module{} ->
-          id = Keyword.get_lazy(opts, :id, fn -> Map.get(fields, :id) end)
-          impl.load(result, id: id)
+      case result do
+        %^module{id: _id} -> impl.load(result, opts)
+        %^module{} -> impl.load(result, id: id)
       end
     else
       {:struct, false} -> Proto.load({module, fields}, opts)
+      false -> {:unknown, nil}
       _ -> {:unknown, nil}
     end
   end

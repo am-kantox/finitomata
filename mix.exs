@@ -28,7 +28,7 @@ defmodule Finitomata.MixProject do
                  else: [{:enfiladex, "~> 0.1", only: [:dev, :test, :finitomata]}]
 
   @app :finitomata
-  @version "0.41.0"
+  @version "0.42.0"
 
   def lib?(lib), do: lib in Enum.map(@modern_libs, &elem(&1, 0))
 
@@ -90,7 +90,7 @@ defmodule Finitomata.MixProject do
       # dev / test
       {:nimble_ownership, "~> 1.0", only: [:dev, :test, :ci, :finitomata]},
       {:mox, "~> 1.2", only: [:dev, :test, :ci, :finitomata]},
-      {:stream_data, "~> 1.0"},
+      {:stream_data, "~> 1.0", only: [:dev, :test, :finitomata]},
       {:observer_cli, "~> 1.5", only: [:dev]},
       {:credo, "~> 1.0", only: [:dev, :ci]},
       {:dialyxir, "~> 1.0", only: [:dev, :ci], runtime: false},
