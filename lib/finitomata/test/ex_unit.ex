@@ -285,6 +285,8 @@ defmodule Finitomata.ExUnit do
     (for instance, that the _FSM_ never crashes and always rests in a valid state).
   """
 
+  import ExUnit.Assertions
+
   require Logger
   alias Finitomata.ExUnit.Listener
   alias Finitomata.TestTransitionError
@@ -551,6 +553,19 @@ defmodule Finitomata.ExUnit do
     `impl` is defined (unless already defined), `Mox.allow/3`-ed to be called from the _FSM_,
     and stubbed/expected on `after_transition/3` to send `{:on_transition, id, state, payload}`
     to the test process.
+
+  ## Persisted _FSM_s
+
+  An _FSM_ declaring `persistency:` is settled differently, because two of the
+    assumptions above stop holding: `c:Finitomata.Persistency.load/1` decides the payload,
+    so the one passed here is not necessarily the one carried, and a `:loaded` lifecycle
+    skips the entry transition altogether — there is nothing to await.
+
+  Such an _FSM_ is therefore awaited by reading its state rather than by expecting the entry
+    notification, and when it resumed from storage the state it resumed in is reported to the
+    test process as if it had been entered. That keeps the `:*` section of `test_path/3`
+    meaningful for a resumed _FSM_: it asserts where the _FSM_ came back as, and against the
+    payload the persistency layer loaded.
   """
   @doc deprecated: "Use `setup_finitomata/1` instead"
 
@@ -558,23 +573,30 @@ defmodule Finitomata.ExUnit do
     require_ast = quote generated: true, location: :keep, do: require(unquote(impl))
 
     # Resolve the listener at compile time so that a Mox-free _FSM_ never has `Mox` calls
-    #   generated into its test (and therefore does not require `Mox` to be available).
-    listener =
+    #   generated into its test (and therefore does not require `Mox` to be available), and
+    #   the persistency, which decides how the _FSM_ start is awaited (see `settle_ast/1`.)
+    {listener, persistency} =
       case Macro.expand(impl, __CALLER__) do
         module when is_atom(module) ->
           if Code.ensure_loaded?(module) and function_exported?(module, :__config__, 1),
-            do: module.__config__(:listener),
-            else: nil
+            do: {module.__config__(:listener), module.__config__(:persistency)},
+            else: {nil, nil}
 
         _other ->
-          nil
+          {nil, nil}
       end
 
     init_ast =
       if listener == Listener do
         quote generated: true,
               location: :keep,
-              bind_quoted: [id: id, impl: impl, name: name, payload: payload] do
+              bind_quoted: [
+                id: id,
+                impl: impl,
+                name: name,
+                payload: payload,
+                persistency: persistency
+              ] do
           fsm_name = {:via, Registry, {Finitomata.Supervisor.registry_name(id), name}}
 
           start_supervised({Finitomata.Supervisor, id: id})
@@ -582,10 +604,7 @@ defmodule Finitomata.ExUnit do
 
           {:ok, _fsm_pid} = Finitomata.start_fsm(id, impl, name, payload)
 
-          entry_state = impl.entry()
-
-          assert_receive {:on_transition, ^fsm_name, ^entry_state, ^payload},
-                         Finitomata.ExUnit.assert_receive_timeout()
+          Finitomata.ExUnit.settle!(id, name, fsm_name, impl.entry(), payload, persistency)
         end
       else
         quote generated: true,
@@ -596,7 +615,8 @@ defmodule Finitomata.ExUnit do
                 name: name,
                 payload: payload,
                 options: options,
-                mocks: mocks
+                mocks: mocks,
+                persistency: persistency
               ] do
           mocker = &Module.concat(&1, "Mox")
 
@@ -632,14 +652,60 @@ defmodule Finitomata.ExUnit do
 
           {:ok, _fsm_pid} = Finitomata.start_fsm(id, impl, name, payload)
 
-          entry_state = impl.entry()
-
-          assert_receive {:on_transition, ^fsm_name, ^entry_state, ^payload},
-                         Finitomata.ExUnit.assert_receive_timeout()
+          Finitomata.ExUnit.settle!(id, name, fsm_name, impl.entry(), payload, persistency)
         end
       end
 
     [require_ast, init_ast]
+  end
+
+  @doc false
+  # Waits until a freshly started _FSM_ has settled, so that whatever the test does next
+  #   cannot race its start.
+  #
+  # Without a persistency that means awaiting the entry transition notification, payload
+  #   included: the _FSM_ is known to have started with what the test passed.
+  @spec settle!(
+          Finitomata.id(),
+          Finitomata.fsm_name(),
+          term(),
+          Finitomata.Transition.state(),
+          Finitomata.State.payload(),
+          nil | module()
+        ) :: :ok
+  def settle!(_id, _name, fsm_name, entry_state, payload, nil) do
+    _ =
+      assert_receive {:on_transition, ^fsm_name, ^entry_state, ^payload},
+                     Finitomata.ExUnit.assert_receive_timeout()
+
+    :ok
+  end
+
+  # With a persistency neither holds unconditionally, so the state is read instead — a call,
+  #   hence processed after `init/1` and any continuation. A resumed _FSM_ never entered
+  #   anything, so the state it came back as is reported to the test process in the shape the
+  #   rest of the framework consumes; otherwise the entry transition did run and is awaited as
+  #   usual, without pinning a payload that `c:Finitomata.Persistency.load/1` owns.
+  def settle!(id, name, fsm_name, entry_state, _payload, _persistency) do
+    _ =
+      case Finitomata.state(id, name, :full) do
+        %Finitomata.State{lifecycle: :loaded, current: current, payload: loaded_payload} ->
+          send(self(), {:on_transition, fsm_name, current, loaded_payload})
+
+        %Finitomata.State{} ->
+          assert_receive {:on_transition, ^fsm_name, ^entry_state, _payload},
+                         Finitomata.ExUnit.assert_receive_timeout()
+
+        nil ->
+          raise TestTransitionError,
+            message:
+              "the _FSM_ ‹" <>
+                inspect(name) <>
+                "› is not running; it either failed to start or terminated immediately " <>
+                "(check `c:Finitomata.Persistency.load/1` and `c:Finitomata.on_start/1`)"
+      end
+
+    :ok
   end
 
   @doc false
