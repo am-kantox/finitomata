@@ -386,7 +386,7 @@ defmodule Finitomata.Engine do
 
   defp do_maybe_pubsub(listener, {:ok, state, payload}, name) do
     cond do
-      is_atom(listener) and function_exported?(listener, :after_transition, 3) ->
+      listener_module?(listener, :after_transition) ->
         with some when some != :ok <- listener.after_transition(name, state, payload) do
           Logger.warning(
             "[♻️] Listener ‹" <>
@@ -419,7 +419,7 @@ defmodule Finitomata.Engine do
 
   defp do_maybe_pubsub_fork_error(listener, name, fork_state, error) do
     cond do
-      is_atom(listener) and function_exported?(listener, :after_transition, 3) ->
+      listener_module?(listener, :after_transition) ->
         notify_fork_failure(listener, name, fork_state, error)
 
       is_pid(listener) or is_port(listener) or is_atom(listener) or is_tuple(listener) ->
@@ -431,10 +431,21 @@ defmodule Finitomata.Engine do
     end
   end
 
+  # Tells a `Finitomata.Listener` module apart from a `GenServer.name()` to send to. The
+  #   module must be *loaded* for `function_exported?/3` to see its exports, and a module that
+  #   has simply not been reached yet is the common case in a freshly started release or test
+  #   run — without ensuring it is loaded first, such a listener would be mistaken for a
+  #   process name, and `send/2` to an unregistered atom raises, taking the FSM down with it.
+  @spec listener_module?(term(), atom()) :: boolean()
+  defp listener_module?(listener, fun) when is_atom(listener) and not is_nil(listener),
+    do: Code.ensure_loaded?(listener) and function_exported?(listener, fun, 3)
+
+  defp listener_module?(_listener, _fun), do: false
+
   # `listener` is a `Finitomata.Listener` behaviour module; `after_fork_failure/3` is optional,
   #   so notify only when it is implemented, otherwise stay silent (do not message the module).
   defp notify_fork_failure(listener, name, fork_state, error) do
-    if function_exported?(listener, :after_fork_failure, 3) do
+    if listener_module?(listener, :after_fork_failure) do
       with some when some != :ok <- listener.after_fork_failure(name, fork_state, error) do
         Logger.warning(
           "[♻️] Listener ‹" <>
