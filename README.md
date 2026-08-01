@@ -151,12 +151,16 @@ Typically, one would implement all the `on_transition/4` handlers, pattern match
 ```elixir
 def deps do
   [
-    {:finitomata, "~> 0.30"}
+    {:finitomata, "~> 1.0.0-rc.0"}
   ]
 end
 ```
 
 ## Changelog
+- `1.0.0-rc.0` — [CHR]  first release candidate for `1.0.0`
+- `0.43.0` — [UPD] `:stream_data` is a true optional dependency now (`only: [:dev, :test, :finitomata, :ci]`), and `Finitomata.ExUnit.event_generator/1` is guarded behind `Code.ensure_loaded?(StreamData)` so `Finitomata.ExUnit` compiles without it;
+- `0.43.0` — [UPD] `Finitomata.Persistency.Protocol.store/3`/`store_error/4` forward any persisted value to `Finitomata.Persistency.Persistable` and rescue a missing implementation into `:ok`, instead of only attempting structs;
+- `0.43.0` — [FIX] `Finitomata.Persistency.Persistable`'s tuple-based struct loader looks up the generated `Protocol.StructModule` directly instead of `impl_for/1`, avoiding a Dialyzer false positive on consolidated protocols;
 - `0.42.1` — [FIX] `setup_finitomata/1` supports _FSM_s declaring `persistency:`: the payload is no longer pinned to the one the test passed (loading decides it) and an _FSM_ resumed with a `:loaded` lifecycle, which has no entry transition to await, is settled by reading its state and reports the state it resumed in; [FIX] an unloaded `Finitomata.Listener` module is no longer mistaken for a process name (`send/2` to an unregistered atom used to raise inside the transition and take the _FSM_ down)
 - `0.41.0` — [UPD] `hibernate:` accepts a `state()`/`[state()]` to hibernate only on selected states (#116); a transition resolving to a state not allowed from the current one is now rolled back instead of committed inevitably — persistency/listener are no longer touched and a new optional `c:Finitomata.on_rollback/3` callback lets consumers compensate (#121); the `listener` is notified about failed `on_fork/2` resolutions via the new optional `c:Finitomata.Listener.after_fork_failure/3` (#118)
 - `0.40.0` — [UPD] `Finitomata.ExUnit` testing improvements: a dependency-free `Finitomata.ExUnit.Listener` (test without `Mox`), `assert_no_transition/3` for failure assertions, `event_generator/1` for property-based fuzzing, configurable `assert_receive`/`refute_receive`/flush timeouts, and a `Mox.stub/3`-by-default listener (the exact `transition_count` is opt-in); [DOC] documented the `Access` requirement for `~>`, the `:_` timer sugar, and fixed the moduledoc examples
