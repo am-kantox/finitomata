@@ -368,7 +368,7 @@ use Finitomata,
   hibernate: false,              # true | false | [state_atoms]
   cache_state: true,             # cache payload in :persistent_term
   persistency: nil,              # module implementing Finitomata.Persistency
-  listener: nil,                 # module | :mox | {:mox, FallbackModule}
+  listener: nil,                 # module | GenServer.name() | :mox | {:mox, FallbackModule}
   forks: [],                     # [{state, {event, fork_module}}, ...]
   shutdown: 5_000                # GenServer shutdown timeout
 ```

@@ -29,6 +29,13 @@ defmodule Finitomata.Persistency do
     `%{type: type, id: id}` map) and expects back a `{lifecycle, {state, payload}}`
     tuple. A `:loaded` lifecycle skips the entry transition and resumes from the
     persisted `state`; `:created`/`:unknown` proceed through the normal entry flow.
+
+  ## Testing
+
+  A persisted _FSM_ is testable with `Finitomata.ExUnit` as any other one — the setup
+    accounts for the loaded payload superseding the one the test passed, and for a
+    `:loaded` lifecycle having no entry transition to await. See the section
+    _“Testing persisted FSMs”_ in `Finitomata.ExUnit`.
   """
 
   alias Finitomata.{State, Transition}

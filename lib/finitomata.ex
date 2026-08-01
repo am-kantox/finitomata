@@ -160,7 +160,8 @@ defmodule Finitomata do
          ]},
       default: Application.compile_env(:finitomata, :listener, nil),
       doc:
-        "The implementation of `Finitomata.Listener` behaviour _or_ a `GenServer.name()` to receive notification after transitions."
+        "The implementation of `Finitomata.Listener` behaviour _or_ a `GenServer.name()` to receive notification after transitions. " <>
+          "An atom is resolved as a behaviour module (loading it if needed) and only treated as a process name when it does not implement the behaviour."
     ],
     mox_envs: [
       required: false,

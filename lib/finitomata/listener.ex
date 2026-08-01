@@ -2,6 +2,24 @@ defmodule Finitomata.Listener do
   @moduledoc """
   The behaviour to be implemented and passed to `use Finitomata` to receive
     all the state transitions notifications.
+
+  ## Modules and processes
+
+  The `listener:` option accepts either an implementation of this behaviour, or anything
+    `send/2` accepts (a `t:pid/0`, a `t:port/0`, a registered name, or a
+    `{:via, module, term}`/`{name, node}` tuple.) The two are told apart by whether the
+    given term is a module exporting `c:after_transition/3`; a process receives
+    `{:finitomata, {:transition, state, payload}}` (and
+    `{:finitomata, {:fork_error, state, error}}`) messages instead of a callback invocation.
+
+  Because a registered name is an atom too, the distinction is only meaningful for a
+    _loaded_ module: `function_exported?/3` answers `false` for a module that has never
+    been reached, which is the normal state of affairs in a freshly booted release or at
+    the very beginning of a test run. `Finitomata` therefore ensures the module is loaded
+    before deciding, so a lazily-loaded listener module is never mistaken for a process
+    name (which would raise inside the transition and take the _FSM_ down with it.)
+
+  No explicit `Code.ensure_loaded!/1` call on the listener is needed on the consumer side.
   """
 
   alias Finitomata.{State, Transition}

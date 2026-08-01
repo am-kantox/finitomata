@@ -265,6 +265,57 @@ defmodule Finitomata.ExUnit do
   end
   ```
 
+  ## Testing persisted _FSM_s
+
+  An _FSM_ declaring `persistency:` needs no special treatment, `setup_finitomata/1` copes
+    with it out of the box. Two assumptions that hold for a plain _FSM_ do not hold here,
+    though, and it is worth knowing how they are resolved.
+
+  - the payload given as `fsm: [payload: …]` is _not_ necessarily the payload the _FSM_
+    ends up carrying; it is what the `{type, fields}` descriptor passed to
+    `c:Finitomata.Persistency.load/1` is built from, and whatever loading returns wins
+  - a `:loaded` lifecycle resumes the _FSM_ in the persisted state, skipping the entry
+    transition altogether, so there is no entry notification to await
+
+  Such an _FSM_ is therefore awaited by reading its state rather than by expecting the
+    entry notification, and the state it resumed in is reported to the test process as if
+    it had been entered. That keeps the `:*` section of `test_path/3` meaningful for a
+    resumed _FSM_: it asserts where the _FSM_ came back as, against the payload the
+    persistency layer loaded.
+
+  ```elixir
+  describe "an FSM resumed from storage" do
+    setup_finitomata do
+      [
+        fsm: [
+          implementation: PersistedFSM,
+          payload: %Entity{resume_at: :started, value: 41}
+        ]
+      ]
+    end
+
+    test_path "resumes where storage left it, carrying the loaded payload" do
+      :* ->
+        # `:started`, not the entry state, and `42` — the value `load/1` handed back,
+        #   which the test could not have known to pin in advance
+        assert_state :started do
+          assert_payload(%{value: 42})
+        end
+
+      {:do, nil} ->
+        assert_state(:done)
+    end
+  end
+  ```
+
+  When the persistency reports a `:created`/`:unknown` lifecycle instead, the entry
+    transition runs as usual and the `:*` section lists the states as it always would —
+    only the payload is still the loaded one.
+
+  If the _FSM_ never settles (it died on start, or `c:Finitomata.Persistency.load/1`
+    raised), a `Finitomata.TestTransitionError` carrying the diagnostics is raised instead
+    of an opaque `assert_receive` timeout.
+
   ## Configurable timeouts
 
   The `assert_receive` timeout used while awaiting transition notifications (default `1_000`
@@ -471,6 +522,12 @@ defmodule Finitomata.ExUnit do
     the name would be assigned from the test name, which guarantees uniqueness of
     _FSM_s running in concurrent environment.
 
+  _FSM_s declaring `persistency:` are supported without any additional ceremony; the
+    payload passed here is the one `c:Finitomata.Persistency.load/1` builds its descriptor
+    from rather than the one necessarily carried afterwards, and an _FSM_ resumed from
+    storage reports the state it resumed in (see the section _“Testing persisted FSMs”_
+    in `Finitomata.ExUnit`.)
+
   It should return the keyword which would be validated with `NimbleOptions` schema
 
   #{NimbleOptions.docs(@setup_schema)}
@@ -574,7 +631,7 @@ defmodule Finitomata.ExUnit do
 
     # Resolve the listener at compile time so that a Mox-free _FSM_ never has `Mox` calls
     #   generated into its test (and therefore does not require `Mox` to be available), and
-    #   the persistency, which decides how the _FSM_ start is awaited (see `settle_ast/1`.)
+    #   the persistency, which decides how the _FSM_ start is awaited (see `settle!/6`.)
     {listener, persistency} =
       case Macro.expand(impl, __CALLER__) do
         module when is_atom(module) ->
